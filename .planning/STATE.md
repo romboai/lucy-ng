@@ -22,8 +22,11 @@
 
 ## Open Questions
 
-- Which NMR parsing library to use? (nmrglue, bruker-reader, custom)
 - LSD vs pyLSD - which to target first?
+
+## Resolved Questions
+
+- **NMR parsing library**: nmrglue (2026-01-08) — Most mature, BSD licensed, native Bruker support, academic citations
 
 ## Session Continuity
 
