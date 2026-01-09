@@ -49,7 +49,10 @@
 
 **Last session**: 2026-01-09
 **Completed**: Phase 2.1 1D Carbon Dereplication (01-02.1-PLAN.md executed)
-**Next**: Phase 3 2D NMR Reading
+**In progress**: Building Sherlock Docker to extract dereplication database
+**Interrupted**: VM ran out of disk space during docker build
+**Resume from**: `.planning/SESSION-HANDOFF-2026-01-09.md`
+**Next**: Phase 3 2D NMR Reading (after Sherlock database extraction)
 
 ---
 *Last updated: 2026-01-09*
