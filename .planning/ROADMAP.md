@@ -24,6 +24,20 @@
 
 ---
 
+### Phase 2.1: 1D Carbon Dereplication (INSERTED)
+**Goal**: Validate pipeline with 1D dereplication against nmrshiftdb
+
+- Peak picking from 1D 13C spectrum
+- Download/query reference data from nmrshiftdb by molecular formula
+- Match observed peaks against reference spectra
+- Score and rank candidate structures
+- Return dereplication results (match/no match/candidates)
+
+**Depends on:** Phase 2
+**Research**: nmrshiftdb API/data format, matching algorithms
+
+---
+
 ### Phase 3: 2D NMR Reading
 **Goal**: Read Bruker 2D spectra (HSQC, HMBC)
 
@@ -85,6 +99,7 @@
 |-------|--------|-------|
 | 1. Foundation | Complete | 01-01-PLAN.md, 01-01-SUMMARY.md |
 | 2. 1D NMR Reading | Complete | 01-02-PLAN.md, 01-02-SUMMARY.md |
+| 2.1 1D Carbon Dereplication | Complete | 01-02.1-PLAN.md, 01-02.1-SUMMARY.md |
 | 3. 2D NMR Reading | Not Started | — |
 | 4. Peak Picking | Not Started | — |
 | 5. LSD Integration | Not Started | — |
@@ -92,4 +107,4 @@
 | 7. MCP Server | Not Started | — |
 
 ---
-*Last updated: 2026-01-08*
+*Last updated: 2026-01-09*
