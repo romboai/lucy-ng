@@ -3,6 +3,8 @@
 from lucy_ng.models import Peak1D, Peak2D, PeakList1D, PeakList2D, Spectrum1D, Spectrum2D
 from lucy_ng.processing import (
     AdaptivePeakPicker,
+    DEPTGuidedPicker,
+    DEPTGuidedResult,
     PeakPicker2D,
     PeakValidator,
     SimplePeakPicker,
@@ -24,6 +26,8 @@ __all__ = [
     "Spectrum2D",
     # Processing
     "AdaptivePeakPicker",
+    "DEPTGuidedPicker",
+    "DEPTGuidedResult",
     "PeakPicker2D",
     "PeakValidator",
     "SimplePeakPicker",

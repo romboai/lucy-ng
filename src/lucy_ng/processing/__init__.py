@@ -1,13 +1,16 @@
 """Signal processing for NMR spectra."""
 
+from lucy_ng.processing.dept_guided_picker import DEPTGuidedPicker, DEPTGuidedResult
 from lucy_ng.processing.peak_picker import AdaptivePeakPicker, SimplePeakPicker
 from lucy_ng.processing.peak_picker_2d import PeakPicker2D
 from lucy_ng.processing.peak_validator import PeakValidator, ValidationResult
 
 __all__ = [
     "AdaptivePeakPicker",
-    "SimplePeakPicker",
+    "DEPTGuidedPicker",
+    "DEPTGuidedResult",
     "PeakPicker2D",
     "PeakValidator",
+    "SimplePeakPicker",
     "ValidationResult",
 ]
