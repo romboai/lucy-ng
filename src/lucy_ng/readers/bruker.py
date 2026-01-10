@@ -68,7 +68,13 @@ def _detect_experiment_type(pulse_program: str, f1_nucleus: str, f2_nucleus: str
     # Order matters: check HMBC before HSQC since some pulse programs contain both
     if "hmbc" in pp_lower:
         return "HMBC"
-    if "hsqc" in pp_lower or "inv4" in pp_lower:
+    # Long-range indicators in inv4 programs indicate HMBC (e.g., inv4gplplrndqf)
+    # "lr" = long-range, "lplr" = low-pass long-range filter
+    if "inv4" in pp_lower:
+        if "lr" in pp_lower or "lplr" in pp_lower or "lrnd" in pp_lower:
+            return "HMBC"
+        return "HSQC"
+    if "hsqc" in pp_lower:
         return "HSQC"
     if "cosy" in pp_lower:
         return "COSY"
