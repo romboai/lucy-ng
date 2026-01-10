@@ -2,5 +2,12 @@
 
 from lucy_ng.processing.peak_picker import AdaptivePeakPicker, SimplePeakPicker
 from lucy_ng.processing.peak_picker_2d import PeakPicker2D
+from lucy_ng.processing.peak_validator import PeakValidator, ValidationResult
 
-__all__ = ["AdaptivePeakPicker", "SimplePeakPicker", "PeakPicker2D"]
+__all__ = [
+    "AdaptivePeakPicker",
+    "SimplePeakPicker",
+    "PeakPicker2D",
+    "PeakValidator",
+    "ValidationResult",
+]
