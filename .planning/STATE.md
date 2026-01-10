@@ -3,8 +3,8 @@
 ## Current Position
 
 **Milestone**: 1.0 — Core CASE Pipeline
-**Phase**: 4.2 (DEPT-Guided Adaptive HSQC) — Complete
-**Status**: Ready for Phase 5 (LSD Integration)
+**Phase**: 5 (LSD Integration) — Complete
+**Status**: Phase 6 ready for planning
 
 ## Roadmap Evolution
 
@@ -17,11 +17,12 @@
 
 ## Recent Progress
 
-- Phase 4.2 DEPT-Guided Adaptive HSQC complete (2 commits)
-- DEPTGuidedPicker with adaptive threshold algorithm
-- DEPTGuidedResult with peaks, multiplicities, metadata
-- DEPT-90 support for CH/CH3 distinction
-- 18 new tests, all 120 tests passing
+- Phase 5 LSD Integration complete (5 commits)
+- LSD data models: LSDAtom, LSDCorrelation, LSDProblem
+- LSD input generator with from_dept_result() integration
+- LSD runner with subprocess execution and timeout handling
+- LSD output parser for .sol files and SMILES
+- 84 new tests, 204 total passing (6 skipped when LSD not installed)
 
 ## Key Decisions
 
@@ -47,24 +48,23 @@
 
 ## Open Questions
 
-- LSD vs pyLSD - which to target first?
+(none)
 
 ## Resolved Questions
 
 - **NMR parsing library**: nmrglue (2026-01-08) — Most mature, BSD licensed, native Bruker support, academic citations
 - **Dereplication matching strategy**: Multi-mode with fuzzy tolerances (2026-01-09)
+- **LSD vs pyLSD**: LSD first (2026-01-10) — Simpler (no Java), pyLSD builds on it, add ranking later
 
 ## Session Continuity
 
 **Last session**: 2026-01-10
 **Completed**:
-- Phase 3 2D NMR Reading
-- Phase 4 2D Peak Picking
-- Phase 4.1 2D Peak Validation
-- Phase 4.2 DEPT-Guided Adaptive HSQC (01-04.2-PLAN.md executed)
-- DEPTGuidedPicker with adaptive threshold algorithm
-- 18 comprehensive tests, 120 total passing
-**Next**: Plan and execute Phase 5 (LSD Integration)
+- Phase 5 LSD Integration (01-05-PLAN.md executed)
+- LSD data models, generator, runner, parser
+- 84 new tests for LSD module
+- 204 total tests passing
+**Next**: Plan and execute Phase 6 (CLI Interface)
 
 ---
 *Last updated: 2026-01-10*

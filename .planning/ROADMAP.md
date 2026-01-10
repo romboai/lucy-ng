@@ -131,7 +131,7 @@
 | 4. Peak Picking | Complete | 01-04-PLAN.md, 01-04-SUMMARY.md |
 | 4.1 2D Peak Validation | Complete | 01-04.1-PLAN.md, 01-04.1-SUMMARY.md |
 | 4.2 DEPT-Guided Adaptive HSQC | Complete | 01-04.2-PLAN.md, 01-04.2-SUMMARY.md |
-| 5. LSD Integration | Not Started | — |
+| 5. LSD Integration | Complete | 01-05-PLAN.md, 01-05-SUMMARY.md |
 | 6. CLI Interface | Not Started | — |
 | 7. MCP Server | Not Started | — |
 
