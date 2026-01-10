@@ -99,6 +99,34 @@
 
 ---
 
+### Phase 5.1: HMBC-Guided Peak Picking (INSERTED)
+**Goal**: Filter HMBC peaks using validated carbon and proton positions
+
+- Use 13C/DEPT peaks as valid carbon positions
+- Use HSQC proton positions as valid proton positions
+- Filter HMBC to only peaks matching both constraints
+- Reduce noise and improve LSD constraint quality
+
+**Depends on:** Phase 5
+**Rationale**: HMBC noise produces spurious correlations; filtering by known positions improves LSD results
+
+---
+
+### Phase 5.2: Symmetry Detection from Spectroscopic Data (INSERTED)
+**Goal**: Detect molecular symmetry to properly handle equivalent atoms in LSD input
+
+- Hydrogen counting: Compare MF hydrogen count with carbon-assigned H sum
+- Detect "missing" hydrogens indicating equivalent carbons
+- Intensity analysis: Identify doubled signals from relative peak intensities
+- Pattern recognition: Recognize symmetric motifs (para-substituted benzene, isopropyl, etc.)
+- Generate proper atom definitions for equivalent positions
+- Support LSD SYME commands for equivalent atom constraints
+
+**Depends on:** Phase 5.1
+**Rationale**: Molecular symmetry causes fewer NMR signals than atoms; without handling this, LSD fails with valence errors
+
+---
+
 ### Phase 6: CLI Interface
 **Goal**: Command-line interface for all operations
 
@@ -132,6 +160,8 @@
 | 4.1 2D Peak Validation | Complete | 01-04.1-PLAN.md, 01-04.1-SUMMARY.md |
 | 4.2 DEPT-Guided Adaptive HSQC | Complete | 01-04.2-PLAN.md, 01-04.2-SUMMARY.md |
 | 5. LSD Integration | Complete | 01-05-PLAN.md, 01-05-SUMMARY.md |
+| 5.1 HMBC-Guided Peak Picking | Complete | — |
+| 5.2 Symmetry Detection | Not Started | — |
 | 6. CLI Interface | Not Started | — |
 | 7. MCP Server | Not Started | — |
 

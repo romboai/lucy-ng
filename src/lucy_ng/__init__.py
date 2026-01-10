@@ -1,5 +1,10 @@
 """lucy-ng: AI-agent powered Computer-Assisted Structure Elucidation."""
 
+from lucy_ng.analysis import (
+    HydrogenBudgetAnalyzer,
+    IntensityReporter,
+    SymmetryAnalyzer,
+)
 from lucy_ng.models import Peak1D, Peak2D, PeakList1D, PeakList2D, Spectrum1D, Spectrum2D
 from lucy_ng.processing import (
     AdaptivePeakPicker,
@@ -35,6 +40,10 @@ __all__ = [
     "PeakValidator",
     "SimplePeakPicker",
     "ValidationResult",
+    # Analysis
+    "HydrogenBudgetAnalyzer",
+    "IntensityReporter",
+    "SymmetryAnalyzer",
     # LSD
     "LSDInputGenerator",
     "LSDProblem",

@@ -2,7 +2,7 @@
 
 import pytest
 
-from lucy_ng.lsd.models import Hybridization, LSDAtom, LSDCorrelation, LSDProblem
+from lucy_ng.lsd.models import Hybridization, LSDAtom, LSDConstraint, LSDCorrelation, LSDProblem
 
 
 class TestHybridization:
@@ -87,6 +87,48 @@ class TestLSDAtom:
         )
         assert atom.carbon_shift == 129.5
         assert atom.proton_shift == 7.25
+
+
+class TestLSDConstraint:
+    """Tests for LSDConstraint dataclass."""
+
+    def test_create_bond_constraint(self):
+        """Test creating BOND constraint."""
+        constraint = LSDConstraint(atom1_index=1, atom2_index=10, constraint_type="BOND")
+        assert constraint.atom1_index == 1
+        assert constraint.atom2_index == 10
+        assert constraint.constraint_type == "BOND"
+        assert constraint.reason is None
+
+    def test_create_fbnd_constraint(self):
+        """Test creating FBND (forbidden bond) constraint."""
+        constraint = LSDConstraint(
+            atom1_index=2, atom2_index=3,
+            constraint_type="FBND",
+            reason="Forbidden due to distance"
+        )
+        assert constraint.constraint_type == "FBND"
+        assert constraint.reason == "Forbidden due to distance"
+
+    def test_invalid_constraint_type_raises(self):
+        """Test that invalid constraint type raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid constraint type"):
+            LSDConstraint(atom1_index=1, atom2_index=2, constraint_type="INVALID")
+
+    def test_invalid_index_raises(self):
+        """Test that index < 1 raises ValueError."""
+        with pytest.raises(ValueError, match="indices must be >= 1"):
+            LSDConstraint(atom1_index=0, atom2_index=1, constraint_type="BOND")
+
+    def test_to_lsd_line_bond(self):
+        """Test BOND constraint line generation."""
+        constraint = LSDConstraint(atom1_index=1, atom2_index=14, constraint_type="BOND")
+        assert constraint.to_lsd_line() == "BOND 1 14"
+
+    def test_to_lsd_line_fbnd(self):
+        """Test FBND constraint line generation."""
+        constraint = LSDConstraint(atom1_index=2, atom2_index=3, constraint_type="FBND")
+        assert constraint.to_lsd_line() == "FBND 2 3"
 
 
 class TestLSDCorrelation:
@@ -226,3 +268,33 @@ class TestLSDProblem:
         assert "ibuprofen" in summary
         assert "C13H18O2" in summary
         assert "HSQC: 1" in summary
+
+    def test_add_constraint(self):
+        """Test adding constraints to problem."""
+        problem = LSDProblem()
+        constraint = LSDConstraint(atom1_index=1, atom2_index=10, constraint_type="BOND")
+        problem.add_constraint(constraint)
+        assert len(problem.constraints) == 1
+        assert problem.constraints[0] is constraint
+
+    def test_validate_missing_constraint_atom(self):
+        """Test validation catches constraints to non-existent atoms."""
+        problem = LSDProblem()
+        problem.add_atom(LSDAtom(1, "C", Hybridization.SP2, 0))
+        problem.add_constraint(LSDConstraint(1, 99, "BOND"))  # Atom 99 doesn't exist
+
+        issues = problem.validate()
+        assert any("non-existent" in issue for issue in issues)
+
+    def test_summary_with_constraints(self):
+        """Test problem summary includes constraints."""
+        problem = LSDProblem(name="test")
+        problem.add_atom(LSDAtom(1, "C", Hybridization.SP2, 0, carbon_shift=180.0))
+        problem.add_atom(LSDAtom(2, "O", Hybridization.SP2, 0))
+        problem.add_constraint(LSDConstraint(1, 2, "BOND", reason="carbonyl"))
+        problem.add_constraint(LSDConstraint(1, 3, "FBND", reason="too far"))
+
+        summary = problem.summary()
+        assert "Constraints: 2" in summary
+        assert "BOND: 1" in summary
+        assert "FBND: 1" in summary

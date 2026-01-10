@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 
 from lucy_ng import BrukerReader, DEPTGuidedPicker, Peak1D, Peak2D, PeakList1D, PeakList2D
-from lucy_ng.lsd.models import Hybridization, LSDAtom, LSDCorrelation, LSDProblem
+from lucy_ng.lsd.models import Hybridization, LSDAtom, LSDConstraint, LSDCorrelation, LSDProblem
 from lucy_ng.lsd.generator import LSDInputGenerator
 
 
@@ -101,6 +101,33 @@ class TestLSDInputGeneratorBasic:
         assert mult_lines[0] == "MULT 1 C 2 0"
         assert mult_lines[1] == "MULT 2 C 3 2"
         assert mult_lines[2] == "MULT 3 C 3 3"
+
+    def test_generate_with_bond_constraints(self):
+        """Test generating BOND constraint lines."""
+        problem = LSDProblem(name="test")
+        problem.add_atom(LSDAtom(1, "C", Hybridization.SP2, 0, carbon_shift=180.0))
+        problem.add_atom(LSDAtom(2, "O", Hybridization.SP2, 0))
+        problem.add_constraint(LSDConstraint(1, 2, "BOND", reason="carbonyl C=O"))
+
+        content = LSDInputGenerator.generate(problem)
+
+        assert "BOND 1 2" in content
+        assert "; carbonyl C=O" in content
+        assert "; Required bonds" in content
+
+    def test_generate_with_fbnd_constraints(self):
+        """Test generating FBND (forbidden bond) constraint lines."""
+        problem = LSDProblem(name="test")
+        problem.add_atom(LSDAtom(1, "C", Hybridization.SP2, 0))
+        problem.add_atom(LSDAtom(2, "C", Hybridization.SP3, 2))
+        problem.add_atom(LSDAtom(3, "O", Hybridization.SP2, 0))
+        problem.add_constraint(LSDConstraint(1, 3, "FBND", reason="too far"))
+
+        content = LSDInputGenerator.generate(problem)
+
+        assert "FBND 1 3" in content
+        assert "; too far" in content
+        assert "; Forbidden bonds" in content
 
 
 class TestLSDInputGeneratorFile:
@@ -287,3 +314,142 @@ class TestLSDInputGeneratorIntegration:
         assert "MULT" in content
         assert "HSQC" in content or len(problem.correlations) == 0
         assert "EXIT" in content
+
+
+class TestCarbonylDetection:
+    """Tests for automatic carbonyl detection and constraint generation."""
+
+    def test_detects_carboxylic_acid_carbonyl(self):
+        """Test that carboxylic acid carbonyl (180 ppm) is detected."""
+        carbon_peaks = PeakList1D(
+            peaks=[
+                Peak1D(position=180.0, intensity=1000.0),  # Carboxylic acid
+                Peak1D(position=45.0, intensity=800.0),   # CH
+            ],
+            nucleus="13C",
+        )
+
+        problem = LSDInputGenerator.from_peak_data(
+            carbon_peaks=carbon_peaks,
+            molecular_formula="C2H4O2",  # Acetic acid-like
+            name="test",
+        )
+
+        # Should have BOND constraint between carbonyl C and O
+        assert len(problem.constraints) >= 1
+        bond_constraints = [c for c in problem.constraints if c.constraint_type == "BOND"]
+        assert len(bond_constraints) >= 1
+
+        # The carbonyl carbon (180 ppm) should be atom 1 (first by descending ppm)
+        carbonyl_constraint = bond_constraints[0]
+        assert carbonyl_constraint.atom1_index == 1
+        assert "carbonyl" in carbonyl_constraint.reason.lower()
+
+    def test_detects_aldehyde_ketone_carbonyl(self):
+        """Test that aldehyde/ketone carbonyl (200 ppm) is detected."""
+        carbon_peaks = PeakList1D(
+            peaks=[
+                Peak1D(position=200.0, intensity=1000.0),  # Aldehyde/ketone
+                Peak1D(position=30.0, intensity=800.0),   # CH3
+            ],
+            nucleus="13C",
+        )
+
+        problem = LSDInputGenerator.from_peak_data(
+            carbon_peaks=carbon_peaks,
+            molecular_formula="C2H4O",  # Acetaldehyde-like
+            name="test",
+        )
+
+        # Should have BOND constraint for carbonyl
+        bond_constraints = [c for c in problem.constraints if c.constraint_type == "BOND"]
+        assert len(bond_constraints) >= 1
+        assert "carbonyl" in bond_constraints[0].reason.lower()
+
+    def test_no_carbonyl_detection_for_non_carbonyl_carbons(self):
+        """Test that regular carbons are not detected as carbonyls."""
+        carbon_peaks = PeakList1D(
+            peaks=[
+                Peak1D(position=130.0, intensity=1000.0),  # Aromatic
+                Peak1D(position=45.0, intensity=800.0),   # Aliphatic
+            ],
+            nucleus="13C",
+        )
+
+        problem = LSDInputGenerator.from_peak_data(
+            carbon_peaks=carbon_peaks,
+            molecular_formula="C2H4",  # No oxygen
+            name="test",
+        )
+
+        # Should have no constraints (no oxygen)
+        assert len(problem.constraints) == 0
+
+
+class TestHydrogenAssignment:
+    """Tests for missing hydrogen detection and assignment to oxygen."""
+
+    def test_assigns_missing_h_to_hydroxyl_oxygen(self):
+        """Test that missing H from MF is assigned to sp3 oxygen."""
+        carbon_peaks = PeakList1D(
+            peaks=[
+                Peak1D(position=180.0, intensity=1000.0),  # Carbonyl
+                Peak1D(position=45.0, intensity=800.0),   # CH2
+            ],
+            nucleus="13C",
+        )
+
+        # C2H4O2: 4 H total
+        # If CH2 has 2 H, and carbonyl has 0 H, that's 2 H on carbons
+        # Missing 2 H should go to sp3 oxygens
+        problem = LSDInputGenerator.from_peak_data(
+            carbon_peaks=carbon_peaks,
+            molecular_formula="C2H4O2",
+            name="test",
+        )
+
+        # Find sp3 oxygen atoms
+        sp3_oxygens = [a for a in problem.atoms if a.element == "O" and a.hybridization == Hybridization.SP3]
+
+        # At least one sp3 oxygen should have H=1 (hydroxyl)
+        h_on_oxygens = sum(a.hydrogen_count for a in sp3_oxygens)
+        assert h_on_oxygens >= 1, "Missing H should be assigned to sp3 oxygen"
+
+    def test_carboxylic_acid_structure(self):
+        """Test proper structure for carboxylic acid: C=O and O-H."""
+        carbon_peaks = PeakList1D(
+            peaks=[
+                Peak1D(position=180.0, intensity=1000.0),  # COOH carbonyl
+                Peak1D(position=22.0, intensity=800.0),   # CH3
+            ],
+            nucleus="13C",
+        )
+
+        # Acetic acid: CH3COOH = C2H4O2
+        # CH3 has 3 H, COOH carbon has 0 H = 3 H on carbons
+        # 4 H total - 3 on C = 1 H missing (goes to -OH)
+        problem = LSDInputGenerator.from_peak_data(
+            carbon_peaks=carbon_peaks,
+            molecular_formula="C2H4O2",
+            name="acetic_acid",
+        )
+
+        # Check atom counts
+        carbons = [a for a in problem.atoms if a.element == "C"]
+        oxygens = [a for a in problem.atoms if a.element == "O"]
+
+        assert len(carbons) == 2
+        assert len(oxygens) == 2
+
+        # One oxygen should be sp2 (C=O), one sp3 (O-H)
+        sp2_oxygens = [a for a in oxygens if a.hybridization == Hybridization.SP2]
+        sp3_oxygens = [a for a in oxygens if a.hybridization == Hybridization.SP3]
+
+        assert len(sp2_oxygens) == 1, "Should have one sp2 oxygen (C=O)"
+        assert len(sp3_oxygens) == 1, "Should have one sp3 oxygen (O-H)"
+
+        # sp3 oxygen should have 1 H (hydroxyl)
+        assert sp3_oxygens[0].hydrogen_count == 1, "Hydroxyl oxygen should have 1 H"
+
+        # Should have BOND constraint
+        assert len(problem.constraints) >= 1

@@ -3,8 +3,8 @@
 ## Current Position
 
 **Milestone**: 1.0 — Core CASE Pipeline
-**Phase**: 5 (LSD Integration) — Complete, enhanced with guided peak picking
-**Status**: Phase 6 ready for planning
+**Phase**: 5.2 (Symmetry Detection from Spectroscopic Data) — COMPLETE
+**Status**: Ready for Phase 6 (CLI Interface)
 
 ## Roadmap Evolution
 
@@ -16,16 +16,24 @@
   - Rationale: DEPT provides ground truth for protonated carbons; HSQC must find all of them
 - Phase 5.1 added: HMBC-Guided Peak Picking (COMPLETE)
   - Rationale: Filter HMBC noise by requiring correlation to known C and H positions
+- Phase 5.2 inserted after Phase 5.1: Symmetry Detection from Spectroscopic Data (INSERTED)
+  - Rationale: Molecular symmetry causes fewer NMR signals than atoms; must detect and handle for valid LSD input
 
 ## Recent Progress
 
+- **Phase 5.2 Symmetry Detection complete**:
+  - New `lucy_ng.analysis` module with AI-oriented convenience tools
+  - `HydrogenBudgetAnalyzer`: Compare MF H count with observed carbon-assigned H
+  - `IntensityReporter`: Report relative HSQC intensities, flag potential equivalents
+  - `SymmetryAnalyzer`: Combined summary for AI-driven symmetry reasoning
+  - Tools expose data with suggestions; AI makes final reasoning decisions
 - Phase 5 LSD Integration complete and enhanced
 - Added HMBCGuidedPicker for validated HMBC peak picking
-- Fixed LSD runner (stderr parsing, success detection)
-- Simplified HMBC format to 2 params (LSD defaults to 2-3 bonds)
-- Added molecular formula parsing and heteroatom handling
-- Comprehensive documentation of guided peak picking rationale
-- 229 total tests passing (4 skipped when LSD not installed)
+- **Automatic spectroscopic constraint inference**:
+  - Carbonyl carbons detected from chemical shift (165-185 ppm or 190-220 ppm)
+  - BOND constraints auto-generated between carbonyl C and sp2 oxygen
+  - Missing hydrogens (from MF vs carbon H count) assigned to sp3 oxygens
+- 266 total tests passing (4 skipped when LSD not installed)
 
 ## Key Decisions
 
@@ -51,38 +59,41 @@
 | HMBC-guided peak picking | 2026-01-10 | Filter HMBC by requiring C match in 13C/DEPT and H match in HSQC |
 | LSD 2-param HMBC format | 2026-01-10 | LSD defaults to 2-3 bond distance; simpler than 4-param format |
 | Real data over manual correlations | 2026-01-10 | Manual test correlations produced 900+ solutions; real data provides stronger constraints |
+| Spectroscopic constraint inference | 2026-01-10 | Carbonyl C identified from shift; missing H assigned to O; derives BOND constraints automatically |
 
 ## Open Questions
 
-- **Symmetry detection**: How to detect equivalent atoms from signal count vs molecular formula?
-  - Affects LSD input (SYME command for equivalent atoms)
-  - Quaternary carbons can also be in symmetry tuples, not just DEPT-visible carbons
+- None at this time
 
 ## Resolved Questions
 
 - **NMR parsing library**: nmrglue (2026-01-08) — Most mature, BSD licensed, native Bruker support, academic citations
 - **Dereplication matching strategy**: Multi-mode with fuzzy tolerances (2026-01-09)
 - **LSD vs pyLSD**: LSD first (2026-01-10) — Simpler (no Java), pyLSD builds on it, add ranking later
+- **Symmetry detection**: (2026-01-10) — AI-driven approach with convenience tools exposing H budget + intensity data
 
 ## Session Continuity
 
 **Last session**: 2026-01-10
 **Completed**:
-- Phase 5 LSD Integration complete and enhanced
-- HMBCGuidedPicker for validated HMBC peak picking
-- LSD runner fixes (stderr parsing, success detection)
-- HMBC format simplified to 2 params
-- Molecular formula parsing and heteroatom handling in generator
-- Comprehensive documentation in CLAUDE.md
-- 229 total tests passing
+- **Phase 5.2 Symmetry Detection complete**
+- New `lucy_ng.analysis` module with 3 convenience tools:
+  - `HydrogenBudgetAnalyzer` - compare MF H vs observed carbon-assigned H
+  - `IntensityReporter` - relative HSQC intensities with equivalence flagging
+  - `SymmetryAnalyzer` - combined AI-readable summary
+- Module exported from main `lucy_ng` package
+- 21 new tests for symmetry analysis tools
+- Verified with Ibuprofen data (correctly detects 5 missing carbons, aromatic pairs)
+- 266 total tests passing
 
-**Key technical insights documented**:
-- Guided peak picking rationale (noise reduction, constraint quality)
-- Molecular symmetry effects on signal count
-- LSD input quality directly affects solution count
-- Real experimental data essential (manual correlations insufficient)
+**Key technical insights**:
+- AI-driven architecture: tools expose data, AI does reasoning
+- H budget: compare MF H count with observed carbon-assigned H
+- Intensity analysis: equivalent atoms show ~2× HSQC intensity
+- Interpretation hints generated but AI makes final decisions
+- Para-disubstituted benzene pattern correctly identified in Ibuprofen
 
-**Next**: Plan and execute Phase 6 (CLI Interface)
+**Next**: Phase 6 (CLI Interface)
 
 ---
 *Last updated: 2026-01-10*

@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-from lucy_ng.lsd.models import Hybridization, LSDAtom, LSDCorrelation, LSDProblem
+from lucy_ng.lsd.models import Hybridization, LSDAtom, LSDConstraint, LSDCorrelation, LSDProblem
 from lucy_ng.models import PeakList1D, PeakList2D
 from lucy_ng.processing.dept_guided_picker import DEPTGuidedResult
 
@@ -101,6 +101,24 @@ class LSDInputGenerator:
             lines.append("; H-H correlations (COSY)")
             for corr in cosy_corrs:
                 lines.append(corr.to_lsd_line())
+            lines.append("")
+
+        # Structural constraints (BOND/FBND)
+        bond_constraints = [c for c in problem.constraints if c.constraint_type == "BOND"]
+        fbnd_constraints = [c for c in problem.constraints if c.constraint_type == "FBND"]
+
+        if bond_constraints:
+            lines.append("; Required bonds (derived from spectroscopic data)")
+            for constraint in bond_constraints:
+                comment = f"  ; {constraint.reason}" if constraint.reason else ""
+                lines.append(f"{constraint.to_lsd_line()}{comment}")
+            lines.append("")
+
+        if fbnd_constraints:
+            lines.append("; Forbidden bonds")
+            for constraint in fbnd_constraints:
+                comment = f"  ; {constraint.reason}" if constraint.reason else ""
+                lines.append(f"{constraint.to_lsd_line()}{comment}")
             lines.append("")
 
         # End marker
@@ -237,9 +255,36 @@ class LSDInputGenerator:
             problem.add_atom(atom)
             atom_index += 1
 
+        # Calculate total hydrogens assigned to carbons
+        carbon_assigned_h = sum(a.hydrogen_count for a in problem.atoms if a.element == "C")
+        expected_h = formula_counts.get("H", 0)
+        missing_h = expected_h - carbon_assigned_h
+
+        # Identify carbonyl carbons from chemical shift and update hybridization
+        # Carboxylic acids/esters: 165-185 ppm
+        # Aldehydes/ketones: 190-220 ppm
+        # Amides: 160-180 ppm
+        carbonyl_atoms: list[LSDAtom] = []
+        for i, atom in enumerate(problem.atoms):
+            if atom.element == "C" and atom.carbon_shift is not None:
+                # Carbonyl detection: quaternary carbon with shift in carbonyl range
+                if atom.hydrogen_count == 0 and (
+                    (165 <= atom.carbon_shift <= 185) or  # acids, esters, amides
+                    (190 <= atom.carbon_shift <= 220)  # aldehydes, ketones
+                ):
+                    carbonyl_atoms.append(atom)
+                    # Update hybridization to SP2 for carbonyl carbons
+                    problem.atoms[i] = LSDAtom(
+                        index=atom.index,
+                        element=atom.element,
+                        hybridization=Hybridization.SP2,
+                        hydrogen_count=atom.hydrogen_count,
+                        charge=atom.charge,
+                        carbon_shift=atom.carbon_shift,
+                        proton_shift=atom.proton_shift,
+                    )
+
         # Add heteroatoms from molecular formula
-        # For oxygen: alternate between sp2 (C=O) and sp3 (C-O-H or C-O-C)
-        # This handles common cases like carboxylic acids, esters, etc.
         heteroatom_defaults = {
             "N": (Hybridization.SP3, 1),  # Nitrogen: often sp3 with 1H
             "S": (Hybridization.SP3, 0),  # Sulfur
@@ -250,22 +295,56 @@ class LSDInputGenerator:
             "I": (Hybridization.SP3, 0),  # Iodine
         }
 
-        # Handle oxygen specially - alternate sp2/sp3 for balanced DBE
+        # Handle oxygen with spectroscopic inference:
+        # 1. For each carbonyl carbon, pair with an sp2 oxygen (C=O)
+        # 2. Remaining oxygens are sp3 (hydroxyl/ether)
+        # 3. Missing H from MF goes to sp3 oxygens
         oxygen_count = formula_counts.get("O", 0)
-        for i in range(oxygen_count):
-            # First oxygen sp2 (carbonyl), second sp3 (hydroxyl/ether), etc.
-            if i % 2 == 0:
-                hyb, h_count = Hybridization.SP2, 0
-            else:
-                hyb, h_count = Hybridization.SP3, 1
+        num_carbonyls = min(len(carbonyl_atoms), oxygen_count)
+        num_sp3_oxygen = oxygen_count - num_carbonyls
+
+        # Create oxygen atoms and track indices for BOND constraints
+        sp2_oxygen_indices: list[int] = []
+        sp3_oxygen_indices: list[int] = []
+
+        # Add sp2 oxygens (carbonyl)
+        for _ in range(num_carbonyls):
+            sp2_oxygen_indices.append(atom_index)
             atom = LSDAtom(
                 index=atom_index,
                 element="O",
-                hybridization=hyb,
-                hydrogen_count=h_count,
+                hybridization=Hybridization.SP2,
+                hydrogen_count=0,
             )
             problem.add_atom(atom)
             atom_index += 1
+
+        # Add sp3 oxygens (hydroxyl/ether)
+        # Assign missing H to these oxygens
+        h_to_assign = missing_h
+        for _ in range(num_sp3_oxygen):
+            sp3_oxygen_indices.append(atom_index)
+            # If we have missing H, assign one to this oxygen (makes it a hydroxyl)
+            h_on_this_o = 1 if h_to_assign > 0 else 0
+            if h_to_assign > 0:
+                h_to_assign -= 1
+            atom = LSDAtom(
+                index=atom_index,
+                element="O",
+                hybridization=Hybridization.SP3,
+                hydrogen_count=h_on_this_o,
+            )
+            problem.add_atom(atom)
+            atom_index += 1
+
+        # Create BOND constraints: pair carbonyl carbons with sp2 oxygens
+        for i, carbonyl_c in enumerate(carbonyl_atoms[:num_carbonyls]):
+            problem.add_constraint(LSDConstraint(
+                atom1_index=carbonyl_c.index,
+                atom2_index=sp2_oxygen_indices[i],
+                constraint_type="BOND",
+                reason=f"carbonyl C ({carbonyl_c.carbon_shift:.1f} ppm) double-bonded to O",
+            ))
 
         # Handle other heteroatoms
         for element, count in formula_counts.items():

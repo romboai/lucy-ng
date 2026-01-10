@@ -36,7 +36,7 @@ if LSDRunner.is_available():
 """
 
 from lucy_ng.lsd.generator import LSDInputGenerator
-from lucy_ng.lsd.models import Hybridization, LSDAtom, LSDCorrelation, LSDProblem
+from lucy_ng.lsd.models import Hybridization, LSDAtom, LSDConstraint, LSDCorrelation, LSDProblem
 from lucy_ng.lsd.parser import LSDOutputParser, LSDSolution
 from lucy_ng.lsd.runner import LSDResult, LSDRunner
 
@@ -44,6 +44,7 @@ __all__ = [
     # Models
     "Hybridization",
     "LSDAtom",
+    "LSDConstraint",
     "LSDCorrelation",
     "LSDProblem",
     # Generator

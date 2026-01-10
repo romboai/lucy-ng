@@ -68,6 +68,44 @@ class LSDAtom:
 
 
 @dataclass
+class LSDConstraint:
+    """Structural constraint for LSD input.
+
+    Represents BOND (required bond) or FBND (forbidden bond) constraints.
+    These encode prior chemical knowledge derived from spectroscopic data.
+
+    Attributes:
+        atom1_index: First atom index
+        atom2_index: Second atom index
+        constraint_type: "BOND" (required) or "FBND" (forbidden)
+        reason: Optional reason/source for this constraint
+    """
+
+    atom1_index: int
+    atom2_index: int
+    constraint_type: str = "BOND"
+    reason: str | None = None
+
+    def __post_init__(self) -> None:
+        """Validate constraint parameters."""
+        valid_types = {"BOND", "FBND"}
+        if self.constraint_type not in valid_types:
+            raise ValueError(
+                f"Invalid constraint type: {self.constraint_type}. Valid: {valid_types}"
+            )
+        if self.atom1_index < 1 or self.atom2_index < 1:
+            raise ValueError("Atom indices must be >= 1")
+
+    def to_lsd_line(self) -> str:
+        """Generate LSD constraint command line.
+
+        Returns:
+            String like "BOND 1 2" or "FBND 3 4"
+        """
+        return f"{self.constraint_type} {self.atom1_index} {self.atom2_index}"
+
+
+@dataclass
 class LSDCorrelation:
     """NMR correlation for LSD input.
 
@@ -123,11 +161,12 @@ class LSDCorrelation:
 class LSDProblem:
     """Complete LSD problem definition.
 
-    Contains all atoms and correlations needed to generate an LSD input file.
+    Contains all atoms, correlations, and constraints needed to generate an LSD input file.
 
     Attributes:
         atoms: List of atom definitions
         correlations: List of NMR correlations
+        constraints: List of structural constraints (BOND/FBND)
         molecular_formula: Molecular formula string (e.g., "C13H18O2")
         name: Problem name for identification
         comments: Optional comments for the input file
@@ -135,6 +174,7 @@ class LSDProblem:
 
     atoms: list[LSDAtom] = field(default_factory=list)
     correlations: list[LSDCorrelation] = field(default_factory=list)
+    constraints: list[LSDConstraint] = field(default_factory=list)
     molecular_formula: str | None = None
     name: str = "problem"
     comments: list[str] = field(default_factory=list)
@@ -146,6 +186,10 @@ class LSDProblem:
     def add_correlation(self, correlation: LSDCorrelation) -> None:
         """Add a correlation to the problem."""
         self.correlations.append(correlation)
+
+    def add_constraint(self, constraint: LSDConstraint) -> None:
+        """Add a structural constraint to the problem."""
+        self.constraints.append(constraint)
 
     def get_atom_by_index(self, index: int) -> LSDAtom | None:
         """Get atom by index."""
@@ -180,6 +224,13 @@ class LSDProblem:
             if corr.atom1_index not in atom_indices:
                 issues.append(f"Correlation references non-existent atom {corr.atom1_index}")
             # Note: atom2 in HSQC/HMBC refers to H position, which may equal atom1
+
+        # Check that constraint atoms exist
+        for constraint in self.constraints:
+            if constraint.atom1_index not in atom_indices:
+                issues.append(f"Constraint references non-existent atom {constraint.atom1_index}")
+            if constraint.atom2_index not in atom_indices:
+                issues.append(f"Constraint references non-existent atom {constraint.atom2_index}")
 
         # Check for atoms without correlations
         corr_atoms = set()
@@ -216,5 +267,14 @@ class LSDProblem:
             type_counts[corr.correlation_type] = type_counts.get(corr.correlation_type, 0) + 1
         for ctype, count in sorted(type_counts.items()):
             lines.append(f"    {ctype}: {count}")
+
+        # Add constraint summary
+        if self.constraints:
+            lines.append(f"  Constraints: {len(self.constraints)}")
+            constraint_counts: dict[str, int] = {}
+            for c in self.constraints:
+                constraint_counts[c.constraint_type] = constraint_counts.get(c.constraint_type, 0) + 1
+            for ctype, count in sorted(constraint_counts.items()):
+                lines.append(f"    {ctype}: {count}")
 
         return "\n".join(lines)
