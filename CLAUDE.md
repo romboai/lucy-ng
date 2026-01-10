@@ -81,6 +81,72 @@ from lucy_ng.models import Peak1D
 peak = Peak1D(ppm=45.2, intensity=1.0e6, assignment="C-1")
 ```
 
+## Peak Picking
+
+### HSQC: Use DEPT-Guided Picker (Preferred)
+
+For HSQC peak picking, **always use `DEPTGuidedPicker`** instead of raw `PeakPicker2D`. This ensures:
+- Only peaks corresponding to real protonated carbons are returned
+- Noise peaks are filtered out by requiring DEPT correspondence
+- Carbon multiplicity (CH, CH2, CH3) is extracted from DEPT signs
+- Adaptive thresholding finds weak signals without picking noise
+
+```python
+from lucy_ng import BrukerReader
+from lucy_ng.processing import DEPTGuidedPicker
+
+hsqc = BrukerReader.read_2d("data/Ibuprofen/6")      # HSQC
+dept135 = BrukerReader.read_1d("data/Ibuprofen/3")   # DEPT-135
+dept90 = BrukerReader.read_1d("data/Ibuprofen/4")    # DEPT-90 (optional)
+
+# With DEPT-90 for full CH/CH3 disambiguation
+result = DEPTGuidedPicker.pick_hsqc_peaks_with_dept90(hsqc, dept135, dept90)
+
+# Or with DEPT-135 only (CH and CH3 remain ambiguous as "CH/CH3")
+result = DEPTGuidedPicker.pick_hsqc_peaks(hsqc, dept135)
+
+print(result.summary())
+# Access: result.peaks, result.carbon_multiplicities, result.all_carbons_found
+```
+
+**Note on symmetry**: Equivalent carbons (e.g., ortho/meta in para-substituted benzene) appear as single signals. The observed signal count may be less than the molecular formula carbon count.
+
+### HMBC: Use Guided Picker (Preferred)
+
+For HMBC peak picking, **use `HMBCGuidedPicker`** to filter noise by requiring:
+1. Carbon (F1) must match a known carbon from 13C or DEPT spectrum
+2. Proton (F2) must match a known proton from HSQC
+
+```python
+from lucy_ng import BrukerReader
+from lucy_ng.processing import HMBCGuidedPicker
+
+hmbc = BrukerReader.read_2d("data/Ibuprofen/7")
+c13 = BrukerReader.read_1d("data/Ibuprofen/2")
+hsqc = BrukerReader.read_2d("data/Ibuprofen/6")
+dept135 = BrukerReader.read_1d("data/Ibuprofen/3")  # optional
+
+result = HMBCGuidedPicker.pick_hmbc_peaks_from_spectra(
+    hmbc=hmbc,
+    carbon_spectrum=c13,
+    hsqc=hsqc,
+    dept135=dept135,  # optional, adds extra carbon positions
+)
+
+print(result.summary())
+# Access: result.peaks, result.validated_count, result.rejected_count
+```
+
+### Other 2D Spectra (COSY, etc.)
+
+For COSY and other 2D spectra, use `PeakPicker2D`:
+```python
+from lucy_ng.processing import PeakPicker2D
+
+cosy = BrukerReader.read_2d("data/Ibuprofen/5")
+peaks = PeakPicker2D.pick_peaks(cosy, threshold=0.05)
+```
+
 ## Planning
 
 This project uses GSD (Get Shit Done) workflow. Planning files in `.planning/`:

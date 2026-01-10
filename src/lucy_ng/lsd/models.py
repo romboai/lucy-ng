@@ -101,15 +101,18 @@ class LSDCorrelation:
         """Generate LSD correlation command line.
 
         Returns:
-            String like "HSQC 1 1" or "HMBC 1 2 2 3"
+            String like "HSQC 1 1" or "HMBC 1 2"
+
+        Note:
+            HMBC uses 2 parameters (carbon index, proton-source atom index).
+            LSD defaults to 2-3 bond distance for HMBC.
         """
         if self.correlation_type in ("HSQC", "HMQC"):
-            return f"{self.correlation_type} {self.atom1_index} {self.atom2_index}"
+            return f"HSQC {self.atom1_index} {self.atom2_index}"
         elif self.correlation_type == "HMBC":
-            return (
-                f"HMBC {self.atom1_index} {self.atom2_index} "
-                f"{self.min_bonds} {self.max_bonds}"
-            )
+            # LSD HMBC format: just the two atom indices
+            # Bond distance defaults to 2-3 in LSD
+            return f"HMBC {self.atom1_index} {self.atom2_index}"
         elif self.correlation_type == "COSY":
             return f"COSY {self.atom1_index} {self.atom2_index}"
         else:

@@ -63,8 +63,10 @@ class LSDRunner:
         "/usr/local/bin/lsd",
         "/usr/bin/lsd",
         "~/.local/bin/lsd",
+        "~/bin/lsd",  # Common user bin directory
         "~/LSD/lsd",
         "~/PyLSD/LSD/lsd",
+        "~/LSD-3.5.3/lsd",  # Default extraction location
     ]
 
     def __init__(self, lsd_path: str | Path | None = None):
@@ -195,16 +197,19 @@ class LSDRunner:
             # Find output files
             output_files = list(output_dir.glob("*.sol")) + list(output_dir.glob("*.out"))
 
-            # Count solutions from output
-            solution_count = self._count_solutions(proc.stdout, output_files)
+            # Count solutions from output (check both stdout and stderr)
+            solution_count = self._count_solutions(proc.stdout, output_files, proc.stderr)
 
             # Read solution contents
             solutions = []
             for sol_file in sorted(output_dir.glob("*.sol")):
                 solutions.append(sol_file.read_text())
 
+            # Success if return code is 0 OR if solutions were found
+            success = proc.returncode == 0 or solution_count > 0
+
             return LSDResult(
-                success=proc.returncode == 0,
+                success=success,
                 solution_count=solution_count,
                 solutions=solutions,
                 output_files=output_files,
@@ -229,24 +234,29 @@ class LSDRunner:
                 return_code=-1,
             )
 
-    def _count_solutions(self, stdout: str, output_files: list[Path]) -> int:
+    def _count_solutions(
+        self, stdout: str, output_files: list[Path], stderr: str = ""
+    ) -> int:
         """Count number of solutions from LSD output.
 
         Args:
             stdout: LSD standard output
             output_files: List of output files
+            stderr: LSD standard error (LSD often writes here)
 
         Returns:
             Number of solutions found
         """
-        # Try to parse from stdout
-        for line in stdout.split("\n"):
-            if "solution" in line.lower():
-                # Try to extract number
-                import re
-                match = re.search(r"(\d+)\s+solution", line.lower())
-                if match:
-                    return int(match.group(1))
+        import re
+
+        # Try to parse from stdout and stderr (LSD writes to stderr)
+        for text in [stdout, stderr]:
+            for line in text.split("\n"):
+                if "solution" in line.lower():
+                    # Try to extract number
+                    match = re.search(r"(\d+)\s+solution", line.lower())
+                    if match:
+                        return int(match.group(1))
 
         # Fallback: count .sol files
         sol_files = [f for f in output_files if f.suffix == ".sol"]

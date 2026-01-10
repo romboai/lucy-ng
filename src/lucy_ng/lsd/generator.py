@@ -1,10 +1,31 @@
 """LSD input file generator from NMR peak data."""
 
+import re
 from pathlib import Path
 
 from lucy_ng.lsd.models import Hybridization, LSDAtom, LSDCorrelation, LSDProblem
 from lucy_ng.models import PeakList1D, PeakList2D
 from lucy_ng.processing.dept_guided_picker import DEPTGuidedResult
+
+
+def parse_molecular_formula(formula: str) -> dict[str, int]:
+    """Parse a molecular formula into element counts.
+
+    Args:
+        formula: Molecular formula like "C13H18O2"
+
+    Returns:
+        Dictionary of element -> count, e.g., {"C": 13, "H": 18, "O": 2}
+    """
+    counts: dict[str, int] = {}
+    # Match element symbol (1-2 letters) followed by optional count
+    pattern = r"([A-Z][a-z]?)(\d*)"
+    for match in re.finditer(pattern, formula):
+        element = match.group(1)
+        count = int(match.group(2)) if match.group(2) else 1
+        if element:  # Skip empty matches
+            counts[element] = counts.get(element, 0) + count
+    return counts
 
 
 class LSDInputGenerator:
@@ -117,6 +138,7 @@ class LSDInputGenerator:
         """Build LSD problem from NMR peak data.
 
         Creates atom definitions from 13C peaks and correlations from 2D spectra.
+        If molecular_formula is provided, adds missing carbons and heteroatoms.
 
         Args:
             carbon_peaks: 1D 13C peak list (defines atoms)
@@ -136,13 +158,19 @@ class LSDInputGenerator:
             name=name,
         )
 
+        # Parse molecular formula to get expected atom counts
+        formula_counts: dict[str, int] = {}
+        if molecular_formula:
+            formula_counts = parse_molecular_formula(molecular_formula)
+
         # Build atom index mapping: carbon ppm → atom index
         # Sort by ppm descending (high field first, as is NMR convention)
         sorted_carbons = sorted(carbon_peaks.peaks, key=lambda p: -p.position)
         ppm_to_index: dict[float, int] = {}
 
-        for i, peak in enumerate(sorted_carbons, start=1):
-            ppm_to_index[peak.position] = i
+        atom_index = 1
+        for peak in sorted_carbons:
+            ppm_to_index[peak.position] = atom_index
 
             # Determine hybridization and H count from DEPT if available
             hybridization = Hybridization.SP3  # Default
@@ -157,25 +185,101 @@ class LSDInputGenerator:
                             hybridization = Hybridization.SP3
                         elif mult == "CH":
                             hydrogen_count = 1
-                            # Could be sp2 or sp3, default to sp3
-                            hybridization = Hybridization.SP3
+                            # Use chemical shift to determine hybridization
+                            # Aromatic/olefinic CH: ~100-160 ppm = sp2
+                            # Aliphatic CH: ~10-80 ppm = sp3
+                            if 100 <= peak.position <= 160:
+                                hybridization = Hybridization.SP2
+                            else:
+                                hybridization = Hybridization.SP3
                         elif mult == "CH3":
                             hydrogen_count = 3
                             hybridization = Hybridization.SP3
                         elif mult == "CH/CH3":
-                            # Ambiguous, assume CH (1 H) for now
-                            hydrogen_count = 1
-                            hybridization = Hybridization.SP3
+                            # Ambiguous from DEPT-135 alone
+                            # Use chemical shift heuristics:
+                            # - 0-30 ppm: likely CH3 (alkyl methyl)
+                            # - 30-60 ppm: likely CH (methine)
+                            # - 100-160 ppm: CH (aromatic/olefinic)
+                            if peak.position < 30:
+                                hydrogen_count = 3  # Likely CH3
+                                hybridization = Hybridization.SP3
+                            elif 100 <= peak.position <= 160:
+                                hydrogen_count = 1  # Aromatic CH
+                                hybridization = Hybridization.SP2
+                            else:
+                                hydrogen_count = 1  # Likely CH
+                                hybridization = Hybridization.SP3
                         break
 
             atom = LSDAtom(
-                index=i,
-                element="C",  # Only carbons for now
+                index=atom_index,
+                element="C",
                 hybridization=hybridization,
                 hydrogen_count=hydrogen_count,
                 carbon_shift=peak.position,
             )
             problem.add_atom(atom)
+            atom_index += 1
+
+        # Add missing carbons from molecular formula (quaternary carbons not in DEPT)
+        observed_carbons = len(sorted_carbons)
+        expected_carbons = formula_counts.get("C", 0)
+        missing_carbons = expected_carbons - observed_carbons
+
+        for _ in range(missing_carbons):
+            atom = LSDAtom(
+                index=atom_index,
+                element="C",
+                hybridization=Hybridization.SP2,  # Quaternary carbons often sp2
+                hydrogen_count=0,
+            )
+            problem.add_atom(atom)
+            atom_index += 1
+
+        # Add heteroatoms from molecular formula
+        # For oxygen: alternate between sp2 (C=O) and sp3 (C-O-H or C-O-C)
+        # This handles common cases like carboxylic acids, esters, etc.
+        heteroatom_defaults = {
+            "N": (Hybridization.SP3, 1),  # Nitrogen: often sp3 with 1H
+            "S": (Hybridization.SP3, 0),  # Sulfur
+            "P": (Hybridization.SP3, 0),  # Phosphorus
+            "Cl": (Hybridization.SP3, 0),  # Chlorine
+            "Br": (Hybridization.SP3, 0),  # Bromine
+            "F": (Hybridization.SP3, 0),  # Fluorine
+            "I": (Hybridization.SP3, 0),  # Iodine
+        }
+
+        # Handle oxygen specially - alternate sp2/sp3 for balanced DBE
+        oxygen_count = formula_counts.get("O", 0)
+        for i in range(oxygen_count):
+            # First oxygen sp2 (carbonyl), second sp3 (hydroxyl/ether), etc.
+            if i % 2 == 0:
+                hyb, h_count = Hybridization.SP2, 0
+            else:
+                hyb, h_count = Hybridization.SP3, 1
+            atom = LSDAtom(
+                index=atom_index,
+                element="O",
+                hybridization=hyb,
+                hydrogen_count=h_count,
+            )
+            problem.add_atom(atom)
+            atom_index += 1
+
+        # Handle other heteroatoms
+        for element, count in formula_counts.items():
+            if element in heteroatom_defaults:
+                hyb, h_count = heteroatom_defaults[element]
+                for _ in range(count):
+                    atom = LSDAtom(
+                        index=atom_index,
+                        element=element,
+                        hybridization=hyb,
+                        hydrogen_count=h_count,
+                    )
+                    problem.add_atom(atom)
+                    atom_index += 1
 
         # Helper to find atom index for a ppm value
         def find_atom_index(ppm: float) -> int | None:

@@ -71,7 +71,8 @@ class TestLSDInputGeneratorBasic:
 
         content = LSDInputGenerator.generate(problem)
 
-        assert "HMBC 1 2 2 3" in content
+        # LSD HMBC uses 2 parameters; bond distance defaults to 2-3
+        assert "HMBC 1 2" in content
         assert "; Long-range C-H correlations" in content
 
     def test_generate_cosy_correlations(self):

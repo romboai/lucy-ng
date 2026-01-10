@@ -127,12 +127,13 @@ class TestLSDCorrelation:
         assert corr.to_lsd_line() == "HSQC 4 4"
 
     def test_to_lsd_line_hmbc(self):
-        """Test HMBC line generation with bond distances."""
+        """Test HMBC line generation (2 params, LSD defaults to 2-3 bonds)."""
         corr = LSDCorrelation(
             atom1_index=1, atom2_index=3, correlation_type="HMBC",
             min_bonds=2, max_bonds=3
         )
-        assert corr.to_lsd_line() == "HMBC 1 3 2 3"
+        # LSD HMBC uses just 2 parameters; bond distance defaults to 2-3
+        assert corr.to_lsd_line() == "HMBC 1 3"
 
     def test_to_lsd_line_cosy(self):
         """Test COSY line generation."""
