@@ -1,0 +1,144 @@
+"""CLI commands for dereplication against reference databases."""
+
+import json
+from pathlib import Path
+
+import click
+
+from lucy_ng.dereplication import DereplicationService, NMRShiftDBLoader
+from lucy_ng.readers import BrukerReader
+
+
+@click.group()
+def dereplicate() -> None:
+    """Dereplication against reference databases."""
+    pass
+
+
+@dereplicate.command("c13")
+@click.argument("c13_path", type=click.Path(exists=True))
+@click.argument("formula")
+@click.option(
+    "--database",
+    "-d",
+    type=click.Path(exists=True),
+    default=None,
+    help="Path to nmrshiftdb SD file. Uses default if not specified.",
+)
+@click.option(
+    "--top",
+    "-n",
+    type=int,
+    default=5,
+    help="Number of top matches to show.",
+)
+@click.option(
+    "--threshold",
+    "-t",
+    type=float,
+    default=0.7,
+    help="Match threshold (0-1). Default: 0.7.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    help="Output format.",
+)
+def dereplicate_c13(
+    c13_path: str,
+    formula: str,
+    database: str | None,
+    top: int,
+    threshold: float,
+    output_format: str,
+) -> None:
+    """Dereplicate 13C spectrum against nmrshiftdb.
+
+    C13_PATH is the path to the 13C Bruker experiment.
+    FORMULA is the molecular formula (e.g., C13H18O2).
+
+    Matches observed 13C peaks against reference spectra in nmrshiftdb
+    filtered by molecular formula.
+    """
+    # Find database path
+    if database is None:
+        # Try default location
+        default_paths = [
+            Path("data/nmrshiftdb.sd"),
+            Path("data/nmrshiftdb/nmrshiftdb.sd"),
+            Path.home() / ".lucy" / "nmrshiftdb.sd",
+        ]
+        for p in default_paths:
+            if p.exists():
+                database = str(p)
+                break
+
+        if database is None:
+            click.echo(
+                "Error: No nmrshiftdb database found. "
+                "Specify path with --database or place at data/nmrshiftdb.sd",
+                err=True,
+            )
+            raise SystemExit(1)
+
+    # Load database
+    try:
+        loader = NMRShiftDBLoader()
+        loader.load(database)
+    except Exception as e:
+        click.echo(f"Error loading database: {e}", err=True)
+        raise SystemExit(1)
+
+    # Read spectrum
+    spectrum = BrukerReader.read_1d(c13_path)
+
+    # Run dereplication
+    service = DereplicationService(loader)
+    result = service.dereplicate_from_spectrum(
+        spectrum=spectrum,
+        molecular_formula=formula,
+        top_n=top,
+        match_threshold=threshold,
+    )
+
+    if output_format == "json":
+        data = {
+            "molecular_formula": result.molecular_formula,
+            "expected_carbons": result.expected_carbons,
+            "observed_peaks": result.observed_peaks,
+            "candidates_found": result.candidates_found,
+            "best_score": result.best_score,
+            "is_match": result.is_match,
+            "match_mode": result.match_mode.value,
+            "top_matches": [
+                {
+                    "name": m.reference.name,
+                    "smiles": m.reference.smiles,
+                    "score": m.score,
+                    "matched_peaks": m.matched_peaks,
+                    "unmatched_query": m.unmatched_query,
+                    "unmatched_ref": m.unmatched_ref,
+                }
+                for m in result.top_matches
+            ],
+        }
+        click.echo(json.dumps(data, indent=2))
+    else:
+        click.echo(f"Dereplication: {result.molecular_formula}")
+        click.echo(f"  Observed peaks: {result.observed_peaks}")
+        click.echo(f"  Candidates found: {result.candidates_found}")
+        click.echo(f"  Best score: {result.best_score:.3f}")
+        click.echo(f"  Is match: {result.is_match}")
+        click.echo()
+
+        if result.top_matches:
+            click.echo("Top matches:")
+            for i, m in enumerate(result.top_matches, 1):
+                click.echo(f"  {i}. {m.reference.name}")
+                click.echo(f"     Score: {m.score:.3f}")
+                click.echo(f"     SMILES: {m.reference.smiles}")
+                click.echo(f"     Matched: {m.matched_peaks}/{result.observed_peaks} peaks")
+        else:
+            click.echo("No matches found.")
