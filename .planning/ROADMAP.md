@@ -148,6 +148,33 @@
 
 ---
 
+### Phase 8: HOSE-Based 13C Spectrum Predictor
+**Goal**: Build pure Python 13C NMR predictor using HOSE codes and COCONUT database
+
+- HOSE code generation wrapper using hosegen library
+- Build lookup table from COCONUT SD file (~895K molecules)
+- Predictor class with fallback to shorter HOSE radii
+- Confidence scoring based on match count and variance
+- CLI command for shift prediction
+- MCP tool for agent integration
+
+**Research**: Completed - evaluated nmrgnn, CASCADE, nmr_mpnn (all had dependency issues); HOSE codes selected
+
+---
+
+### Phase 9: LSD Solution Ranking
+**Goal**: Rank LSD solutions by similarity between experimental 13C spectrum and predicted spectrum
+
+- Use Phase 8 predictor for candidate structure shifts
+- Compare predicted shifts with experimental 13C peaks
+- Score solutions by spectrum similarity (e.g., MAE, RMSE, or cosine similarity)
+- Rank and filter solutions by prediction quality
+- Return ranked solution list with confidence scores
+
+**Depends on:** Phase 8 (HOSE Predictor)
+
+---
+
 ## Progress
 
 | Phase | Status | Plans |
@@ -164,18 +191,21 @@
 | 5.2 Symmetry Detection | Complete | — |
 | 6. CLI Interface | Complete | 01-06-PLAN.md, 01-06-SUMMARY.md |
 | 7. MCP Server | Complete | 01-07-PLAN.md |
+| 8. HOSE-Based 13C Predictor | Complete | 01-08-PLAN.md, 01-08-SUMMARY.md |
+| 9. LSD Solution Ranking | Not Started | 01-09-PLAN.md |
 
 ---
 
-## Milestone 1.0 Complete
+## Milestone 1.0 Status
 
-All phases of the Core CASE Pipeline milestone are now complete:
+Core CASE Pipeline progress:
 
-- **10 MCP Tools**: Spectrum reading, peak picking, analysis, dereplication, LSD integration
-- **Full CLI**: 5 command groups with JSON output support
+- **11 MCP Tools**: Spectrum reading, peak picking, analysis, dereplication, LSD integration, shift prediction
+- **Full CLI**: 6 command groups with JSON output support
 - **Python API**: Direct library access for all functionality
-- **325+ Tests**: Comprehensive test coverage
+- **347+ Tests**: Comprehensive test coverage
 - **Documentation**: README, User Guide, Architecture, MCP Integration
+- **13C Prediction**: HOSE-code based predictor ready for solution ranking
 
 ---
 *Last updated: 2026-01-11*

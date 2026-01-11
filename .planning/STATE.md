@@ -3,8 +3,8 @@
 ## Current Position
 
 **Milestone**: 1.0 — Core CASE Pipeline
-**Phase**: 7 (MCP Server) — COMPLETE
-**Status**: Milestone 1.0 Complete - All phases finished
+**Phase**: 9 (LSD Solution Ranking) — NOT STARTED
+**Last Completed**: Phase 8 (HOSE-Based 13C Predictor)
 
 ## Roadmap Evolution
 
@@ -18,6 +18,10 @@
   - Rationale: Filter HMBC noise by requiring correlation to known C and H positions
 - Phase 5.2 inserted after Phase 5.1: Symmetry Detection from Spectroscopic Data (INSERTED)
   - Rationale: Molecular symmetry causes fewer NMR signals than atoms; must detect and handle for valid LSD input
+- Phase 8 added: HOSE-Based 13C Predictor (ADDED)
+  - Rationale: Build pure Python 13C predictor using HOSE codes; evaluated GNN tools (nmrgnn, CASCADE, nmr_mpnn) but all had TensorFlow compatibility issues
+- Phase 9 added: LSD Solution Ranking (RENUMBERED from Phase 8)
+  - Rationale: Use Phase 8 predictor to rank LSD solutions by spectrum similarity
 
 ## Recent Progress
 
@@ -79,32 +83,28 @@
 
 **Last session**: 2026-01-11
 **Completed**:
-- **Phase 7 MCP Server complete**
-- FastMCP-based server with 10 tools:
-  - `read_spectrum_1d`, `read_spectrum_2d` - Spectrum reading
-  - `pick_peaks_1d`, `pick_hsqc_peaks`, `pick_hmbc_peaks` - Peak picking
-  - `analyze_symmetry` - Symmetry detection
-  - `dereplicate_c13` - Database matching
-  - `check_lsd_availability`, `generate_lsd_input`, `run_lsd` - LSD integration
-- Entry point: `lucy-mcp` command
-- 18 MCP server tests
-- Refactored SimplePeakPicker → AdaptivePeakPicker with static methods
-- 325+ total tests passing
+- **Phase 8 HOSE-Based 13C Predictor complete**
+- Pure Python predictor using HOSE codes + COCONUT database
+- New `lucy_ng.prediction` module:
+  - `HOSECodeGenerator`: HOSE code generation wrapper
+  - `HOSELookupTable`: Build/save/load lookup tables
+  - `C13Predictor`: Predict shifts with 6→1 radius fallback
+- CLI commands: `lucy predict c13`, `lucy predict build-table`, `lucy predict table-info`
+- MCP tool: `predict_c13_shifts`
+- 28 new tests (all passing)
+- Added hosegen and tqdm dependencies
 
-**Documentation complete**:
-- Comprehensive README.md
-- docs/INSTALLATION.md
-- docs/USER_GUIDE.md
-- docs/ARCHITECTURE.md
-- docs/MCP_INTEGRATION.md
+**Previous session**:
+- Phase 7 MCP Server complete (11 tools total now)
+- 347+ total tests collected
 
 **Key technical insights**:
-- FastMCP uses `name` and `instructions`, not `version`/`description`
-- MCP tools return `{"success": bool, ...}` pattern
-- Experiment detection: try 2D first, fall back to 1D
-- COCONUT streaming mode handles 4.8GB database efficiently
+- HOSE codes work with RDKit only (no TensorFlow needed)
+- GNN tools (nmrgnn, CASCADE, nmr_mpnn) all had TF compatibility issues
+- 6-sphere HOSE radius provides good specificity with fallback safety
+- Lookup table expected size: 1-2GB compressed for full COCONUT
 
-**Milestone 1.0 Complete** - All 7 phases finished
+**Next**: Phase 9 - Use predictor for LSD solution ranking
 
 ---
 *Last updated: 2026-01-11*
