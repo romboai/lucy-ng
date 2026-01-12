@@ -319,6 +319,28 @@ lucy predict table-info
 
 See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for comprehensive Python API documentation.
 
+### Claude Code Integration
+
+Lucy-ng works seamlessly with [Claude Code](https://claude.ai/claude-code) for interactive structure elucidation. Copy this prompt to set up a new machine:
+
+```
+Set up this machine for NMR structure elucidation with lucy-ng:
+
+1. Check/install lucy-ng: `lucy --version || pip install lucy-ng`
+2. Check LSD solver: `lucy lsd check` - if missing, install from http://eos.univ-reims.fr/LSD/
+3. Fetch the workflow guide and learn it: https://raw.githubusercontent.com/steinbeck/lucy-ng/main/docs/AI_GUIDE.md
+4. Create .claude/settings.json with: {"permissions":{"allow":["Bash(lucy:*)","Bash(python3:*)"]}}
+
+Once ready, place Bruker NMR data in a folder and I'll perform complete structure elucidation.
+```
+
+After setup, simply ask:
+```
+Perform structure elucidation on the NMR data in this folder. Molecular formula: C13H18O2
+```
+
+Claude will automatically run dereplication, pick peaks, analyze symmetry, generate LSD constraints, solve structures, and rank solutions by 13C shift prediction.
+
 ### MCP Server (AI Integration)
 
 Lucy-ng includes an MCP (Model Context Protocol) server for AI agent integration.

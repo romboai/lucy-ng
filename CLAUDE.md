@@ -2,6 +2,68 @@
 
 AI-agent powered Computer-Assisted Structure Elucidation for organic natural products.
 
+---
+
+## End-User Setup (First-Time Installation)
+
+When a user asks to set up structure elucidation or perform CASE, run these checks:
+
+### 1. Install lucy-ng
+```bash
+lucy --version || pip install lucy-ng
+```
+
+### 2. Check LSD Solver (REQUIRED)
+```bash
+lucy lsd check
+```
+
+If LSD is not found:
+- Download from: http://eos.univ-reims.fr/LSD/
+- Extract the archive
+- Add the `bin/` directory to PATH (contains `LSD` and `outlsd`)
+- Both `LSD` and `outlsd` are required for full functionality
+
+### 3. Verify Setup
+```bash
+lucy lsd check
+```
+Should report both LSD and outlsd as available.
+
+### 4. Create Permissions File
+Create `.claude/settings.json` in the working directory:
+```json
+{
+  "permissions": {
+    "allow": ["Bash(lucy:*)", "Bash(python3:*)", "Bash(ls:*)", "Bash(mkdir:*)"]
+  }
+}
+```
+
+### 5. Learn the Workflow
+Read the AI Guide for structure elucidation workflow:
+https://raw.githubusercontent.com/steinbeck/lucy-ng/main/docs/AI_GUIDE.md
+
+## Performing Structure Elucidation
+
+Once setup is complete, follow this workflow:
+
+1. **Dereplication** - `lucy dereplicate c13 <spectrum> <formula>` - check known compounds first
+2. **Symmetry** - `lucy analyze symmetry <data_dir> <formula>` - detect equivalent atoms
+3. **Peak Picking**:
+   - `lucy pick 1d <c13>` - carbon peaks
+   - `lucy pick hsqc <hsqc> --dept135 <dept135>` - direct C-H correlations
+   - `lucy pick hmbc <hmbc> --c13 <c13> --hsqc <hsqc>` - long-range correlations
+4. **LSD Generation** - `lucy lsd generate <data_dir> <formula> -o output.lsd`
+5. **Solve** - `lucy lsd run output.lsd`
+6. **Rank** - `lucy lsd rank <solutions_dir> --spectrum <c13>` or `--shifts "..."`
+
+Create an `analysis/` folder to document all steps and results.
+
+---
+
+## Developer Reference
+
 ## Quick Reference
 
 ```bash
