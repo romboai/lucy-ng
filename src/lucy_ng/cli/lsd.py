@@ -347,8 +347,7 @@ def lsd_rank(
             if spec.nucleus != "13C":
                 click.echo(f"Warning: Spectrum is {spec.nucleus}, expected 13C", err=True)
             # Pick peaks
-            picker = AdaptivePeakPicker(spec.data, spec.ppm_scale)
-            peaks = picker.pick_peaks()
+            peaks = AdaptivePeakPicker.pick_peaks(spec)
             experimental_shifts = [p.ppm for p in peaks]
         except Exception as e:
             click.echo(f"Error reading spectrum: {e}", err=True)
