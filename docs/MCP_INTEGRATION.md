@@ -63,7 +63,7 @@ Lucy-ng exposes 13 MCP tools:
 | `check_lsd_availability` | Check if LSD is installed | (none) |
 | `generate_lsd_input` | Generate LSD input file | `data_dir`, `molecular_formula`, `output_file` (optional) |
 | `run_lsd` | Execute LSD solver | `input_file`, `timeout`, `output_dir` (optional) |
-| `rank_lsd_solutions` | Rank solutions by 13C prediction | `solutions_dir`, `experimental_shifts`, `tolerance`, `top_n` |
+| `rank_lsd_solutions` | Rank solutions by 13C prediction | `smiles_file`, `experimental_shifts`, `tolerance`, `top_n` |
 
 ### Prediction
 
@@ -323,7 +323,7 @@ This opens a web interface where you can:
 > LSD generated 50 candidate structures. Which one is most likely correct?
 
 **Claude uses:**
-1. `rank_lsd_solutions(solutions_dir="output/", experimental_shifts=[18.5, 22.4, ...], top_n=10)` - Rank by spectrum prediction
+1. `rank_lsd_solutions(smiles_file="output/outlsd.out", experimental_shifts=[18.5, 22.4, ...], top_n=10)` - Rank by spectrum prediction
 
 **Response:**
 > I ranked the 50 LSD solutions by comparing predicted vs experimental 13C shifts:

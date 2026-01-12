@@ -56,7 +56,7 @@ Once setup is complete, follow this workflow:
    - `lucy pick hmbc <hmbc> --c13 <c13> --hsqc <hsqc>` - long-range correlations
 4. **LSD Generation** - `lucy lsd generate <data_dir> <formula> -o output.lsd`
 5. **Solve** - `lucy lsd run output.lsd`
-6. **Rank** - `lucy lsd rank <solutions_dir> --spectrum <c13>` or `--shifts "..."`
+6. **Rank** - `lucy lsd rank <smiles_file> --spectrum <c13>` or `--shifts "..."`
 
 Create an `analysis/` folder to document all steps and results.
 

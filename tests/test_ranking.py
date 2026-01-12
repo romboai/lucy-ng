@@ -371,23 +371,22 @@ class TestSolutionRankerRank:
         assert result.solutions[0].mae == 0.0
         assert result.solutions[1].smiles == "BAD"
 
-    def test_skip_solutions_without_smiles(self, mock_predictor):
-        """Test that solutions without SMILES are skipped."""
+    def test_skip_solutions_with_empty_smiles(self, mock_predictor):
+        """Test that solutions with empty SMILES are skipped."""
         mock_predictor.predict_from_smiles.return_value = make_prediction_result("CCC", [45.0])
 
         ranker = SolutionRanker(mock_predictor, tolerance=3.0)
 
         solutions = [
             LSDSolution(index=1, smiles="CCC"),
-            LSDSolution(index=2, smiles=None),  # No SMILES
-            LSDSolution(index=3, smiles=""),    # Empty SMILES
+            LSDSolution(index=2, smiles=""),    # Empty SMILES
         ]
 
         result = ranker.rank(solutions, [45.0])
 
-        assert result.total_solutions == 3
+        assert result.total_solutions == 2
         assert result.ranked_count == 1
-        assert result.skipped_count == 2
+        assert result.skipped_count == 1
 
     def test_skip_failed_predictions(self, mock_predictor):
         """Test that failed predictions are skipped."""

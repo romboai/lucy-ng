@@ -369,10 +369,10 @@ Options:
 #### Rank LSD Solutions
 
 ```bash
-lucy lsd rank SOLUTIONS_PATH [OPTIONS]
+lucy lsd rank SMILES_FILE [OPTIONS]
 
 Arguments:
-  SOLUTIONS_PATH  Directory containing LSD solution files (.sol)
+  SMILES_FILE     File containing SMILES (one per line), typically outlsd output
 
 Options:
   -s, --spectrum PATH   Path to Bruker 13C spectrum for experimental shifts
@@ -387,13 +387,13 @@ Options:
 ```bash
 # Rank using curated shift list (RECOMMENDED)
 # Use the peak list that was refined during the CASE workflow
-lucy lsd rank output/ --shifts "180.5,140.8,137.0,129.4,127.1,45.1,40.4,30.2,22.4,18.2"
+lucy lsd rank outlsd.out --shifts "180.5,140.8,137.0,129.4,127.1,45.1,40.4,30.2,22.4,18.2"
 
 # Rank using experimental 13C spectrum (re-picks peaks from scratch)
-lucy lsd rank output/ --spectrum data/Ibuprofen/2 --top 5
+lucy lsd rank solutions.smi --spectrum data/Ibuprofen/2 --top 5
 
 # With custom tolerance
-lucy lsd rank output/ --shifts "180.5,140.8,137.0,129.4,127.1" --tolerance 2.0
+lucy lsd rank outlsd.out --shifts "180.5,140.8,137.0,129.4,127.1" --tolerance 2.0
 ```
 
 > **Best Practice**: Use `--shifts` with your curated peak list rather than `--spectrum`.

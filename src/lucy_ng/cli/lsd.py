@@ -259,7 +259,7 @@ def _get_default_table_path() -> Path:
 
 
 @lsd.command("rank")
-@click.argument("solutions_path", type=click.Path(exists=True))
+@click.argument("smiles_file", type=click.Path(exists=True))
 @click.option(
     "--spectrum",
     "-s",
@@ -301,7 +301,7 @@ def _get_default_table_path() -> Path:
     help="Output format.",
 )
 def lsd_rank(
-    solutions_path: str,
+    smiles_file: str,
     spectrum: str | None,
     shifts: str | None,
     top: int,
@@ -311,16 +311,17 @@ def lsd_rank(
 ) -> None:
     """Rank LSD solutions by 13C spectrum similarity.
 
-    SOLUTIONS_PATH is the directory containing LSD solution files (.sol).
+    SMILES_FILE is a file containing SMILES strings (one per line),
+    typically the output from outlsd.
 
     Provide experimental shifts via --spectrum (Bruker 13C directory) or
     --shifts (comma-separated ppm values).
 
     Examples:
 
-      lucy lsd rank ./solutions --spectrum data/Ibuprofen/2
+      lucy lsd rank outlsd.out --spectrum data/Ibuprofen/2
 
-      lucy lsd rank ./solutions --shifts "180.5,140.8,137.0,129.4"
+      lucy lsd rank solutions.smi --shifts "180.5,140.8,137.0,129.4"
     """
     # Get experimental shifts
     if spectrum and shifts:
@@ -357,16 +358,18 @@ def lsd_rank(
         click.echo("Error: No experimental shifts found", err=True)
         raise SystemExit(1)
 
-    # Load solutions
-    solutions_dir = Path(solutions_path)
+    # Load solutions from SMILES file
     try:
-        solutions = LSDOutputParser.parse_solutions(solutions_dir)
+        solutions = LSDOutputParser.parse_smiles_file(smiles_file)
+    except FileNotFoundError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
     except Exception as e:
-        click.echo(f"Error loading solutions: {e}", err=True)
+        click.echo(f"Error loading SMILES file: {e}", err=True)
         raise SystemExit(1)
 
     if not solutions:
-        click.echo("Error: No solutions found in directory", err=True)
+        click.echo("Error: No SMILES found in file", err=True)
         raise SystemExit(1)
 
     # Get table path

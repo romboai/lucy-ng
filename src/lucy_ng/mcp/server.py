@@ -647,7 +647,7 @@ def _get_default_hose_table() -> Path | None:
 
 @mcp.tool()
 def rank_lsd_solutions(
-    solutions_dir: str,
+    smiles_file: str,
     experimental_shifts: list[float],
     top_n: int = 10,
     tolerance: float = 3.0,
@@ -663,7 +663,7 @@ def rank_lsd_solutions(
     predicted shifts matching the experimental spectrum rank higher.
 
     Args:
-        solutions_dir: Directory containing LSD solution files (.sol)
+        smiles_file: Path to file containing SMILES (one per line), typically outlsd output
         experimental_shifts: List of experimental 13C peak positions in ppm
         top_n: Number of top results to return (default: 10)
         tolerance: Max ppm difference for shift matching (default: 3.0)
@@ -691,14 +691,14 @@ def rank_lsd_solutions(
                     "lucy predict build-table --source nmrshiftdb",
                 }
 
-        # Load solutions
-        sol_path = Path(solutions_dir)
-        if not sol_path.exists():
-            return {"success": False, "error": f"Solutions directory not found: {solutions_dir}"}
+        # Load solutions from SMILES file
+        smiles_path = Path(smiles_file)
+        if not smiles_path.exists():
+            return {"success": False, "error": f"SMILES file not found: {smiles_file}"}
 
-        solutions = LSDOutputParser.parse_solutions(sol_path)
+        solutions = LSDOutputParser.parse_smiles_file(smiles_path)
         if not solutions:
-            return {"success": False, "error": "No LSD solutions found in directory"}
+            return {"success": False, "error": "No SMILES found in file"}
 
         # Create ranker
         ranker = SolutionRanker.from_table_file(

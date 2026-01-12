@@ -332,9 +332,9 @@ hmbc_result = pick_hmbc_peaks(hmbc_path, c13_path, hsqc_path, dept135_path)
 **Then run**: `run_lsd(input_file, timeout=60)`
 
 **What happens automatically**:
-1. LSD generates solution files (.sol) with atom connectivity
+1. LSD generates solution files with atom connectivity
 2. If outlsd is installed, it automatically converts solutions to SMILES
-3. The SMILES are stored in outlsd.out for ranking
+3. The SMILES are written to outlsd.out (one per line) for ranking
 
 **Interpret results**:
 ```
@@ -359,7 +359,7 @@ solution_count > 100:
 
 **When to rank**: If LSD produces more than one solution, use ranking to identify the most likely candidate.
 
-**Use**: `rank_lsd_solutions(solutions_dir, experimental_shifts, tolerance=3.0, top_n=10)`
+**Use**: `rank_lsd_solutions(smiles_file, experimental_shifts, tolerance=3.0, top_n=10)`
 
 > **Important**: Use the curated peak list you built during the CASE workflow, not a
 > fresh re-pick from the spectrum. The peak list may have been validated against DEPT,
