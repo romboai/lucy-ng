@@ -616,15 +616,32 @@ def run_lsd(
 
 def _get_default_hose_table() -> Path | None:
     """Find the default HOSE lookup table."""
-    search_paths = [
-        Path("data/reference/hose_nmrshiftdb.json.gz"),
-        Path("data/reference/hose_lookup.json.gz"),
-        Path.home() / ".lucy" / "hose_nmrshiftdb.json.gz",
-        Path.home() / ".lucy" / "hose_lookup.json.gz",
-    ]
-    for p in search_paths:
-        if p.exists():
-            return p
+    import lucy_ng
+
+    package_dir = Path(lucy_ng.__file__).parent
+
+    # Check project data directory (development install)
+    # package_dir = .../lucy-ng/src/lucy_ng → project_root = .../lucy-ng
+    project_root = package_dir.parent.parent
+    project_table = project_root / "data" / "reference" / "hose_nmrshiftdb.json.gz"
+    if project_table.exists():
+        return project_table
+
+    # Check package data (pip install)
+    package_table = package_dir / "data" / "hose_nmrshiftdb.json.gz"
+    if package_table.exists():
+        return package_table
+
+    # Check user home directory
+    home_table = Path.home() / ".lucy" / "hose_nmrshiftdb.json.gz"
+    if home_table.exists():
+        return home_table
+
+    # Fallback to current working directory (legacy)
+    cwd_table = Path("data/reference/hose_nmrshiftdb.json.gz")
+    if cwd_table.exists():
+        return cwd_table
+
     return None
 
 
