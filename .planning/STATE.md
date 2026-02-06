@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-06)
 
 **Core value:** AI agent autonomously determines compound structures from NMR, with multi-agent architecture preventing loops
-**Current focus:** Phase 21 complete; ready for Phase 22 (HMBC Strategy and Spectral Quality)
+**Current focus:** Phase 22 complete; ready for Phase 23 (Error Tolerance and Confidence)
 
 ## Current Position
 
 **Milestone**: v2.0 Robust Multi-Agent CASE
-**Phase**: 22 of 26 (HMBC Strategy and Spectral Quality) -- IN PROGRESS
-**Plan**: 1 of 3 complete
-**Status**: Phase 22 started (HMBC strategy and quality assessment documented)
-**Last activity**: 2026-02-06 -- Completed 22-01-PLAN.md (skill documentation)
+**Phase**: 22 of 26 (HMBC Strategy and Spectral Quality) -- COMPLETE
+**Plan**: 1 of 1 complete
+**Status**: Phase 22 complete (HMBC strategy and spectral quality assessment in SKILL.md)
+**Last activity**: 2026-02-06 -- Completed 22-01-PLAN.md (spectral quality + incremental HMBC)
 
-Progress: [======================|.......] 79% (21 phases complete + 1/3 of phase 22, 5 remaining)
+Progress: [=======================|......] 81% (22 phases complete, 4 remaining)
 
 ## Completed Milestones
 
@@ -72,11 +72,10 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Phase 22 Plan 01 complete: HMBC strategy and quality assessment documented in SKILL.md
-- Phase 22 Plan 02 next: Implement quality assessment tool (assess_spectrum_quality MCP tool)
-- Phase 22 Plan 03 next: Teach agent incremental HMBC behavior
+- Phase 22 complete: SKILL.md now 610 lines with 10 sections (quality assessment + incremental HMBC + updated workflow/quick reference)
+- Phase 23 ready: Error tolerance and confidence-annotated output (ETOL-01 through ETOL-04, CONF-01 through CONF-03)
 - Phase 24 foundation ready: skill/supervisor/SKILL.md + convergence detection from 22-01
-- 8 intelligence hotspot modules (~2,139 lines) identified for progressive migration through Phases 22-26
+- 8 intelligence hotspot modules (~2,139 lines) identified for progressive migration through Phases 23-26
 - 3 code consolidation targets (experiment auto-discovery, database finder, LSD parser) queued for Phase 26
 
 ### Blockers/Concerns
@@ -86,8 +85,8 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Completed Phase 22 Plan 01 (HMBC strategy and quality assessment documented)
+Stopped at: Completed Phase 22 (all plans executed, verified)
 Resume file: None
 
 ---
-*Last updated: 2026-02-06 after Phase 22 Plan 01 completion*
+*Last updated: 2026-02-06 after Phase 22 completion*

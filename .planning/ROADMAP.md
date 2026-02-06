@@ -290,7 +290,7 @@
 
 - [x] **Phase 20: System Audit** -- COMPLETE 2026-02-06. 15 MCP tools, 9 CLI groups, 1,080-line CLAUDE.md classified
 - [x] **Phase 21: Skill Restructure** -- COMPLETE 2026-02-06. CLAUDE.md 305 lines, SKILL.md 418 lines, SUPERVISOR.md 78 lines, zero duplication
-- [ ] **Phase 22: HMBC Strategy and Spectral Quality** -- Encode incremental constraint strategy and quality assessment in skill
+- [x] **Phase 22: HMBC Strategy and Spectral Quality** -- COMPLETE 2026-02-06. SKILL.md 610 lines (+192), spectral quality + incremental HMBC strategy
 - [ ] **Phase 23: Error Tolerance and Confidence** -- Encode error handling patterns and confidence-annotated output in skill
 - [ ] **Phase 24: Supervisor Agent** -- Create supervisor with loop detection, intervention strategies, and escalation
 - [ ] **Phase 25: Diagnostic Specialist** -- Create LSD expert agent for systematic failure diagnosis
@@ -344,7 +344,7 @@ Plans:
   5. An AI agent reading SKILL.md would know to assess spectrum quality BEFORE picking peaks and to adjust expectations based on quality findings
 **Plans**: 1 plan
 Plans:
-- [ ] 22-01-PLAN.md -- Add Spectral Quality Assessment + Incremental HMBC Strategy to SKILL.md, update CASE Workflow and Quick Reference
+- [x] 22-01-PLAN.md -- Add Spectral Quality Assessment + Incremental HMBC Strategy to SKILL.md, update CASE Workflow and Quick Reference
 
 ---
 
@@ -433,11 +433,11 @@ Plans:
 | 19. CLI/MCP Integration | v1.2 | 1/1 | Complete | 2026-01-18 |
 | 20. System Audit | v2.0 | 3/3 | Complete | 2026-02-06 |
 | 21. Skill Restructure | v2.0 | 3/3 | Complete | 2026-02-06 |
-| 22. HMBC Strategy + Quality | v2.0 | 0/1 | Planned | - |
+| 22. HMBC Strategy + Quality | v2.0 | 1/1 | Complete | 2026-02-06 |
 | 23. Error Tolerance + Confidence | v2.0 | TBD | Not started | - |
 | 24. Supervisor Agent | v2.0 | TBD | Not started | - |
 | 25. Diagnostic Specialist | v2.0 | TBD | Not started | - |
 | 26. Thin Tools | v2.0 | TBD | Not started | - |
 
 ---
-*Last updated: 2026-02-06 after Phase 21 completion*
+*Last updated: 2026-02-06 after Phase 22 completion*

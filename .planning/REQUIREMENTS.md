@@ -23,10 +23,10 @@ Requirements for v2.0 Robust Multi-Agent CASE. Each maps to roadmap phases.
 
 ### Incremental HMBC Strategy
 
-- [ ] **HMBC-01**: Skill encodes 3-phase constraint addition strategy: Phase 1 (core structure from high-confidence signals), Phase 2 (resolve ambiguity with diagnostic correlations), Phase 3 (refine with full constraint set)
-- [ ] **HMBC-02**: Skill explicitly teaches "start with 5-10 high-confidence HMBC correlations, not all"
-- [ ] **HMBC-03**: Skill includes decision tree for when to add more correlations vs when to investigate failures
-- [ ] **HMBC-04**: Skill explicitly prohibits "throw everything in" approach -- no guidance saying "use all correlations from peak picking"
+- [x] **HMBC-01**: Skill encodes adaptive incremental constraint strategy: start with high-confidence correlations, add 3-5 per iteration, observe solution count change (replaces fixed 3-phase recipe per CONTEXT.md decision)
+- [x] **HMBC-02**: Skill explicitly teaches "start with 5-10 high-confidence HMBC correlations, not all"
+- [x] **HMBC-03**: Skill includes decision tree for when to add more correlations vs when to investigate failures
+- [x] **HMBC-04**: Skill explicitly prohibits "throw everything in" approach -- no guidance saying "use all correlations from peak picking"
 
 ### Error Tolerance
 
@@ -62,9 +62,9 @@ Requirements for v2.0 Robust Multi-Agent CASE. Each maps to roadmap phases.
 
 ### Spectral Quality Assessment
 
-- [ ] **QUAL-01**: Skill teaches S/N assessment -- AI evaluates signal-to-noise and adjusts expectations
-- [ ] **QUAL-02**: Skill teaches digital resolution impact -- AI documents when close carbons may alias
-- [ ] **QUAL-03**: Skill teaches artifact recognition -- AI identifies 1J correlations, t1 noise, baseline roll
+- [x] **QUAL-01**: Skill teaches S/N assessment -- AI evaluates signal-to-noise and adjusts expectations
+- [x] **QUAL-02**: Skill teaches digital resolution impact -- AI documents when close carbons may alias
+- [x] **QUAL-03**: Skill teaches artifact recognition -- AI identifies 1J correlations, t1 noise, baseline roll
 
 ### Confidence-Annotated Output
 
@@ -123,13 +123,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SKIL-02 | Phase 21 | Complete |
 | SKIL-03 | Phase 21 | Complete |
 | SKIL-04 | Phase 21 | Complete |
-| HMBC-01 | Phase 22 | Pending |
-| HMBC-02 | Phase 22 | Pending |
-| HMBC-03 | Phase 22 | Pending |
-| HMBC-04 | Phase 22 | Pending |
-| QUAL-01 | Phase 22 | Pending |
-| QUAL-02 | Phase 22 | Pending |
-| QUAL-03 | Phase 22 | Pending |
+| HMBC-01 | Phase 22 | Complete |
+| HMBC-02 | Phase 22 | Complete |
+| HMBC-03 | Phase 22 | Complete |
+| HMBC-04 | Phase 22 | Complete |
+| QUAL-01 | Phase 22 | Complete |
+| QUAL-02 | Phase 22 | Complete |
+| QUAL-03 | Phase 22 | Complete |
 | ETOL-01 | Phase 23 | Pending |
 | ETOL-02 | Phase 23 | Pending |
 | ETOL-03 | Phase 23 | Pending |
@@ -161,4 +161,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-06*
-*Last updated: 2026-02-06 after roadmap creation*
+*Last updated: 2026-02-06 after Phase 22 completion*
