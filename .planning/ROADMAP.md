@@ -307,7 +307,11 @@
   2. All 7 CLI command groups classified with recommendation for what intelligence stays vs moves to skill
   3. CLAUDE.md sections catalogued with duplication and misplacement identified
   4. Audit report exists with specific, actionable recommendation per component (not generic "simplify later")
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 20-01-PLAN.md -- Audit MCP tools and CLI commands (tier classification)
+- [ ] 20-02-PLAN.md -- Audit CLAUDE.md (duplication and misplacement analysis)
+- [ ] 20-03-PLAN.md -- Compile final audit report with migration roadmap
 
 ---
 
@@ -421,7 +425,7 @@
 | 17. HOSE Generation | v1.2 | 1/1 | Complete | 2026-01-16 |
 | 18. Prediction API | v1.2 | 1/1 | Complete | 2026-01-18 |
 | 19. CLI/MCP Integration | v1.2 | 1/1 | Complete | 2026-01-18 |
-| 20. System Audit | v2.0 | TBD | Not started | - |
+| 20. System Audit | v2.0 | 0/3 | Planned | - |
 | 21. Skill Restructure | v2.0 | TBD | Not started | - |
 | 22. HMBC Strategy + Quality | v2.0 | TBD | Not started | - |
 | 23. Error Tolerance + Confidence | v2.0 | TBD | Not started | - |
