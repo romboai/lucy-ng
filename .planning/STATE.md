@@ -11,9 +11,9 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 
 **Milestone**: v2.0 Robust Multi-Agent CASE
 **Phase**: 20 of 26 (System Audit)
-**Plan**: 0 of TBD in current phase
-**Status**: Ready to plan
-**Last activity**: 2026-02-06 -- Roadmap created for v2.0 (Phases 20-26)
+**Plan**: 2 of 3 in current phase
+**Status**: In progress
+**Last activity**: 2026-02-06 -- Completed 20-02-PLAN.md (CLAUDE.md audit)
 
 Progress: [===================|..........] 66% (19/26 phases complete overall)
 
@@ -50,7 +50,7 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None yet.
+- 20-02 audit found CLAUDE.md is 80% domain knowledge (~590 lines) that should move to SKILL.md in Phase 21
 
 ### Blockers/Concerns
 
@@ -59,8 +59,8 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Roadmap created for v2.0 milestone (7 phases, 38 requirements mapped)
+Stopped at: Completed 20-02-PLAN.md (CLAUDE.md audit)
 Resume file: None
 
 ---
-*Last updated: 2026-02-06 after v2.0 roadmap creation*
+*Last updated: 2026-02-06 after 20-02 CLAUDE.md audit completion*
