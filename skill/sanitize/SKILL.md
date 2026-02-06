@@ -17,6 +17,39 @@ This skill removes compound identity information from NMR datasets while preserv
 
 ---
 
+## Blind CASE Protocol (CRITICAL)
+
+**When evaluating AI-based CASE on datasets from public sources (nmrXiv, metabolomics repositories), compound identity may be present in metadata files.**
+
+### If You Discover Compound Identity in Metadata
+
+If you find compound names in title files, peaklist.xml, audit logs, or any other files:
+
+1. **STOP** - Do not use this information for structure determination
+2. **Do not** look up the compound structure or properties
+3. **Do not** infer molecular formula from the name
+4. **Treat** the compound as completely unknown
+5. **Ask** the user to provide the molecular formula (simulating HRMS)
+
+### Data Sanitization for Valid CASE Evaluation
+
+For valid CASE evaluation, use this skill to remove compound identity before analysis. This requires:
+
+1. Run this sanitization workflow on the dataset
+2. Start a **fresh AI session** (to clear memory of compound identity)
+3. Perform CASE in the new session with user-provided molecular formula
+
+### Why This Matters
+
+For AI-based CASE research, the AI must demonstrate it can:
+- Determine structure from NMR correlations alone
+- Handle symmetry and equivalence without prior knowledge
+- Generate and rank candidate structures objectively
+
+Using compound identity from metadata invalidates the evaluation.
+
+---
+
 ## Prerequisites
 
 The sanitization tools should be in the dataset directory or accessible. If not present, create them using the embedded code below.

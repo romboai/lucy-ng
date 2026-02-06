@@ -17,6 +17,9 @@ This skill performs ONLY dereplication (database matching). It does NOT proceed 
 - Identify a natural product from a database
 - Get candidate matches before deciding whether full CASE is needed
 
+> **Domain Knowledge:** For dereplication score interpretation and ranking thresholds,
+> see `skill/SKILL.md` Section 4 (Dereplication).
+
 ---
 
 ## Prerequisites
@@ -102,12 +105,7 @@ with DatabaseQueryService(db_path) as query:
 
 ### Step 4: Interpret Results
 
-| Score | Interpretation | Recommendation |
-|-------|---------------|----------------|
-| > 0.85 | **Strong match** | Likely identified. Verify with literature. |
-| 0.65 - 0.85 | **Possible match** | Top candidate often correct. Verify carefully. |
-| 0.50 - 0.65 | **Weak match** | Starting hypothesis only. Consider full CASE. |
-| < 0.50 | **No match** | Likely novel compound. Proceed to full CASE. |
+For dereplication score interpretation thresholds and recommendations, see `skill/SKILL.md` Section 4 (Dereplication).
 
 ### Step 5: Report Results
 
