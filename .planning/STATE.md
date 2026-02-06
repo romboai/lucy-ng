@@ -2,16 +2,18 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-01-18)
+See: .planning/PROJECT.md (updated 2026-02-06)
 
-**Core value:** AI-agent powered structure elucidation from NMR data
-**Current focus:** Planning next milestone
+**Core value:** AI agent autonomously determines compound structures from NMR, with multi-agent architecture preventing loops
+**Current focus:** Defining requirements for v2.0
 
 ## Current Position
 
-**Milestone**: v1.2 HOSE Database Prediction ✅ ARCHIVED
-**Status**: All milestones v1.0-v1.2 complete
-**Last activity**: 2026-01-18 - v1.2 milestone archived
+**Milestone**: v2.0 Robust Multi-Agent CASE
+**Phase**: Not started (defining requirements)
+**Plan**: —
+**Status**: Defining requirements
+**Last activity**: 2026-02-06 — Milestone v2.0 started
 
 ## Completed Milestones
 
@@ -41,24 +43,20 @@ See: .planning/PROJECT.md (updated 2026-01-18)
 | Protocol pattern for backends | 2026-01-18 | HOSELookupProtocol for interchangeable prediction |
 | Database-first auto-detection | 2026-01-18 | Prefer database over JSON table |
 | Single database for both features | 2026-01-18 | Same DB powers dereplication AND prediction |
+| AI as intelligence layer | 2026-02-06 | v2.0: Domain knowledge in skill, not Python code |
+| Multi-agent CASE | 2026-02-06 | v2.0: Supervisor prevents loops, specialists handle subtasks |
+| Error tolerance as skill knowledge | 2026-02-06 | v2.0: Teach AI to detect issues, not build Python machinery |
+| Skip COSY for now | 2026-02-06 | Notoriously difficult to analyze, defer |
 
-## Key Capabilities (v1.2)
+## v2.0 Context
 
-- **16 MCP Tools**: Full AI agent integration including get_hose_stats_info
-- **7 CLI Command Groups**: read, pick, analyze, dereplicate, predict, lsd, fetch
-- **Python API**: Direct library access
-- **642 Tests**: Comprehensive coverage
-- **Documentation**: USER_GUIDE.md, CLAUDE.md, MCP_INTEGRATION.md, skill/SKILL.md
+**Trigger**: Virgiline (CASE7) failure analysis revealed that de novo CASE fails not due to tool bugs but due to:
+1. AI agent not detecting ambiguous carbon shifts (close shifts in aliphatic region)
+2. Agent using "throw everything in" HMBC strategy instead of incremental approach
+3. Agent getting stuck in loops (trying ELIM, adjusting constraints, re-running) without a supervisor
+4. Domain knowledge encoded in Python code instead of in the skill where the AI can reason about it
 
-## Session Continuity
-
-**Last session**: 2026-01-18
-**Stopped at**: v1.2 milestone archived
-**Resume file**: None (between milestones)
-
-**Next steps**:
-- Run `/gsd:discuss-milestone` to plan v1.3
-- Or start a new feature directly
+**Analysis documents**: `CASE7-failed/analysis/SYSTEM_ANALYSIS.pdf`, `CASE7-failed/analysis/Virgiline_HMBC_Analysis.pdf`
 
 ---
-*Last updated: 2026-01-18 after v1.2 milestone archived*
+*Last updated: 2026-02-06 after v2.0 milestone started*

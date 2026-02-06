@@ -2,18 +2,29 @@
 
 **AI-agent powered Computer-Assisted Structure Elucidation for organic natural products**
 
-## Vision
+## What This Is
 
-Lucy-ng is the next-generation successor to Lucy, designed for AI-agent (Claude) driven structure elucidation from NMR spectroscopic data. Unlike GUI-focused tools like nmrium, lucy-ng is built for programmatic, unattended operation where an AI agent can iterate through the elucidation process until a structure is determined.
+Lucy-ng is an AI-agent skill for Computer-Assisted Structure Elucidation (CASE) of organic natural products from NMR spectroscopy data. The AI agent is the intelligence layer -- it reasons about spectra, detects problems, and drives the elucidation process. The Python tools are thin wrappers around external libraries (nmrglue, LSD, RDKit) that give the agent access to NMR data and solvers. The skill (CLAUDE.md) encodes domain expertise and workflow strategy.
 
-The system reads Bruker NMR data, performs peak picking, generates constraints, and interfaces with structure elucidation solvers (LSD/pyLSD) in a hybrid loop that combines constraint-based generation with prediction-based validation.
+## Core Value
+
+An AI agent can autonomously determine the structure of an unknown organic compound from its NMR spectra, with a multi-agent architecture that prevents unproductive loops and keeps the elucidation on track.
+
+## Current Milestone: v2.0 Robust Multi-Agent CASE
+
+**Goal:** Transform lucy-ng from a tool-heavy system into an AI-first skill with thin tool wrappers and a multi-agent architecture that keeps structure elucidation on track.
+
+**Three pillars:**
+1. **Audit & Simplify** -- Examine every component, strip intelligence from CLI/Python code, push domain knowledge into the skill
+2. **Skill Rewrite** -- Rewrite the CASE skill with clearer strategy (incremental HMBC, error tolerance as AI knowledge, not Python code)
+3. **Multi-Agent CASE Architecture** -- Orchestrator/supervisor + specialist agents; supervisor detects loops and redirects the CASE agent
 
 ## Architecture
 
-- **Core**: Python 3.10+ library for NMR processing and CASE workflow
-- **CLI**: Command-line interface for testing, debugging, and scripting
-- **MCP Server**: Model Context Protocol tools for Claude agent integration
-- **Solver Interface**: Wrapper for LSD/pyLSD command-line tools
+- **Skill** (CLAUDE.md/SKILL.md): Domain expertise, workflow strategy, error handling knowledge -- the intelligence layer
+- **Thin Tools**: Minimal Python CLI/MCP wrappers around nmrglue, LSD, RDKit, SQLite
+- **Multi-Agent**: CASE agent (does the work) + Supervisor agent (keeps it on track) + optional specialist agents
+- **Database**: SQLite with 928K compounds and 7.9M HOSE statistics
 
 ## Requirements
 
@@ -36,7 +47,15 @@ The system reads Bruker NMR data, performs peak picking, generates constraints, 
 
 ### Active
 
-- [ ] Support for COSY correlations in LSD constraints
+- [ ] Audit all CLI/Python components -- identify what to simplify, remove, or keep
+- [ ] Rewrite CASE skill with incremental HMBC strategy and error tolerance knowledge
+- [ ] Multi-agent CASE architecture (CASE agent + supervisor + specialists)
+- [ ] Supervisor agent rules for detecting and breaking unproductive loops
+- [ ] Bake error tolerance into skill (close-shift detection, ambiguity handling, DEPT phase checks)
+
+### Deferred
+
+- [ ] Support for COSY correlations in LSD constraints -- notoriously difficult to analyze
 - [ ] Stereochemistry handling (E/Z, R/S)
 - [ ] Interactive CASE mode with user feedback loop
 
@@ -54,21 +73,6 @@ The system reads Bruker NMR data, performs peak picking, generates constraints, 
 - Open source only - no proprietary dependencies
 - Open data formats - no vendor lock-in
 - Must interface with existing LSD/pyLSD CLI tools
-
-## Key Decisions
-
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| Hybrid CLI + MCP interface | MCP provides structured tools for agent iteration; CLI enables testing and scripting | Good |
-| Bruker-only for v1 | Focus on most common format, expand vendor support later | Good |
-| LSD/pyLSD as primary solvers | Established CASE tools with CLI interface | Good |
-| nmrglue for NMR parsing | Most mature, BSD licensed, native Bruker support | Good |
-| Pydantic v2 for models | Type safety, validation, JSON serialization | Good |
-| DEPT-guided adaptive thresholding | Lower HSQC threshold until all DEPT carbons matched | Good |
-| HMBC-guided peak picking | Filter by requiring C match in 13C/DEPT and H match in HSQC | Good |
-| N:1 shift matching for ranking | Handles molecular symmetry correctly | Good |
-| SQLite for dereplication DB | Portable, no server, formula-indexed for fast lookup | Good |
-| HOSE codes for prediction | Pure Python, no external services, reasonable accuracy | Good |
 
 ## Context
 
@@ -92,6 +96,24 @@ Minimum viable spectral data for v1:
 - 1D: 1H and 13C spectra
 - 2D: HSQC (direct C-H correlations) and HMBC (long-range correlations)
 
+## Key Decisions
+
+| Decision | Rationale | Outcome |
+|----------|-----------|---------|
+| Hybrid CLI + MCP interface | MCP provides structured tools for agent iteration; CLI enables testing and scripting | Good |
+| Bruker-only for v1 | Focus on most common format, expand vendor support later | Good |
+| LSD/pyLSD as primary solvers | Established CASE tools with CLI interface | Good |
+| nmrglue for NMR parsing | Most mature, BSD licensed, native Bruker support | Good |
+| Pydantic v2 for models | Type safety, validation, JSON serialization | Good |
+| DEPT-guided adaptive thresholding | Lower HSQC threshold until all DEPT carbons matched | Good |
+| HMBC-guided peak picking | Filter by requiring C match in 13C/DEPT and H match in HSQC | Good |
+| N:1 shift matching for ranking | Handles molecular symmetry correctly | Good |
+| SQLite for dereplication DB | Portable, no server, formula-indexed for fast lookup | Good |
+| HOSE codes for prediction | Pure Python, no external services, reasonable accuracy | Good |
+| AI as intelligence layer | v2.0: Domain knowledge belongs in skill, not Python code | — Pending |
+| Multi-agent CASE | v2.0: Supervisor prevents loops, specialists handle subtasks | — Pending |
+| Error tolerance as skill knowledge | v2.0: Teach AI to detect close shifts, ambiguity -- not Python machinery | — Pending |
+
 ## Current State
 
 **Version:** v1.2 (shipped 2026-01-18)
@@ -106,4 +128,4 @@ Minimum viable spectral data for v1:
 - Full CASE pipeline: peak picking → LSD generation → solving → ranking
 
 ---
-*Last updated: 2026-01-18 after v1.2 milestone archived*
+*Last updated: 2026-02-06 after v2.0 milestone started*
