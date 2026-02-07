@@ -197,6 +197,8 @@ result = HMBCGuidedPicker.pick_hmbc_peaks_from_spectra(
 
 Adjust tolerances when: 13C dimension has poor digital resolution (increase to ±2.0 ppm) or 1H dimension shows line broadening (increase to ±0.15 ppm). Most spectra use default tolerances.
 
+After HMBC guided picking, check quaternary carbons with 0-1 correlations. If found, attempt targeted threshold reduction per Section 10.3 before proceeding to LSD generation.
+
 ### APT as DEPT Alternative
 
 APT (Attached Proton Test) can replace DEPT-135 when unavailable. Positive peaks = CH and CH3 (odd number of attached H). Negative peaks = CH2 and quaternary C (even number). Use `pick_peaks_1d` on APT for carbon positions. Pick HSQC with raw threshold 0.05. Cross-reference APT phase with HSQC intensity: high-intensity HSQC + positive APT = likely CH3, medium-intensity + positive APT = likely CH, HSQC present + negative APT = CH2, no HSQC + negative APT = quaternary C. APT cannot distinguish CH from CH3 without HSQC intensity or shift patterns.
@@ -541,8 +543,10 @@ HOSE prediction errors: carbonyl carbons can vary ±5-10 ppm, conjugated systems
    - `pick_hsqc_peaks` with DEPT-135 for direct C-H correlations (use DEPT-guided picker)
    - `pick_hmbc_peaks` with 13C and HSQC for long-range correlations (use cross-validated picker)
    - Apply quality-based adjustments from Section 2 (thresholds, tolerances)
+   - **After peak picking**, scan all carbon pairs for close carbons using resolution-based detection (Section 10.1). Document any unresolvable pairs in the Ambiguities Detected section before proceeding to LSD generation.
+   - **During HSQC guided picking**, if DEPT and HSQC disagree on multiplicity for any carbon, resolve using the priority tree (Section 10.2) and document in Ambiguities Detected section.
 
-4. **LSD Generation**: Generate initial LSD file with MULT definitions, HSQC correlations, and heteroatom constraints. Do NOT add HMBC correlations yet. See Section 7 for the incremental approach. Verify checklist before running: all carbons defined, heteroatoms added, sp2 count is EVEN, HSQC before HMBC, NO ELIM on first run.
+4. **LSD Generation**: Generate initial LSD file with MULT definitions, HSQC correlations, and heteroatom constraints. Do NOT add HMBC correlations yet. See Section 7 for the incremental approach. Verify checklist before running: all carbons defined, heteroatoms added, sp2 count is EVEN, HSQC before HMBC, NO ELIM on first run. **When close carbons are detected** (Section 10.1), use LIST/PROP to encode ambiguity rather than picking one assignment arbitrarily. **For quaternary carbons with 0 HMBC correlations**, apply shift-based constraints (Section 10.3) and attempt targeted threshold reduction before LSD generation.
 
 5. **Solve**: Follow the Incremental HMBC Constraint Strategy (Section 7). Add 3-5 high-confidence HMBC correlations per iteration. Stop when solution_count ≤ 10 or after ~10 iterations. Check solution count after each iteration:
    - **0 solutions**: Follow Zero-Solution Recovery (Section 7).
@@ -550,6 +554,8 @@ HOSE prediction errors: carbonyl carbons can vary ±5-10 ppm, conjugated systems
    - **>10 solutions**: Under-constrained. Continue incremental HMBC iteration (Section 7). Do NOT proceed to ranking until ≤10 solutions or all correlations/iterations exhausted.
 
 6. **Rank**: Run `rank_lsd_solutions` (only after achieving ≤10 solutions or exhausting all correlations/iterations). Examine top 10-20 candidates. Cross-reference with dereplication hits if available.
+
+7. **Confidence Assessment**: After ranking, assess confidence for each carbon atom using the three-factor model (Section 11). Derive overall structure confidence. Document ambiguous assignments with reasoning in the Ambiguities Detected section (Section 10.4). If confidence is Medium or Low for specific atoms, suggest additional NMR experiments that would resolve the uncertainty (Section 11.5). Include "Ambiguities Detected" and "Assignment Confidence" sections in the analysis output.
 
 ### When to Proceed vs Request More Data
 
@@ -569,7 +575,7 @@ HOSE prediction errors: carbonyl carbons can vary ±5-10 ppm, conjugated systems
 "No database match found. This may be a novel compound, a known compound with different stereochemistry, or a compound not yet in the reference database. Proceeding with de novo structure elucidation."
 
 **LSD results (1-10 solutions)**:
-"LSD found [N] candidate structure(s). Solution 1: [Description]. Core scaffold: [aromatic/aliphatic/mixed]. Key features: [functional groups, ring systems]. Consistent with: [spectroscopic features]. [If multiple solutions, describe key differences: position of functional group, ring fusion pattern, stereochemistry]."
+"LSD found [N] candidate structure(s). Solution 1: [Description]. Core scaffold: [aromatic/aliphatic/mixed]. Key features: [functional groups, ring systems]. Consistent with: [spectroscopic features]. [If multiple solutions, describe key differences: position of functional group, ring fusion pattern, stereochemistry]. Overall confidence: [High/Medium/Low]. [N] atoms High, [M] Medium, [K] Low. Key uncertainties: [list]."
 
 **Reporting uncertainty**:
 Always be transparent about missing data that would improve confidence, assumptions made during analysis, alternative interpretations, and recommended additional experiments.
@@ -830,7 +836,209 @@ When a quaternary carbon has 0-1 HMBC correlations after guided picking, perform
 
 ---
 
-## 11. Quick Reference
+## 11. Confidence Scoring
+
+After ranking LSD solutions (Section 8), assess confidence for each carbon atom and derive overall structure confidence. Confidence assessment is **qualitative judgment**, NOT computed percentages. The goal is honest reporting: better to report Medium confidence and be right than High confidence and be wrong.
+
+### 11.1 Per-Atom Confidence Factors
+
+Evaluate three factors for each carbon atom. Assign High/Medium/Low based on overall judgment of all three factors. The thresholds below are qualitative GUIDELINES for interpretation, not formula inputs.
+
+#### Factor 1: Digital Resolution
+
+Can this peak be distinguished from nearby carbons?
+
+- **High**: No other carbon within 2× the resolution limit (well-isolated peak)
+- **Medium**: Another carbon within 2-3× the resolution limit (distinguishable but close)
+- **Low**: Peaks overlapping or within 1× the resolution limit (detected as ambiguous in Section 10)
+
+Calculate minimum spacing from digital resolution (Section 10.1). Example: 5 pts/ppm → 0.30 ppm minimum spacing. A carbon with the nearest neighbor at 1.0 ppm away is High (well-resolved). A carbon with a neighbor at 0.4 ppm is Medium (2-3× limit). A carbon with a neighbor at 0.2 ppm is Low (below limit, unresolvable).
+
+#### Factor 2: HOSE Prediction Quality (MAE)
+
+How well does the predicted shift match the experimental shift for this specific atom?
+
+- **High**: MAE < 2.0 ppm (excellent match between predicted and experimental)
+- **Medium**: MAE 2.0-3.5 ppm (reasonable match)
+- **Low**: MAE > 3.5 ppm (poor match or unusual chemical environment)
+
+MAE thresholds come from ranking quality labels (Section 8). Per-atom MAE is the absolute difference between predicted shift for that atom and its matched experimental peak. A structure with overall MAE 3.2 ppm (Good) may have individual atoms ranging from 0.8 ppm (High) to 5.4 ppm (Low).
+
+#### Factor 3: Supporting Correlations
+
+How many independent NMR correlations support this assignment?
+
+- **High**: 3+ HMBC correlations + HSQC (highly constrained)
+- **Medium**: 1-2 HMBC correlations + HSQC (moderately constrained)
+- **Low**: 0 HMBC correlations (quaternary with shift-only constraint) OR HSQC ambiguous
+
+HMBC correlations provide connectivity information. More correlations = more constraints = higher confidence. Quaternary carbons with 0 HMBC correlations rely solely on shift-based inference (Section 10.3), which is weak.
+
+#### Overall Atom-Level Judgment
+
+Agent evaluates all three factors and assigns High/Medium/Low based on judgment. No formula. Ask: "Would an expert spectroscopist agree this assignment is >90% certain (High), 60-90% certain (Medium), or <60% certain (Low)?"
+
+**Worked example:**
+
+```
+Carbon 5 (155.08 ppm): MEDIUM confidence
+- Resolution: GOOD (nearest carbon 4.3 ppm away, well-resolved)
+- HOSE MAE: 2.8 ppm (GOOD, within normal aromatic range)
+- Correlations: 1 HMBC (MEDIUM, single quaternary correlation)
+-> Overall MEDIUM due to sparse correlations despite good resolution/prediction
+```
+
+```
+Carbon 3 (28.5 ppm): MEDIUM confidence
+- Resolution: GOOD (nearest carbon 2.1 ppm away)
+- HOSE MAE: 1.8 ppm (EXCELLENT)
+- Correlations: 2 HMBC + HSQC (MEDIUM)
+-> Overall MEDIUM due to DEPT/HSQC conflict (documented in Ambiguities)
+```
+
+```
+Carbon 7 (172.4 ppm): LOW confidence
+- Resolution: GOOD (nearest carbon 3.8 ppm away)
+- HOSE MAE: 4.2 ppm (POOR, carbonyl prediction uncertainty)
+- Correlations: 0 HMBC (LOW, shift-based constraint only)
+-> Overall LOW due to poor prediction + no connectivity information
+```
+
+### 11.2 Explicit Confidence Downgrade Rules
+
+These rules PREVENT confidence inflation. Apply automatically:
+
+1. **Any ambiguity detected** (from Section 10) → at most Medium confidence
+   - Close carbons unresolvable → atoms involved are Medium at best
+   - DEPT/HSQC conflict → that atom is Medium at best
+   - Edge case both SNR < 20 → that atom is Low
+
+2. **MAE > 3.5 ppm for any atom** → that atom is Low confidence
+   - Prediction quality trumps other factors for unusual environments
+
+3. **0 HMBC correlations on quaternary carbon** → that atom is Low confidence
+   - Shift-based constraint is weak inference, not structural evidence
+
+4. **DEPT/HSQC conflict unresolved** → that atom is Medium at best
+   - Even if resolved using decision tree (Section 10.2), uncertainty remains
+
+5. **Targeted threshold reduction failed** → quaternary carbon is Low confidence
+   - If threshold reduction to noise floor found 0 correlations, assignment is highly uncertain
+
+**Audit question before finalizing:** "Would an expert spectroscopist agree this assignment is >90% certain?" If no, downgrade.
+
+### 11.3 Per-Structure Confidence Derivation
+
+Derive overall structure confidence from atom-level scores. Use threshold-based approach:
+
+**High confidence:**
+- >= 80% of carbons rated High or Medium, AND
+- No more than 1 Low-confidence carbon, AND
+- Any Low-confidence carbons are NOT structurally critical (not ring junctions, stereogenic centers, or unique functional groups)
+
+**Medium confidence:**
+- >= 50% of carbons rated High or Medium, OR
+- 2-3 Low-confidence carbons (not in critical positions), OR
+- 1 Low-confidence carbon in critical position (e.g., ring junction, stereogenic center)
+
+**Low confidence:**
+- < 50% of carbons rated High or Medium, OR
+- Multiple (3+) Low-confidence carbons, OR
+- Critical structural atoms (ring junctions, stereogenic centers, unique heteroatom attachments) are Low
+
+**Critical position examples:**
+- Aromatic ring junction carbons (determine ring fusion pattern)
+- Bridgehead carbons in polycyclic systems
+- Stereogenic centers (chiral carbons)
+- Carbonyl carbons (define functional group)
+- Heteroatom attachment sites (N-CH3, O-CH2)
+
+**Err on the side of honesty.** Better to report Medium confidence and be right than High confidence and be wrong. If uncertain which tier applies, choose the lower one.
+
+### 11.4 Confidence-Annotated Output Format
+
+Show confidence summary as a dedicated section in the analysis output. Include per-atom table and overall structure confidence.
+
+**Template:**
+
+```markdown
+## Assignment Confidence
+
+**Overall structure confidence: MEDIUM**
+(8/10 carbons High/Medium, 2 Low-confidence quaternary carbons)
+
+| Carbon | Shift (ppm) | Type | Resolution | HOSE MAE | Correlations | Confidence |
+|--------|-------------|------|------------|----------|-------------|------------|
+| C1 | 155.08 | Quat | Good | 2.8 | 1 HMBC | Medium |
+| C2 | 138.51 | CH | Excellent | 1.2 | 3 HMBC + HSQC | High |
+| C3 | 28.5 | CH3* | Good | 1.8 | 2 HMBC + HSQC | Medium |
+| C4 | 172.4 | Quat | Good | 4.2 | 0 HMBC | Low |
+| C5 | 127.3 | CH | Excellent | 1.5 | 2 HMBC + HSQC | High |
+| C6 | 129.8 | CH | Excellent | 1.1 | 3 HMBC + HSQC | High |
+| C7 | 32.1 | CH2 | Good | 2.3 | 1 HMBC + HSQC | Medium |
+| C8 | 22.4 | CH3 | Good | 1.9 | 1 HMBC + HSQC | Medium |
+| C9 | 155.32 | Quat** | Moderate | 3.8 | 1 HMBC | Low |
+| C10 | 18.7 | CH3 | Excellent | 1.4 | 2 HMBC + HSQC | High |
+
+*Multiplicity conflict: DEPT/HSQC disagreement, assigned CH3 based on shift < 30 ppm (see Ambiguities)
+**Close carbon: 155.08/155.32 ppm unresolvable in HMBC F1 (see Ambiguities)
+```
+
+**Notes in table:**
+- Use footnotes (*,**) to cross-reference Ambiguities Detected section
+- Resolution column: Excellent/Good/Moderate/Poor based on nearest neighbor spacing
+- HOSE MAE column: per-atom MAE in ppm
+- Correlations column: count + type (e.g., "3 HMBC + HSQC", "0 HMBC")
+
+### 11.5 Suggesting Additional NMR Experiments
+
+When confidence is Medium or Low for specific atoms, suggest SPECIFIC experiments that would resolve the uncertainty. Suggestions must be actionable for a spectroscopist: include WHAT experiment, WHY it helps, and WHICH specific atom/issue it resolves.
+
+**Template examples:**
+
+**For CH/CH3 ambiguity:**
+"Acquire **DEPT-90** to resolve CH/CH3 ambiguity at 28.5 ppm (currently assigned as CH3 based on shift < 30 ppm, but DEPT-135/HSQC pattern-based inference uncertain). DEPT-90 shows only CH carbons — peak visible = CH, peak absent = CH3."
+
+**For sparse quaternary correlations:**
+"Acquire **HMBC with optimized nJCH delay** (5 Hz instead of 8 Hz) to enhance quaternary carbon correlations, specifically targeting C=O at 172.4 ppm which shows 0 correlations after threshold reduction. Longer-range couplings (3JCH) are enhanced at lower nJCH values, potentially revealing weak correlations missed in standard HMBC."
+
+**For resolution-limited close carbons:**
+"Acquire **higher-resolution HSQC (F1 dimension)** with 2× F1 points to distinguish 155.08/155.32 ppm pair (current resolution 4.2 pts/ppm → 0.36 ppm minimum spacing, but peaks only 0.24 ppm apart). Doubling F1 points → 8.4 pts/ppm → 0.18 ppm minimum spacing, sufficient to resolve."
+
+**For poor S/N multiplicity assignment:**
+"Re-acquire **DEPT-135** with longer acquisition time to improve S/N for peak at 138.6 ppm (current S/N = 18, insufficient for confident multiplicity assignment). Target S/N > 30 for reliable DEPT-based multiplicity."
+
+**For critical Low-confidence carbons:**
+"Acquire **1,1-ADEQUATE** or **LR-HSQMBC** to establish direct C-C connectivity for quaternary carbon at 155.08 ppm. These experiments provide 1JCC or long-range heteronuclear correlations, bypassing the need for HMBC proton-mediated connections."
+
+**Include in analysis output:**
+
+```markdown
+## Recommended Additional Experiments
+
+To improve confidence for Low/Medium assignments:
+
+1. **DEPT-90 acquisition** (highest priority)
+   - Resolves: CH/CH3 ambiguities at 28.5 ppm and 32.1 ppm
+   - Why: Definitive CH identification (CH visible, CH3 absent in DEPT-90)
+   - Impact: Upgrades C3 and C7 from Medium to High confidence
+
+2. **HMBC with optimized nJCH delay (5 Hz)**
+   - Resolves: Sparse correlations for quaternary C=O at 172.4 ppm
+   - Why: Enhances long-range 3JCH couplings often missed at standard 8 Hz
+   - Impact: May find 1-2 additional correlations, upgrading C4 from Low to Medium
+
+3. **Higher-resolution HSQC (2× F1 points)**
+   - Resolves: Close carbon pair 155.08/155.32 ppm (unresolvable at current 4.2 pts/ppm)
+   - Why: Doubles F1 resolution to 8.4 pts/ppm, sufficient to distinguish 0.24 ppm spacing
+   - Impact: Upgrades C1/C9 from Low to Medium
+```
+
+**Prioritization:** Order suggestions by impact (number of atoms affected, criticality of affected positions) and feasibility (standard experiments like DEPT-90 before advanced experiments like 1,1-ADEQUATE).
+
+---
+
+## 12. Quick Reference
 
 ### Key Tolerances
 
@@ -844,6 +1052,8 @@ When a quaternary carbon has 0-1 HMBC correlations after guided picking, perform
 - HMBC batch size: 3-5 correlations per iteration
 - HMBC iteration cap: ~10 iterations maximum
 - High-confidence threshold: no other carbon within ±3.0 ppm, no other proton within ±0.2 ppm
+- **Per-atom confidence**: High (MAE < 2.0, 3+ correlations, well-resolved), Medium (MAE 2-3.5, 1-2 correlations), Low (MAE > 3.5, 0 correlations, unresolved ambiguity)
+- **Structure confidence**: High (>= 80% atoms High/Medium, <= 1 Low), Medium (>= 50% High/Medium), Low (< 50% High/Medium OR critical atoms Low)
 
 ### Red Flags
 
@@ -855,6 +1065,9 @@ When a quaternary carbon has 0-1 HMBC correlations after guided picking, perform
 - Hitting 10-iteration cap: Systematic issue, not normal convergence
 - > 200 "validated" HMBC correlations: Likely noise leakage from poor quality spectrum
 - 1J artifact peaks in HMBC: Exclude from constraints (see Section 2)
+- **All atoms rated High confidence despite detected ambiguities**: Confidence inflation (violates downgrade rules, Section 11)
+- **DEPT/HSQC multiplicity changing between iterations**: Flip-flop (resolve once per Section 10.2, not repeatedly)
+- **Threshold reduction below 0.01 for quaternary carbon search**: Noise territory (Section 10.3 floor determination)
 
 ### When to Ask for Help
 
@@ -862,3 +1075,5 @@ When a quaternary carbon has 0-1 HMBC correlations after guided picking, perform
 - Unusual chemical shifts outside normal ranges
 - Molecular formula does not match observed data
 - User requests interpretation beyond available data
+- **Multiple Low-confidence atoms in structurally critical positions** (ring junctions, stereogenic centers)
+- **All quaternary carbons have 0 HMBC correlations even after targeted search** (severely under-constrained)
