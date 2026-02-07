@@ -55,6 +55,8 @@ lucy lsd check  # Must show LSD and outlsd available
 
 ## Workflow
 
+**Supervisor integration:** When running under supervisor control, write CASE-PROGRESS.md after each LSD iteration (see Step 7c). This enables the supervisor to detect loops and provide diagnostic guidance.
+
 ### Step 0: Setup Documentation
 
 ```bash
@@ -279,6 +281,58 @@ lsd compound_test.lsd 2>&1 | grep solution
 1. Intensity (stronger peaks are more reliable)
 2. Proximity to known fragment assignments
 3. Correlations that connect unassigned regions
+
+### Step 7c: Write Progress Checkpoint (CASE-PROGRESS.md)
+
+**After EVERY LSD iteration** (including the baseline run), append an iteration entry to `CASE-PROGRESS.md` in the compound's working directory. This file is read by the supervisor agent to monitor progress, detect loops, and provide diagnostic guidance.
+
+**First iteration:** Create the file with header section:
+
+```markdown
+# CASE Progress Log
+
+**Compound:** <compound_path>
+**Formula:** <molecular_formula>
+**Started:** <timestamp>
+```
+
+**Each iteration:** Append a new section:
+
+```markdown
+---
+
+## Iteration N: <brief description>
+
+**Time:** <timestamp>
+**LSD file:** <filename>.lsd
+**Solution count:** <count>
+
+**Constraints added:**
+- <constraint and reasoning>
+
+**Constraints removed:**
+- <constraint and reasoning> (or "None")
+
+**Why:** <natural language explanation of strategy for this iteration>
+
+**Constraint effectiveness:** <% reduction from previous, or "baseline", or "over-constrained (0 solutions)">
+**Confidence:** <qualitative assessment: too many solutions / converging / stuck / etc.>
+**HMBC correlations used:** X/Y
+
+**Notes:**
+- sp2 count: <N> (<even/odd>) <check/warning>
+- H budget: <matches/mismatch>
+- <other observations>
+```
+
+**Rules:**
+- NEVER overwrite the file — always append new iteration sections
+- Include ALL required fields in every iteration entry
+- The "Why" field must explain reasoning, not just state what was done
+- The "Constraints added/removed" must list each constraint individually with reasoning
+- If recovering from 0 solutions, document which correlations were removed and why
+
+For the complete format specification with examples, see `skill/supervisor/SKILL.md` Section 7.
 
 ### Step 8: Run LSD Solver
 
