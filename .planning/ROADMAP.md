@@ -376,7 +376,10 @@ Plans:
   4. Supervisor detects solution explosion -- 1000+ solutions with minor tweaks not reducing count triggers redirect
   5. Every supervisor intervention requires diagnosis before allowing retry (not generic "try again" -- specific like "validate sp2 count before trying ELIM")
   6. Supervisor escalates to user after 3 failed attempts with the same detected pattern
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 24-01-PLAN.md -- Expand supervisor SKILL.md with loop detection, diagnostics, convergence, CASE-PROGRESS.md format + update CASE subskill with checkpoint writing
+- [ ] 24-02-PLAN.md -- Create .claude/agents/supervisor.md agent definition with routing, supervision, and intervention logic
 
 ---
 
@@ -438,9 +441,9 @@ Plans:
 | 21. Skill Restructure | v2.0 | 3/3 | Complete | 2026-02-06 |
 | 22. HMBC Strategy + Quality | v2.0 | 1/1 | Complete | 2026-02-06 |
 | 23. Error Tolerance + Confidence | v2.0 | 2/2 | Complete | 2026-02-07 |
-| 24. Supervisor Agent | v2.0 | TBD | Not started | - |
+| 24. Supervisor Agent | v2.0 | 0/2 | Not started | - |
 | 25. Diagnostic Specialist | v2.0 | TBD | Not started | - |
 | 26. Thin Tools | v2.0 | TBD | Not started | - |
 
 ---
-*Last updated: 2026-02-07 after Phase 23 completion*
+*Last updated: 2026-02-07 after Phase 24 planning*
