@@ -392,7 +392,10 @@ Plans:
   2. For 0-solution failures: specialist systematically checks sp2 count (even?), hydrogen budget (matches formula?), HMBC conflicts, and correlation order -- and reports which check failed
   3. For 1000+ solution failures: specialist checks constraint count, quaternary carbon connectivity, heteroatom constraints, and symmetry encoding -- and reports which is insufficient
   4. Specialist produces a structured diagnostic report (markdown) with findings, root cause, and recommended fixes that the CASE agent can act on
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 25-01-PLAN.md -- Create diagnostic specialist skill (skill/diagnostic/SKILL.md) and agent definition (.claude/agents/diagnostic-specialist.md)
+- [ ] 25-02-PLAN.md -- Update supervisor agent and skill to integrate diagnostic specialist delegation
 
 ---
 
@@ -442,8 +445,8 @@ Plans:
 | 22. HMBC Strategy + Quality | v2.0 | 1/1 | Complete | 2026-02-06 |
 | 23. Error Tolerance + Confidence | v2.0 | 2/2 | Complete | 2026-02-07 |
 | 24. Supervisor Agent | v2.0 | 2/2 | Complete | 2026-02-07 |
-| 25. Diagnostic Specialist | v2.0 | TBD | Not started | - |
+| 25. Diagnostic Specialist | v2.0 | 0/2 | Planned | - |
 | 26. Thin Tools | v2.0 | TBD | Not started | - |
 
 ---
-*Last updated: 2026-02-07 after Phase 24 completion*
+*Last updated: 2026-02-07 after Phase 25 planning*
