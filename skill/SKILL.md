@@ -576,7 +576,261 @@ Always be transparent about missing data that would improve confidence, assumpti
 
 ---
 
-## 10. Quick Reference
+## 10. Error Tolerance and Ambiguity Detection
+
+**Core principle:** Proactively detect and document ambiguity instead of guessing through it. Ambiguity arises from three sources: (1) close carbons unresolvable by digital resolution, (2) DEPT/HSQC multiplicity conflicts, and (3) quaternary carbons with sparse HMBC correlations. All ambiguities must be documented in a dedicated output section with quantitative resolution details.
+
+This section references quality assessment from Section 2 and extends the LSD constraint mechanisms from Section 6.
+
+### 10.1 Close Carbon Detection (Resolution-Based)
+
+**Detection strategy:** Calculate digital resolution independently for each spectrum dimension. Two carbons are unresolvable if their spacing is smaller than the minimum distinguishable separation based on that dimension's resolution.
+
+**Resolution calculation:**
+
+For any spectrum dimension:
+```
+resolution = len(ppm_scale) / (ppm_max - ppm_min)  # points per ppm
+min_spacing = 1.5 / resolution  # minimum distinguishable spacing in ppm
+```
+
+**Apply to each dimension independently:**
+- **1D 13C spectrum**: Calculate from 13C ppm_scale
+- **HSQC F1 (carbon axis)**: Calculate from HSQC F1 dimension ppm_scale
+- **HMBC F1 (carbon axis)**: Calculate from HMBC F1 dimension ppm_scale
+
+Each dimension may have different resolution. A carbon pair may be resolvable in 1D 13C (high resolution) but unresolvable in HMBC F1 (lower resolution).
+
+**Quality-dependent minimum spacing** (from Section 2):
+- > 10 pts/ppm (Excellent): ~0.15 ppm minimum spacing
+- 5-10 pts/ppm (Good): ~0.30 ppm minimum spacing
+- 2-5 pts/ppm (Moderate): ~0.75 ppm minimum spacing
+- < 2 pts/ppm (Poor): 1.5+ ppm minimum spacing
+
+**Ambiguity criterion:** Two carbons at shifts A and B are unresolvable if:
+```
+abs(shift_A - shift_B) < min_spacing
+```
+
+**Physical grounding:** This approach is resolution-aware, not based on arbitrary hard-coded ppm thresholds. A 0.3 ppm spacing may be clearly resolvable in one spectrum (10 pts/ppm) but completely merged in another (2 pts/ppm). Always calculate resolution for the specific spectrum being analyzed.
+
+**Future extensibility:** This detection mechanism is designed for future augmentation by an atom environment database. A learned model could refine the 1.5-point threshold based on peak shape, overlap characteristics, and chemical environment. The core resolution calculation remains unchanged.
+
+**When carbons are unresolvable:**
+
+1. **Use LSD LIST/PROP mechanism** to encode ambiguity in a SINGLE LSD file (NOT separate variant files):
+
+```
+; Example: carbons at 155.08 and 155.32 ppm cannot be distinguished
+; in HMBC F1 dimension (4.2 pts/ppm, 0.36 ppm minimum spacing, 0.24 ppm apart)
+
+MULT 5 C 2 0   ; could be either 155.08 or 155.32 ppm
+MULT 6 C 2 0   ; could be either 155.08 or 155.32 ppm
+LIST L1 5 6    ; group these unresolvable carbons
+
+; When HMBC shows correlation to one of them (but unclear which):
+; Use PROP to express "at least one atom in L1 connects to proton X"
+; Example: HMBC shows peak at (155.2, 7.8) correlating to H12
+; PROP L1 1 LIST_H12  ; one of {C5, C6} has exactly 1 connection to H12
+```
+
+2. **Document in Ambiguities Detected section** (see 10.4 below) with quantitative details:
+   - The specific carbon shifts
+   - Calculated resolution (pts/ppm)
+   - Calculated minimum spacing
+   - Actual spacing between peaks
+   - Impact on LSD constraints (which LIST/PROP was used)
+
+**Verification across dimensions:** Check ambiguity in ALL relevant dimensions. If two carbons are resolvable in 1D 13C but unresolvable in HMBC F1, HMBC correlations involving those carbons are ambiguous even though the 1D assignment is clear.
+
+### 10.2 DEPT/HSQC Multiplicity Conflict Resolution
+
+**Core principle:** No blanket rule. Resolution is context-dependent based on experiment quality, availability, and chemical shift expectations.
+
+**Priority-ordered decision tree:**
+
+**1. DEPT-90 availability (highest priority)**
+
+DEPT-90 shows ONLY CH carbons — this is near-definitive identification. If DEPT-90 is available:
+- Peak visible in DEPT-90 → **CH with high confidence** (overrides HSQC pattern inference)
+- Peak absent in DEPT-90 but positive in DEPT-135 → **CH3** (overrides HSQC if conflict)
+- Peak negative in DEPT-135 → **CH2**
+
+DEPT-90 provides the most definitive multiplicity assignment. When available, trust it over HSQC pattern-based inference.
+
+**2. S/N comparison**
+
+When DEPT-90 is unavailable, compare S/N ratios (from Section 2 quality assessment):
+- DEPT-135 SNR > 50, HSQC SNR < 20 → trust DEPT-135
+- HSQC SNR > 50, DEPT-135 SNR < 20 → trust HSQC
+- Both SNR in similar range (20-100) → proceed to next criterion
+- **Both SNR < 20** → mark as explicitly ambiguous (see edge case below)
+
+**3. Chemical shift expectations**
+
+Use shift-based heuristics as tiebreaker:
+- < 30 ppm → likely **CH3** (aliphatic methyl)
+- 100-160 ppm → likely aromatic **CH**
+- 50-90 ppm with negative DEPT-135 → likely **CH2** attached to oxygen (O-CH2)
+- 30-50 ppm positive DEPT-135 → could be CH or CH3, examine HSQC intensity
+
+**4. Consistency check**
+
+Cross-validate with other data:
+- **HMBC correlation count**: CH typically shows 2-4 HMBC correlations, CH2 shows 2-3, CH3 shows 1-2 (fewer bonds to other carbons)
+- **Hydrogen budget**: Sum all assigned multiplicities — does total H count match molecular formula?
+- **HSQC intensity**: CH3 groups often show higher HSQC intensity than CH (3 equivalent protons vs 1)
+
+**Edge case: Both experiments poor S/N (< 20)**
+
+When both DEPT-135 and HSQC show S/N < 20 for the same peak:
+- **Mark as explicitly ambiguous** — neither experiment is trustworthy
+- **Assign Low confidence** to this carbon's multiplicity
+- **Use shift-based heuristic as last resort** (criterion 3 above)
+- **Suggest re-acquisition**: "Re-acquire DEPT-135 or HSQC with longer acquisition time to improve S/N for peak at X ppm"
+
+**Resolution strategy:**
+
+- **Resolve to ONE multiplicity** based on weight of evidence from the decision tree
+- **Do NOT create separate LSD runs** for alternative assignments
+- **Document the conflict** in Ambiguities Detected section (see 10.4) with:
+  - DEPT-135 indication (positive/negative/absent)
+  - HSQC pattern inference
+  - S/N ratios for both experiments
+  - Which criterion was used to resolve (DEPT-90, S/N, shift, consistency)
+  - The chosen multiplicity and the rejected alternative
+  - Confidence level (Low/Medium based on strength of evidence)
+
+**Audit trail:** Document ALL disagreements, even minor ones. This builds a complete record for validation and enables future review if structure is later questioned.
+
+### 10.3 Quaternary Carbon HMBC Sparsity
+
+**Challenge:** Quaternary carbons (no attached H) appear in 13C but not in HSQC/DEPT. HMBC is their ONLY structural connection. When HMBC correlations are sparse (0-1 visible), use shift-based constraints and targeted threshold reduction.
+
+#### Shift-Based Constraint Mapping
+
+When a quaternary carbon has 0 HMBC correlations, use chemical shift to infer likely environment and add LSD constraints.
+
+**Mapping table** (explicitly modular for future replacement):
+
+| Shift Range (ppm) | Likely Environment | LSD Constraint |
+|-------------------|-------------------|----------------|
+| 160-180 | Carboxylic acid/ester/amide C=O | `BOND Quat_idx O_idx` (bond to oxygen) |
+| 180-220 | Ketone/aldehyde C=O | `BOND Quat_idx O_idx` (bond to oxygen) |
+| 120-160 (aromatic context) | Aromatic junction | Use LIST/PROP to constrain to aromatic ring carbons |
+| < 50 | Quaternary aliphatic | Rare (e.g., tert-butyl); note as unusual, minimal constraint |
+
+**Important note:** This mapping is heuristic and designed for future replacement by an atom environment database. The specific shift ranges and constraint types should be treated as initial guidelines, not rigid rules. Edge cases (e.g., conjugated carbonyls 170-180 ppm, nitriles 115-120 ppm) should be flagged in Ambiguities Detected section as potentially ambiguous.
+
+**Rationale:** A quaternary carbon with 0 HMBC correlations provides no connectivity information. Shift-based constraints prevent LSD from producing thousands of disconnected solutions. The constraint is weak but better than none.
+
+#### Single HMBC Correlation
+
+When a quaternary carbon has exactly 1 HMBC correlation:
+- **Treat with HIGHER confidence** (not suspicion)
+- This is the only connectivity information for that atom — it is precious, not dubious
+- Do NOT discard or downweight single correlations to quaternary carbons
+- Validate normally (cross-check carbon and proton positions against 13C and HSQC)
+
+#### Targeted HMBC Threshold Reduction
+
+When a quaternary carbon has 0-1 HMBC correlations after guided picking, perform targeted search at lower thresholds to find weak correlations that may have been missed.
+
+**Incremental reduction strategy:**
+
+```
+1. Start at current threshold from guided picking (typically 0.05-0.08)
+
+2. For each quaternary carbon with 0-1 correlations:
+
+   current_threshold = starting_threshold
+
+   WHILE correlation_count <= 1 AND current_threshold > floor:
+
+       # Reduce threshold by 20% (user-preferred gradual approach)
+       current_threshold = current_threshold × 0.8
+
+       # Re-examine HMBC in ±2.5 ppm window around quaternary carbon shift
+       new_peaks = pick_hmbc_in_region(
+           carbon_range=(quat_shift - 2.5, quat_shift + 2.5),
+           threshold=current_threshold
+       )
+
+       # Validate new peaks against 13C and HSQC (guided picking logic)
+       validated_peaks = validate_against_13C_and_HSQC(new_peaks)
+
+       correlation_count = count(validated_peaks)
+
+       # Stopping conditions:
+       IF correlation_count > 1:
+           STOP → correlations found, use them
+
+       IF 3 consecutive reductions yield 0 new validated peaks:
+           STOP → diminishing returns, no more signal here
+
+       IF current_threshold <= floor:
+           STOP → reached noise floor, further reduction futile
+
+   # Document outcome in Ambiguities Detected section
+
+3. Determine floor based on spectrum noise characteristics:
+
+   # Claude determines reasonable floor from noise_floor (Section 2):
+   # Conservative: noise_floor × 3 (high confidence 3:1 S/N)
+   # Moderate: noise_floor × 2 (standard 2:1 S/N)
+   # Aggressive (only for excellent spectra): noise_floor × 1.5
+```
+
+**Rationale for 20% reduction:** User explicitly preferred gradual reduction over aggressive 50% halving. 20% per step allows 5-7 steps before reaching 1/3 of starting threshold, providing fine-grained control with controlled risk of noise leakage.
+
+**Floor determination:** Claude assesses noise characteristics from the specific spectrum (noise floor calculation from Section 2). For a spectrum with low noise (SNR > 100), floor = noise_floor × 1.5 is reasonable. For noisy spectra (SNR < 30), use floor = noise_floor × 3 to avoid false positives.
+
+**Validation is mandatory:** Each threshold reduction MUST validate new peaks using guided picking logic (carbon position exists in 13C, proton position exists in HSQC). Do NOT simply accept all peaks above threshold — most will be noise.
+
+**Outcome documentation:** If targeted search finds new correlations, note in Ambiguities section: "Quaternary carbon at 155.2 ppm initially showed 0 HMBC correlations. Targeted search at threshold 0.032 (reduced from 0.05) found 2 correlations: C155.2-H7.8, C155.2-H3.2." If search fails, note: "Quaternary at 172.4 ppm: 0 correlations after threshold reduction to 0.025 (noise_floor × 2.5). Used shift constraint: BOND to oxygen based on 172 ppm carbonyl region."
+
+### 10.4 Ambiguities Detected Output Section
+
+**Mandatory documentation:** All detected ambiguities MUST be documented in a dedicated "Ambiguities Detected" section in the analysis output. If zero ambiguities are detected, state explicitly: "No ambiguities detected."
+
+**Standard table format:**
+
+```markdown
+## Ambiguities Detected
+
+| Carbon/Issue | Type | Resolution Detail | Impact on Constraints |
+|-------------|------|-------------------|----------------------|
+| 155.08 / 155.32 ppm | Close carbons | HMBC F1: 4.2 pts/ppm, min spacing 0.36 ppm, actual spacing 0.24 ppm → unresolvable | Used LIST L1 {5,6} and PROP for C-H12 correlation (cannot distinguish which carbon) |
+| 28.5 ppm | DEPT/HSQC conflict | DEPT-135 positive (CH/CH3), HSQC pattern suggests CH3, no DEPT-90 available | Assigned CH3 based on shift < 30 ppm (aliphatic), alternative CH possible, Medium confidence |
+| 172.4 ppm (C=O) | Sparse HMBC | 0 correlations after threshold reduction to 0.025 (noise_floor × 2.5) | Added shift constraint: BOND to oxygen based on 172 ppm carbonyl region |
+| 138.6 ppm | DEPT/HSQC conflict | DEPT-135 SNR = 18, HSQC SNR = 15 (both poor) | Assigned CH based on shift (aromatic region), Low confidence, suggest re-acquisition |
+```
+
+**Required elements for each entry:**
+
+1. **Carbon/Issue:** Specific chemical shift(s) or carbon identifier
+2. **Type:** Category of ambiguity
+   - "Close carbons" (resolution-limited)
+   - "DEPT/HSQC conflict" (multiplicity disagreement)
+   - "Sparse HMBC" (quaternary with 0-1 correlations)
+   - "Other" (any additional ambiguity type)
+3. **Resolution Detail:** Quantitative specifics
+   - For close carbons: pts/ppm, minimum spacing, actual spacing
+   - For conflicts: S/N values, DEPT-90 availability, which criterion was decisive
+   - For sparse HMBC: threshold reduction steps, final threshold, floor value
+4. **Impact on Constraints:** Specific action taken
+   - Which LSD LIST/PROP/BOND was added
+   - Which multiplicity was assigned
+   - Confidence level assigned
+   - What the alternative interpretation would be
+
+**Transparency principle:** The user must be able to see exactly what ambiguity was detected, why it was detected (quantitative criteria), how it was resolved (which decision rule), and what the impact is (which constraints were affected). This enables validation, manual review, and future refinement.
+
+**Cross-reference to suggested experiments:** Ambiguities documented here feed into "Recommended Additional Experiments" section (if that workflow is implemented in future phases). Example: "DEPT-90 acquisition would resolve CH/CH3 ambiguities at 28.5 ppm and 32.1 ppm."
+
+---
+
+## 11. Quick Reference
 
 ### Key Tolerances
 
