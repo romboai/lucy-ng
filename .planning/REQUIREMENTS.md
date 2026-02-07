@@ -30,10 +30,10 @@ Requirements for v2.0 Robust Multi-Agent CASE. Each maps to roadmap phases.
 
 ### Error Tolerance
 
-- [ ] **ETOL-01**: Skill teaches close carbon shift detection -- AI identifies carbons within 0.3-0.5 ppm proactively and documents ambiguity
-- [ ] **ETOL-02**: Skill teaches DEPT phase conflict handling -- AI compares HSQC vs DEPT and chooses ground truth
-- [ ] **ETOL-03**: Skill teaches ambiguous HMBC assignment -- AI generates LSD variants when carbon positions are close (<1 ppm)
-- [ ] **ETOL-04**: Skill teaches quaternary carbon HMBC sparsity -- AI uses chemical shift to constrain when few HMBC visible
+- [x] **ETOL-01**: Skill teaches resolution-based close carbon detection -- AI identifies unresolvable carbons using digital resolution (pts/ppm) and documents ambiguity with LIST/PROP encoding
+- [x] **ETOL-02**: Skill teaches context-dependent DEPT/HSQC conflict resolution -- priority tree (DEPT-90 > S/N > shift > consistency) with documented reasoning
+- [x] **ETOL-03**: Skill teaches ambiguous HMBC assignment -- AI uses LSD LIST/PROP mechanism in single file (NOT separate variant files) for close carbon positions
+- [x] **ETOL-04**: Skill teaches quaternary carbon HMBC sparsity -- shift-based constraints + incremental 20% threshold reduction for targeted correlation search
 
 ### Supervisor Agent
 
@@ -68,9 +68,9 @@ Requirements for v2.0 Robust Multi-Agent CASE. Each maps to roadmap phases.
 
 ### Confidence-Annotated Output
 
-- [ ] **CONF-01**: CASE workflow produces assignments with confidence levels (High >90%, Medium 60-90%, Low <60%)
-- [ ] **CONF-02**: Ambiguous assignments explicitly documented with reasoning
-- [ ] **CONF-03**: Analysis output flags areas where additional NMR experiments might help
+- [x] **CONF-01**: CASE workflow produces assignments with qualitative confidence levels (High/Medium/Low based on 3-factor judgment: resolution, HOSE MAE, correlations) -- NOT computed percentages
+- [x] **CONF-02**: Ambiguous assignments explicitly documented with reasoning in mandatory Ambiguities Detected table (Carbon/Issue, Type, Resolution Detail, Impact on Constraints)
+- [x] **CONF-03**: Analysis output suggests specific additional NMR experiments (WHAT experiment, WHY it helps, WHICH atom/issue it resolves) for Medium/Low confidence atoms
 
 ## v2.1 Requirements
 
@@ -130,13 +130,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | QUAL-01 | Phase 22 | Complete |
 | QUAL-02 | Phase 22 | Complete |
 | QUAL-03 | Phase 22 | Complete |
-| ETOL-01 | Phase 23 | Pending |
-| ETOL-02 | Phase 23 | Pending |
-| ETOL-03 | Phase 23 | Pending |
-| ETOL-04 | Phase 23 | Pending |
-| CONF-01 | Phase 23 | Pending |
-| CONF-02 | Phase 23 | Pending |
-| CONF-03 | Phase 23 | Pending |
+| ETOL-01 | Phase 23 | Complete |
+| ETOL-02 | Phase 23 | Complete |
+| ETOL-03 | Phase 23 | Complete |
+| ETOL-04 | Phase 23 | Complete |
+| CONF-01 | Phase 23 | Complete |
+| CONF-02 | Phase 23 | Complete |
+| CONF-03 | Phase 23 | Complete |
 | SUPV-01 | Phase 24 | Pending |
 | SUPV-02 | Phase 24 | Pending |
 | SUPV-03 | Phase 24 | Pending |
@@ -161,4 +161,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-06*
-*Last updated: 2026-02-06 after Phase 22 completion*
+*Last updated: 2026-02-07 after Phase 23 completion*

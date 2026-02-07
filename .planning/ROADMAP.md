@@ -291,7 +291,7 @@
 - [x] **Phase 20: System Audit** -- COMPLETE 2026-02-06. 15 MCP tools, 9 CLI groups, 1,080-line CLAUDE.md classified
 - [x] **Phase 21: Skill Restructure** -- COMPLETE 2026-02-06. CLAUDE.md 305 lines, SKILL.md 418 lines, SUPERVISOR.md 78 lines, zero duplication
 - [x] **Phase 22: HMBC Strategy and Spectral Quality** -- COMPLETE 2026-02-06. SKILL.md 610 lines (+192), spectral quality + incremental HMBC strategy
-- [ ] **Phase 23: Error Tolerance and Confidence** -- Encode error handling patterns and confidence-annotated output in skill
+- [x] **Phase 23: Error Tolerance and Confidence** -- COMPLETE 2026-02-07. SKILL.md 1,079 lines (+469), error tolerance + ambiguity detection + confidence scoring
 - [ ] **Phase 24: Supervisor Agent** -- Create supervisor with loop detection, intervention strategies, and escalation
 - [ ] **Phase 25: Diagnostic Specialist** -- Create LSD expert agent for systematic failure diagnosis
 - [ ] **Phase 26: Thin Tools** -- Migrate embedded intelligence from MCP tools to skill; tools become data access wrappers
@@ -360,8 +360,8 @@ Plans:
   5. CASE workflow produces assignments with confidence levels (High >90%, Medium 60-90%, Low <60%) and explicitly flags where additional NMR experiments might help
 **Plans**: 2 plans
 Plans:
-- [ ] 23-01-PLAN.md -- Add Error Tolerance and Ambiguity Detection section to SKILL.md (close carbons, DEPT/HSQC conflicts, quaternary HMBC sparsity)
-- [ ] 23-02-PLAN.md -- Add Confidence Scoring section and integrate into CASE Workflow and Quick Reference
+- [x] 23-01-PLAN.md -- Add Error Tolerance and Ambiguity Detection section to SKILL.md (close carbons, DEPT/HSQC conflicts, quaternary HMBC sparsity)
+- [x] 23-02-PLAN.md -- Add Confidence Scoring section and integrate into CASE Workflow and Quick Reference
 
 ---
 
@@ -437,10 +437,10 @@ Plans:
 | 20. System Audit | v2.0 | 3/3 | Complete | 2026-02-06 |
 | 21. Skill Restructure | v2.0 | 3/3 | Complete | 2026-02-06 |
 | 22. HMBC Strategy + Quality | v2.0 | 1/1 | Complete | 2026-02-06 |
-| 23. Error Tolerance + Confidence | v2.0 | 0/2 | Planned | - |
+| 23. Error Tolerance + Confidence | v2.0 | 2/2 | Complete | 2026-02-07 |
 | 24. Supervisor Agent | v2.0 | TBD | Not started | - |
 | 25. Diagnostic Specialist | v2.0 | TBD | Not started | - |
 | 26. Thin Tools | v2.0 | TBD | Not started | - |
 
 ---
-*Last updated: 2026-02-06 after Phase 22 completion*
+*Last updated: 2026-02-07 after Phase 23 completion*

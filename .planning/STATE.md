@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-02-06)
 
 **Core value:** AI agent autonomously determines compound structures from NMR, with multi-agent architecture preventing loops
-**Current focus:** Phase 23 complete; SKILL.md now includes confidence scoring framework
+**Current focus:** Phase 23 complete; Phase 24 (Supervisor Agent) ready to start
 
 ## Current Position
 
