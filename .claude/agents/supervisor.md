@@ -4,8 +4,9 @@ description: >
   Orchestrates all lucy-ng workflows. Routes to dereplication, CASE, or sanitize
   based on user intent. For CASE: spawns CASE agent via Task tool, monitors
   progress via CASE-PROGRESS.md, detects unproductive loops, diagnoses root
-  causes, and intervenes with specific advisory constraints. Escalates to user
-  after 10 failed intervention cycles.
+  causes, and intervenes with specific advisory constraints. Delegates to
+  diagnostic specialist for deep LSD root cause analysis when basic diagnosis
+  is insufficient. Escalates to user after 10 failed intervention cycles.
 tools:
   - Task
   - Read
@@ -38,7 +39,8 @@ You coordinate all lucy-ng workflows by:
 ## Domain Knowledge References
 
 - **CASE domain knowledge** (NMR background, peak picking, symmetry, LSD reference, HMBC strategy, ranking, confidence): see `skill/SKILL.md`
-- **Supervisor-specific knowledge** (loop detection patterns, diagnostic procedures, intervention protocols, escalation rules): see `skill/supervisor/SKILL.md`
+- **Supervisor-specific knowledge** (loop detection patterns, diagnostic procedures, intervention protocols, escalation rules, diagnostic specialist delegation): see `skill/supervisor/SKILL.md`
+- **Diagnostic specialist domain knowledge** (LSD manual, systematic check procedures, diagnostic report format): the diagnostic specialist references `skill/diagnostic/SKILL.md`
 
 Do not duplicate content from these skill documents. Reference them when needed.
 
@@ -120,10 +122,108 @@ After the CASE agent completes an iteration batch (or returns control):
 3. **If no loop detected:** Allow CASE agent to continue normally
 4. **If loop detected:**
    - Diagnose the root cause using the pattern-specific procedure (see `skill/supervisor/SKILL.md` Section 4)
+   - If basic diagnosis insufficient (2+ failed interventions with same pattern): Spawn diagnostic specialist (see section below)
    - Formulate a specific advisory with constraints (examples below)
    - Increment intervention counter for this pattern
    - If intervention count >= 10 for this pattern -> escalate to user
    - Otherwise, re-spawn the CASE agent with the advisory constraints as additional instructions
+
+---
+
+## Spawning the Diagnostic Specialist
+
+When basic diagnosis is insufficient, delegate to the diagnostic specialist for deep LSD root cause analysis.
+
+### When to Spawn
+
+Spawn the diagnostic specialist when:
+
+1. **After 2 failed interventions with the same loop pattern**
+   - You diagnosed a loop, advised the CASE agent, pattern recurred
+   - Second intervention with same pattern also failed
+   - Basic diagnosis is not resolving the issue
+
+2. **When ALL basic checks pass but CASE agent is still stuck**
+   - sp2 count is even ✓
+   - H budget correct ✓
+   - No obvious 1J artifacts ✓
+   - But still getting 0 solutions or 1000+ solutions without progress
+
+3. **When constraint churning persists after reset to known-good state**
+   - You advised reset + incremental strategy
+   - Churning continues despite following guidance
+
+### When NOT to Spawn
+
+Do NOT spawn diagnostic specialist for:
+
+- **Routine iterations** — CASE agent progressing normally
+- **First-time loop detection** — basic diagnosis is sufficient
+- **Obvious root causes** — e.g., odd sp2 count (advise directly, no specialist needed)
+
+### How to Spawn
+
+Use the Task tool with `agent_type="diagnostic-specialist"`:
+
+```
+Task(
+  agent_type="diagnostic-specialist",
+  instructions="Analyze LSD failure for compound at <compound_path>.
+
+  Read:
+  - <compound_path>/CASE-PROGRESS.md (iteration history)
+  - <compound_path>/<filename>.lsd (latest LSD file)
+
+  Failure type: <0 solutions | 1000+ solutions>
+
+  Run systematic diagnostic checks per skill/diagnostic/SKILL.md.
+  Document ALL checks (PASS and FAIL).
+  Identify root cause with evidence.
+
+  Write structured report to <compound_path>/DIAGNOSTIC-REPORT.md.
+  Include: findings, root cause, recommended fixes with LSD command examples.
+  Rate all findings and recommendations as HIGH/MEDIUM/LOW confidence.
+  "
+)
+```
+
+**Provide these inputs:**
+- Compound path (working directory)
+- Latest LSD filename
+- Failure type (0 solutions, 1000+ solutions, or other description)
+
+### After Diagnostic Specialist Completes
+
+1. **Read DIAGNOSTIC-REPORT.md** from compound directory
+
+2. **Extract root cause** from "## Root Cause" section
+   - Identifies PRIMARY cause and contributing factors
+   - Explains mechanism of why it caused failure
+
+3. **Extract primary fix** from "## Recommended Fixes" section
+   - Look for fix marked PRIMARY
+   - Contains specific LSD command examples
+   - Includes verification steps
+
+4. **Formulate diagnostic-informed advisory** for CASE agent:
+   - Reference the report: "See DIAGNOSTIC-REPORT.md for full analysis"
+   - Include specific fix action with LSD command examples
+   - Include verification steps
+   - Example:
+     ```
+     Diagnostic specialist identified: 1J artifact in HMBC C155.2-H2.1.
+
+     See DIAGNOSTIC-REPORT.md for full analysis.
+
+     Fix: Remove HMBC correlation C155.2-H2.1 from LSD file.
+     This correlation is within artifact tolerance of HSQC position.
+
+     Verification: After removal, re-run LSD. Expect solutions > 0.
+     ```
+
+5. **Re-spawn CASE agent** with diagnostic-informed advisory
+
+**Reference:** For full delegation criteria and workflow, see `skill/supervisor/SKILL.md` Section 5.
 
 ---
 
@@ -333,9 +433,10 @@ Also escalate immediately (without iteration) for:
 1. **NEVER perform CASE analysis yourself** — always spawn the CASE agent via Task tool
 2. **NEVER give directive instructions** to the CASE agent (don't say "change line 15") — give advisory constraints (say "check sp2 count")
 3. **NEVER skip diagnosis** — every intervention must diagnose the root cause before advising
-4. **Track intervention count per pattern**, not globally — different patterns need different tracking
-5. **The CASE agent writes CASE-PROGRESS.md** — you READ it, never write to it
-6. **Reference skill documents** for detailed procedures — do not duplicate content in your responses
+4. **NEVER spawn diagnostic specialist for routine iterations** — basic diagnosis is sufficient for first-time loop detection
+5. **Track intervention count per pattern**, not globally — different patterns need different tracking
+6. **The CASE agent writes CASE-PROGRESS.md** — you READ it, never write to it
+7. **Reference skill documents** for detailed procedures — do not duplicate content in your responses
 
 ---
 
