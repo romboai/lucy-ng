@@ -1,696 +1,400 @@
-# Feature Landscape: Multi-Agent CASE System
+# Feature Landscape: Multi-Agent CASE Orchestration Skills
 
-**Domain:** AI-powered Computer-Assisted Structure Elucidation (CASE) for NMR spectroscopy
-**Researched:** 2026-02-06
-**Context:** v2.0 transformation from tool-heavy to AI-first architecture
+**Domain:** AI-powered NMR structure elucidation with multi-agent orchestration
+**Researched:** 2026-02-08
+
+---
 
 ## Executive Summary
 
-The Virgiline (CASE7) failure revealed that robust CASE requires:
-1. **AI reasoning about errors** - not Python machinery detecting them
-2. **Incremental constraint strategy** - encoded as skill knowledge, not CLI logic
-3. **Multi-agent supervision** - detecting and breaking unproductive loops
-4. **Thin tools** - giving data access without imposing intelligence
+This research defines the feature landscape for lucy-ng's v2.1 multi-agent CASE orchestration skills. The system replaces a monolithic `/lucy-ng` skill with GSD-pattern sub-command skills that follow modern agent orchestration patterns.
 
-Current system (v1.2) has 16 MCP tools and extensive Python intelligence. The v2.0 transformation pushes domain knowledge into skills where the AI can reason about it, reduces tools to thin wrappers, and adds multi-agent orchestration to prevent loops.
+**Key findings:**
+- **Table stakes**: Sub-commands must be single-purpose, spawn agents correctly, and maintain clean separation of concerns
+- **Differentiators**: AI-driven sanitisation without CLI, autonomous CASE with supervision loop, diagnostic delegation pattern
+- **Anti-features**: Dereplication in CASE orchestrator, CLI for sanitisation, directive intervention (vs advisory)
+
+The feature set is informed by 2026 multi-agent orchestration patterns: hierarchical supervisor architectures, iterative agent spawning via Task tool, advisory intervention models, and transparent progress monitoring.
 
 ---
 
 ## Table Stakes
 
-Features essential for robust multi-agent CASE. Missing = system gets stuck.
-
-### TS-1: Supervisor Agent with Loop Detection
-
-**What:** Dedicated supervisor agent monitors CASE agent behavior and detects unproductive patterns.
-
-**Why expected:** Multi-agent orchestration research shows supervisor-based patterns prevent the "bag of agents" failure mode where adding agents without coordination creates more meetings than progress.
-
-**Complexity:** Medium
-
-**Loop patterns to detect:**
-- **ELIM thrashing** - Adding ELIM command repeatedly without diagnosing root cause
-- **Peak picking oscillation** - Adjusting thresholds repeatedly without progress
-- **Constraint churning** - Adding/removing constraints randomly
-- **Zero-solution loop** - Getting 0 solutions, tweaking constraints, getting 0 again
-- **Solution explosion** - Getting 1000+ solutions, minor tweaks, still 1000+
-
-**Intervention strategies:**
-- After 3 failed attempts with same pattern → escalate to user
-- After ELIM added → require diagnosis of which HMBC correlation is suspect
-- After 5 peak picking adjustments → require spectral quality assessment
-- After 2 zero-solution attempts → require sp2/hydrogen count validation
-
-**Implementation notes:**
-- Supervisor sees full conversation history
-- Uses temporal pattern matching (not just state)
-- Can inject diagnostic questions to CASE agent
-- Human-in-the-loop for escalation, not micro-management
-
-**Sources:**
-- [Multi-agent supervisor patterns](https://arxiv.org/html/2601.19121)
-- [Coordination overhead vs task complexity](https://www.kore.ai/blog/choosing-the-right-orchestration-pattern-for-multi-agent-systems)
-
----
-
-### TS-2: CASE Skill with Incremental HMBC Strategy
-
-**What:** Skill instructions teaching incremental constraint addition strategy.
-
-**Why expected:** The "throw everything in" approach fails on difficult cases. Structure Elucidator 2025 documentation emphasizes incremental constraint addition for crowded spectral regions.
-
-**Complexity:** Low (skill update, not code)
-
-**Skill knowledge to encode:**
-
-#### Phase 1: Core Structure from High-Confidence Signals
-```
-Start with HSQC only (direct C-H correlations - these are always correct).
-Add HMBC correlations for:
-- Well-separated quaternary carbons (>2 ppm from neighbors)
-- Carbonyl region signals (>160 ppm, usually unambiguous)
-- Aromatic region CH peaks (if benzene ring present)
-
-Goal: 5-20 solutions showing core scaffold
-```
-
-#### Phase 2: Resolve Ambiguity with Diagnostic Correlations
-```
-If multiple scaffolds remain:
-- Add HMBC correlations that distinguish between candidates
-- Focus on HMBC to quaternary carbons (most informative)
-- Avoid crowded aliphatic regions initially
-
-If solutions differ in heteroatom placement:
-- Add BOND constraints for C-O or C-N based on shift
-```
-
-#### Phase 3: Refine with Full Constraint Set
-```
-Only after scaffold is determined:
-- Add remaining HMBC correlations
-- Include aliphatic region correlations
-- Use ELIM only if truly necessary
-
-If aliphatic signals overlap (within 0.5 ppm):
-- Document ambiguity
-- Try both assignments if solutions differ
-```
-
-**What skill MUST NOT say:**
-- "Run lucy pick hmbc and use all correlations" (this is the failure mode)
-- "If LSD returns 0 solutions, try ELIM" (this skips diagnosis)
-
-**What skill MUST say:**
-- "Start with 5-10 high-confidence HMBC correlations"
-- "If 0 solutions, check sp2 count and hydrogen budget BEFORE trying ELIM"
-- "Close carbon shifts (<0.5 ppm apart) create assignment ambiguity"
-
-**Sources:**
-- [Incremental constraint addition](https://www.acdlabs.com/technical-support/current-software-versions/structure-elucidator-suite/)
-- [HMBC ambiguity handling](https://pubs.acs.org/doi/10.1021/acs.jcim.7b00653)
-
----
-
-### TS-3: Error Tolerance as AI Knowledge (Not Python Detection)
-
-**What:** Skill teaches AI to detect and reason about common spectroscopic ambiguities.
-
-**Why expected:** The AI can see the data and reason about it. Building Python machinery to detect every edge case is brittle and removes the intelligence from where it belongs.
-
-**Complexity:** Low (skill content) + Medium (remove existing Python detection)
-
-**Ambiguity patterns the AI must learn:**
-
-#### Close Carbon Shifts (Aliphatic Crowding)
-```
-Pattern: Multiple carbons within 0.3-0.5 ppm in 10-40 ppm region
-Why it happens: Saturated CH2/CH3 have narrow shift ranges
-What AI should do:
-  - Identify close shifts proactively
-  - Document: "Carbons 3, 5, 7 at 22.1-22.4 ppm may be ambiguous"
-  - Try multiple HMBC assignments if LSD fails
-  - Don't force constraints that assume exact assignment
-
-Example from Virgiline: 5 carbons in 22-28 ppm range
-```
-
-#### DEPT Phase Inversion Issues
-```
-Pattern: HSQC shows CH peak but DEPT-135 phase is negative (CH2-like)
-Why it happens: Unusual J-coupling, DEPT setup error, or HSQC artifact
-What AI should do:
-  - Compare HSQC multiplicity with DEPT phase
-  - If conflict: "Signal at X ppm: HSQC suggests CH, DEPT suggests CH2"
-  - Use HSQC as ground truth (direct measurement more reliable)
-  - Document uncertainty in LSD comments
-
-Example: HSQC doublet at 45 ppm, DEPT-135 negative
-```
-
-#### Ambiguous HMBC Assignment
-```
-Pattern: HMBC cross-peak could be assigned to either of two close carbons
-Why it happens: Digital resolution limits, peak overlap, close shifts
-What AI should do:
-  - Identify when carbon positions are close (<1 ppm)
-  - Note: "HMBC from H-8 to ~25 ppm could be C-5 (24.8) or C-7 (25.3)"
-  - Generate two LSD input variants if critical for scaffold
-  - Don't over-constrain with arbitrary choice
-
-Example: HMBC to 138.5 ppm could be C-3 (138.4) or C-6 (138.7)
-```
-
-#### Quaternary Carbon HMBC Sparsity
-```
-Pattern: Quaternary carbon has no or very few HMBC correlations
-Why it happens: HMBC is insensitive, quaternary C are distant from H
-What AI should do:
-  - Check if other constraints place quaternary C unambiguously
-  - If not: use chemical shift to constrain heteroatom attachment
-  - Don't assume missing HMBC = no connection (may be weak signal)
-
-Example: Carbonyl at 173 ppm with only 1 HMBC visible
-```
-
-**What to remove from Python code:**
-- Automatic HMBC conflict resolution (let AI reason about conflicts)
-- Hard thresholds for "too close" (context-dependent)
-- Automatic constraint relaxation (AI should decide strategy)
-
-**What Python should provide:**
-- Raw peak lists with positions and intensities
-- Distance calculations (e.g., "these carbons are 0.3 ppm apart")
-- Validation that peaks exist in reference spectra
-
-**Sources:**
-- [Peak overlap in metabolomics](https://www.nature.com/articles/s41597-025-06245-5)
-- [Ambiguous assignment challenges](https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-13-S3-S4)
-
----
-
-### TS-4: Diagnostic Specialist Agent
-
-**What:** Specialist agent that diagnoses WHY LSD failed (0 solutions or 1000+ solutions).
-
-**Why expected:** The CASE agent gets stuck trying fixes without understanding the root cause. A specialist can systematically check common failure modes.
-
-**Complexity:** Medium
-
-**Diagnostic checklist for 0 solutions:**
-
-1. **sp2 Count Validation**
-   - Extract all atom definitions from LSD file
-   - Count atoms with hybridization=2
-   - Check: Is count EVEN?
-   - Common fix: Convert one N from sp2→sp3 or vice versa
-
-2. **Hydrogen Budget**
-   - Sum: (CH3 count × 3) + (CH2 count × 2) + (CH count × 1)
-   - Compare to molecular formula H count
-   - Common fix: Wrong multiplicity assignment
-
-3. **HMBC Conflict Detection**
-   - Check if HMBC implies impossible geometry
-   - Example: C-1 HMBC to H-3, but C-1 and C-3 are >4 bonds apart in all solutions
-   - Common fix: HMBC is artifact, add to ELIM list
-
-4. **Correlation Order**
-   - Verify all HSQC commands appear before HMBC
-   - Verify all referenced H positions are defined
-   - Common fix: Reorder correlation commands
-
-**Diagnostic checklist for 1000+ solutions:**
-
-1. **Constraint Count**
-   - How many HMBC correlations are defined?
-   - Rule of thumb: Need ~N correlations for N-carbon molecule
-   - Common fix: Add more HMBC correlations
-
-2. **Quaternary Carbon Connectivity**
-   - Are all quaternary carbons connected via HMBC?
-   - Quaternary C with 0 HMBC = floating, causes explosion
-   - Common fix: Find weak HMBC peaks, lower threshold
-
-3. **Heteroatom Constraints Missing**
-   - Are carbonyl C-O bonds defined?
-   - Are N-CH3 attachments defined?
-   - Common fix: Add BOND or LIST/PROP constraints
-
-4. **Symmetry Not Encoded**
-   - Does signal count match formula atom count?
-   - If not, are SYME constraints present?
-   - Common fix: Add symmetry constraints
-
-**Output format:**
-```markdown
-## LSD Diagnostic Report
-
-**Problem:** 0 solutions found
-
-**Findings:**
-1. ✅ sp2 count: 8 (EVEN) - OK
-2. ❌ Hydrogen budget: Expected 22 H, LSD defines 24 H
-3. ⚠️  HMBC conflict: Correlation C-1 to H-7 unlikely (>4 bonds)
-
-**Recommended fixes:**
-- Check multiplicity of C-5 (may be CH not CH2)
-- Try adding ELIM 1 0 to allow removing suspicious correlation
-
-**Root cause:** Multiplicity assignment error
-```
-
-**Sources:**
-- [Constraint satisfaction diagnostics](https://www.geeksforgeeks.org/artificial-intelligence/constraint-satisfaction-problems-csp-in-artificial-intelligence/)
-
----
-
-### TS-5: Thin Peak Picker Tools (Remove Intelligence)
-
-**What:** Reduce MCP tools to thin wrappers. Remove Python logic that second-guesses the AI.
-
-**Why expected:** On difficult cases, the AI agent bypasses CLI wrappers and reasons directly on the data anyway. The "smart" tools just get in the way.
-
-**Complexity:** Medium (refactor existing tools)
-
-**Current tools to simplify:**
-
-| Current Tool | What to Keep | What to Remove |
-|--------------|--------------|----------------|
-| `pick_hsqc_peaks` | Read HSQC, extract peaks above threshold | DEPT-guided adaptive thresholding |
-| `pick_hmbc_peaks` | Read HMBC, extract peaks above threshold | Carbon/proton position validation filtering |
-| `analyze_symmetry` | Count signals, count formula atoms | Interpretation hints, automatic equivalence detection |
-| `generate_lsd_input` | Build MULT/HSQC commands from peak list | HMBC auto-inclusion, constraint generation |
-
-**New thin tool design:**
-
-```python
-@mcp.tool()
-def read_2d_peaks(spectrum_path: str, threshold: float = 0.05) -> dict:
-    """Read 2D spectrum and return ALL peaks above threshold.
-
-    No filtering, no validation, no intelligence.
-    Just give the AI the data and let it reason.
-
-    Returns:
-        {
-            "peaks": [
-                {"f1_ppm": 138.5, "f2_ppm": 7.24, "intensity": 0.82},
-                ...
-            ],
-            "f1_nucleus": "13C",
-            "f2_nucleus": "1H"
-        }
-    """
-```
-
-**What the AI does with raw peaks:**
-- Cross-reference HMBC F1 with 13C peak list manually
-- Decide which HMBC correlations to include in LSD
-- Detect close carbon shifts and document ambiguity
-- Build LSD file incrementally with commentary
-
-**Why this is better:**
-- AI sees the same data a human would see
-- AI can make context-dependent decisions
-- AI can document reasoning ("excluding HMBC to 138.7 because it's within 0.2 ppm of 138.5 and likely artifact")
-- Tool simplification reduces maintenance burden
-
-**What Python still does well:**
-- Read binary Bruker files (nmrglue)
-- Extract peaks from 2D matrices (SciPy)
-- Run LSD subprocess (shell integration)
-- Query SQLite database (SQL)
-
-**Sources:**
-- [Human-in-the-loop evolution](https://siliconangle.com/2026/01/18/human-loop-hit-wall-time-ai-oversee-ai/)
+Features users expect. Missing = system feels broken or incomplete.
+
+### 1. /lucy-ng:case — CASE Orchestrator
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Spawn autonomous CASE agent via Task tool | Core orchestrator responsibility in hierarchical pattern | Medium | Follow Claude Code 2.1 Task spawning pattern with clear instructions |
+| Monitor CASE-PROGRESS.md after each iteration | Standard supervision loop pattern for iterative workflows | Low | Read-only, agent writes this file |
+| Detect 4 unproductive loop patterns | Supervisor must prevent infinite loops in autonomous systems | Medium | ELIM thrashing, zero-solution loop, solution explosion, constraint churning |
+| Diagnose root cause before intervention | Quality gate for supervision — intervention without diagnosis wastes tokens | Medium | Pattern-specific diagnostic procedures |
+| Intervene with advisory constraints | Supervisor guides without directive control | Medium | "Check sp2 count" not "change line 15" |
+| Track per-pattern intervention counts | Prevents infinite supervision loops | Low | Separate counters for each loop type |
+| Escalate after 10 failed cycles | Hard safety cap for autonomous operation | Low | Return control to user with diagnostic report |
+| NEVER attempt dereplication | Absolute separation of concerns | Low | Critical anti-pattern: CASE != dereplication |
+| Spawn diagnostic specialist after 2 failures | Deep root cause analysis for persistent issues | Medium | Delegation pattern for specialized diagnosis |
+| Support "skip dereplication" option | User control over workflow routing | Low | Default tries dereplication, user can override |
+
+**Dependencies:**
+- Existing: skill/SKILL.md (CASE workflow knowledge), skill/supervisor/SKILL.md (loop detection)
+- Existing: CASE-PROGRESS.md format specification
+- New: Autonomous CASE agent definition
+
+### 2. /lucy-ng:sanitise — AI Dataset Sanitisation
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Extract all text content for AI review | AI needs complete context to identify identifiers | Low | Use existing lucy_text_extractor.py helper |
+| Detect chemical names via reasoning | Cannot be pattern-matched — requires understanding | High | AI applies chemistry knowledge to recognize compound names |
+| Detect SMILES/InChI/InChIKey patterns | Well-defined formats, pattern-matchable | Low | Regex for InChI/InChIKey, heuristics for SMILES |
+| Detect CAS registry numbers | Standard format: up to 10 digits, hyphen-separated, check digit | Low | Pattern: `\d{2,7}-\d{2}-\d` with checksum validation |
+| Detect MOL file structures | Binary structure files containing atom coordinates | Low | File extension and header signature |
+| Detect dataset naming patterns | Paths/filenames may contain compound names | Medium | Example: "Caffeine/10" or "Ibuprofen_1H" |
+| Generate redaction manifest | List of identifiers to remove | Low | One identifier per line, feed to bulk_sanitize.py |
+| Execute bulk sanitisation | Apply text replacements safely | Low | Use existing lucy_bulk_sanitize.py helper |
+| Verify sanitisation completeness | Re-extract and confirm no identifiers remain | Low | Run text extractor again, review output |
+| NO CLI COMMAND | Requires AI reasoning — cannot be automated | N/A | Explicitly document: "This skill has no CLI command" |
+
+**Dependencies:**
+- Existing: skill/sanitize/lucy_text_extractor.py (extraction helper)
+- Existing: skill/sanitize/lucy_bulk_sanitize.py (bulk replacement helper)
+- New: AI reasoning about chemistry domain knowledge
+
+**Critical design decision:** Sanitisation CANNOT be a simple CLI because identifying compound names requires semantic understanding. "Indigo" could be a dye, a company name, or background noise. Only AI with chemistry knowledge can distinguish.
+
+### 3. /lucy-ng:dereplicate — Simple Dereplication
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Wrap `lucy dereplicate c13` CLI | Core function is database lookup | Low | Thin wrapper, all logic in CLI |
+| Parse CLI JSON output | Programmatic result handling | Low | `--format json` flag |
+| Report match quality tiers | User needs context: exact match vs possible vs no match | Low | ≥0.95 exact, 0.65-0.85 possible, <0.50 no match |
+| Offer CASE escalation on no match | Natural workflow: dereplication → CASE if unknown | Low | "No match found. Run CASE? [Y/n]" |
+| Support direct Bruker path input | Consistent with existing workflows | Low | Auto-detect experiment numbers |
+| Support shift list input | Fallback when no spectrum available | Low | `--shifts "155.08,151.58,..."` |
+
+**Dependencies:**
+- Existing: `lucy dereplicate c13` CLI command
+- Existing: Database with 928K compounds
+
+### 4. /lucy-ng:predict — Standalone Prediction
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Wrap `lucy predict c13` CLI | Core function is HOSE lookup | Low | Thin wrapper, all logic in CLI |
+| Parse prediction results | Programmatic access to shifts | Low | JSON output with atom indices, shifts, confidence |
+| Validate SMILES input | Prevent crashes from invalid input | Low | Use RDKit validation |
+| Report prediction confidence | User needs quality signal | Low | Based on HOSE stats count and std |
+| Auto-detect database | Default to standard path | Low | data/reference/lucy-ng-derep.db |
+| Support custom database path | Advanced users, testing | Low | --db option |
+
+**Dependencies:**
+- Existing: `lucy predict c13` CLI command
+- Existing: Database with 7.9M HOSE statistics
+
+### 5. /lucy-ng:status — Environment Readiness Check
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Check lucy-ng installation | Prerequisite for all operations | Low | `lucy --version` |
+| Check LSD solver availability | Required for CASE | Low | `lucy lsd check` |
+| Check database installation | Required for dereplication and prediction | Low | Verify data/reference/lucy-ng-derep.db exists |
+| Report database statistics | User needs context about coverage | Low | Compound count, HOSE stats count |
+| Check Python dependencies | Troubleshooting aid | Medium | nmrglue, rdkit, pydantic versions |
+| Recommend fixes for missing components | Actionable guidance | Low | Download URLs, install commands |
+
+**Dependencies:**
+- Existing: All CLI commands for capability checking
+
+### 6. /lucy-ng Landing Page (Replacement for Monolithic Skill)
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Route to sub-command skills | Discovery mechanism | Low | "For CASE: /lucy-ng:case" |
+| Describe each sub-command's purpose | User needs to know which to invoke | Low | One-line description per skill |
+| No direct functionality | Pure router/documentation | Low | All work delegated to sub-commands |
+| Deprecation notice for old skill | Migration path for existing users | Low | "Old /lucy-ng skill replaced by sub-commands" |
+
+**Dependencies:**
+- All sub-command skills must exist first
 
 ---
 
 ## Differentiators
 
-Features that make this approach unique. Not expected, but high value.
+Features that set lucy-ng apart from other CASE systems. Not expected, but provide competitive advantage.
 
-### DIFF-1: AI-Readable Spectral Quality Assessment
+### 1. Autonomous CASE with Supervision Loop
 
-**What:** Skill teaches AI to assess spectral quality and predict which steps will be problematic.
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Full autonomy until stuck | Agent completes CASE without manual intervention | High | Option A architecture: run to completion or report stuck |
+| Progress transparency via CASE-PROGRESS.md | User can observe reasoning without interrupting | Medium | Human-readable markdown, AI-parseable structure |
+| Advisory intervention model | Maintains agent autonomy while preventing loops | Medium | Supervisor constrains WHAT to fix, not HOW |
+| Diagnostic specialist delegation | Deep root cause analysis for complex failures | High | Separate agent with LSD manual knowledge |
+| Escalation with diagnostic context | When stuck, provide actionable insights | Medium | Not just "failed" but "why failed" |
 
-**Value proposition:** Proactive problem detection. "This HMBC has low S/N in the aliphatic region - expect assignment ambiguity in Phase 3."
+**Why differentiating:** Most CASE systems are either fully manual (user builds constraints) or black-box automated (no intervention). Lucy-ng's supervised autonomy combines the best of both.
 
-**Complexity:** Low (skill content)
+**Complexity drivers:**
+- Detecting loops requires pattern matching across iteration history
+- Root cause diagnosis requires deep LSD domain knowledge
+- Advisory guidance requires translating technical findings to actionable constraints
 
-**Quality indicators to teach:**
+### 2. AI-Driven Dataset Sanitisation
 
-#### Signal-to-Noise Indicators
-```
-High S/N (>100:1): Clean peak picking, reliable correlations
-Medium S/N (20-100:1): Most peaks reliable, check weak correlations
-Low S/N (<20:1): Expect noise peaks, aggressive filtering needed
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Semantic identifier detection | Recognizes compound names that patterns cannot | High | Requires chemistry domain knowledge |
+| Multi-format identifier coverage | SMILES, InChI, CAS, MOL, chemical names | Medium | Hybrid pattern + reasoning approach |
+| Blind evaluation workflow | Removes AI contamination for unbiased CASE | Medium | Critical for scientific validation |
+| Verification loop | Confirms complete sanitisation | Low | Re-extract and review |
+| NO CLI footgun | Explicitly prevents false security from automated approach | Low | Documents limitation clearly |
 
-How to assess:
-- Compare max peak intensity to baseline region intensity
-- Check for "grainy" appearance in 2D spectra
-- Look for peak count >> expected (indicates noise)
-```
+**Why differentiating:** No other CASE system addresses the AI contamination problem. Publishing blind evaluation results requires this capability.
 
-#### Digital Resolution
-```
-High resolution (>1024 points in F1): Can distinguish 0.2 ppm shifts
-Medium resolution (512 points): 0.5 ppm resolution limit
-Low resolution (<256 points): 1+ ppm resolution, expect overlap
+**Complexity drivers:**
+- Chemical name detection is NLP-hard: "Caffeine" vs "Indigo" vs "Classics_Indigo"
+- Requires AI to apply chemistry knowledge to determine if text is a compound identifier
+- Must balance thoroughness (catch everything) with false positives (don't redact legitimate text)
 
-Impact on CASE:
-- Low resolution → close carbons will alias
-- Document: "HMBC F1 resolution 0.8 ppm, C-5/C-7 distinction marginal"
-```
+### 3. Iterative Agent Spawning with Convergence Monitoring
 
-#### Spectral Artifacts
-```
-Common HMBC artifacts:
-- 1J correlations (F1 = HSQC carbon, should be suppressed)
-- t1 noise (vertical streaks at strong proton positions)
-- Baseline roll (F1 baseline not flat)
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Multi-iteration agent lifecycle | CASE agent continues across multiple spawns | Medium | Unlike one-shot GSD executors |
+| Convergence criteria tracking | Automatic success detection | Medium | Solution count trends, MAE differentiation |
+| Hard safety cap at ~20 iterations | Prevents runaway token consumption | Low | Report best available result |
+| Plateau detection and strategy adaptation | Knows when to stop vs try different approach | Medium | Distinguish "good enough" from "stuck" |
 
-What AI should do:
-- Identify 1J peaks: "HMBC shows C-H correlation to same H as HSQC - artifact"
-- Identify t1 noise: "Vertical artifacts at 7.2 ppm (solvent H)"
-- Lower confidence in correlations near artifacts
-```
+**Why differentiating:** Most agent orchestrators are one-shot (plan → execute → done). CASE requires iterative refinement with dynamic strategy adjustment.
 
-**Deliverable:** Section in CASE skill titled "Spectral Quality Assessment" with examples and heuristics.
-
----
-
-### DIFF-2: Constraint Satisfaction Explorer Specialist
-
-**What:** Specialist agent that generates multiple LSD input variants for ambiguous cases.
-
-**Value proposition:** When assignment is genuinely ambiguous, try both interpretations systematically instead of guessing.
-
-**Complexity:** Medium
-
-**Use cases:**
-
-#### Close Carbon Assignment
-```
-Problem: HMBC cross-peak to F1=25.2 ppm
-        Candidates: C-5 at 25.0 ppm, C-7 at 25.4 ppm
-
-Explorer generates 2 LSD variants:
-- Variant A: HMBC to atom 5
-- Variant B: HMBC to atom 7
-
-Run both, compare solutions:
-- If variant A gives 1-10 solutions, variant B gives 0 → C-5 correct
-- If both give solutions → need additional data to resolve
-```
-
-#### Heteroatom Placement
-```
-Problem: Molecular formula C9H10O2 (2 oxygens)
-        Possible: Two isolated OH, or one ester, or one ether + one OH
-
-Explorer generates 3 LSD variants:
-- Variant A: Both O as sp3 (two OH)
-- Variant B: One O as sp2 carbonyl
-- Variant C: BOND constraint for ester linkage
-
-Ranking by MAE determines most likely structure
-```
-
-**Implementation:**
-- Explorer agent spawned by CASE agent when ambiguity detected
-- Generates 2-5 variants (not exhaustive)
-- Runs LSD on all variants in parallel
-- Reports back which variants succeeded
-- CASE agent uses MAE ranking to select best
-
-**Sources:**
-- [Fuzzy structure generation for ambiguous constraints](https://www.sciencedirect.com/science/article/abs/pii/S0377221798003646)
-
----
-
-### DIFF-3: Confidence-Annotated Output
-
-**What:** All analysis steps include confidence levels and uncertainty documentation.
-
-**Value proposition:** Transparent AI reasoning. User can see which assignments were certain vs. guessed.
-
-**Complexity:** Low (prompt engineering)
-
-**Output format example:**
-
-```markdown
-## Peak Assignments
-
-### High Confidence (>90%)
-- C-1 at 173.2 ppm: Carbonyl (HMBC to 3 protons)
-- C-2 at 128.5 ppm: Aromatic CH (HSQC doublet)
-
-### Medium Confidence (60-90%)
-- C-5 at 25.0 ppm: Aliphatic CH2 (DEPT negative, but close to C-7)
-- HMBC C-1 to H-3: 2J or 3J unclear (both geometries possible)
-
-### Low Confidence (<60%)
-- C-7 vs C-9 assignment: Both at ~22 ppm, HMBC assignment ambiguous
-- Quaternary C-4: No HMBC correlations visible (may be HSQC artifact)
-
-## Ambiguity Resolution Strategy
-1. Proceed with high-confidence assignments only
-2. Generate 2 LSD variants for C-7/C-9 ambiguity
-3. Use MAE ranking to resolve C-4 uncertainty
-```
-
-**Why this matters:**
-- User can verify high-confidence assignments first
-- Low-confidence areas flag where additional NMR might help
-- Research paper can report: "5 of 13 carbons required ambiguity resolution"
-
----
-
-### DIFF-4: LSD Solution Explainer Specialist
-
-**What:** Specialist agent that explains WHY a solution structure satisfies (or violates) the NMR constraints.
-
-**Value proposition:** Answer "Why is this the #1 ranked solution when this other structure looks more reasonable?"
-
-**Complexity:** Medium
-
-**Explanation format:**
-
-```markdown
-## Solution 1: CC1CCC(C1)C(=O)C (MAE=2.3 ppm, Rank #1)
-
-### Constraint Satisfaction
-✅ All HSQC correlations satisfied
-✅ 8 of 9 HMBC correlations satisfied
-⚠️ HMBC C-1 to H-7 not satisfied (4 bonds in solution, should be 2-3)
-
-### Shift Prediction Quality
-✅ Carbonyl at 173 ppm: predicted 171 (Δ=2 ppm) - excellent
-✅ Aromatic region: MAE=1.2 ppm - good
-⚠️ Aliphatic region: MAE=3.8 ppm - moderate
-
-### Structural Features
-- Cyclopentanone ring (common motif)
-- Methyl ketone (consistent with carbonyl shift)
-- Predicted ring strain: low
-
-### Why This Ranks #1
-The MAE is dominated by well-predicted carbons (8 of 10 within 3 ppm).
-The one HMBC violation is likely a 4J correlation (possible but unusual).
-Alternative Solution #2 has lower MAE (2.1) but violates 3 HMBC correlations.
-```
-
-**Use case:**
-- User reviews top 5 solutions
-- Asks: "Why is solution 3 ranked below solution 1?"
-- Explainer generates comparative report
-- Highlights which constraints differ, which shifts differ
-
-**Sources:**
-- [Explainable AI for constraint satisfaction](https://www.sciencedirect.com/topics/computer-science/constraint-satisfaction-problems)
+**Complexity drivers:**
+- Supervisor must maintain state across multiple agent spawns
+- Convergence is multi-signal: solution count, MAE spread, constraint effectiveness
+- Plateau handling requires distinguishing "stuck" from "good enough"
 
 ---
 
 ## Anti-Features
 
-Features to deliberately NOT build. Common mistakes in this domain.
+Features to explicitly NOT build. Common mistakes or tempting additions that would harm the system.
 
-### AF-1: Automatic HMBC Conflict Resolution
+### 1. Dereplication in CASE Orchestrator
 
-**What NOT to build:** Python code that detects HMBC conflicts and automatically removes "suspicious" correlations.
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| CASE orchestrator attempts dereplication before spawning CASE agent | Violates separation of concerns, creates confusion about when dereplication happens | Dereplication is a separate sub-command. If user wants it, they invoke /lucy-ng:dereplicate explicitly |
+| "Try dereplication first" logic in CASE skill | User already decided to run CASE by invoking the skill | Assume user has already tried dereplication if they wanted it |
+| Automatic dereplication before CASE | Hidden behavior, wastes time for known unknowns | Make workflow explicit: dereplicate THEN case, or skip to case |
 
-**Why avoid:** This removes human/AI judgment. A 4-bond HMBC correlation may be unusual but real (W-coupling, through-space). Automatic removal may discard critical constraints.
+**Rationale:** The Virgiline (CASE7) failure revealed that mixing dereplication into CASE creates confusion and wasted iterations. User invokes CASE skill → user wants CASE, not dereplication.
 
-**What to do instead:**
-- Tool reports: "HMBC C-1 to H-7 is 4 bonds in solution (unusual)"
-- AI decides: Keep it, remove it, or try both
-- Skill teaches when 4J correlations are plausible
+**Design principle:** One sub-command, one purpose. If user wants both, they invoke both.
 
-**Root cause of temptation:** Python programmer wants to "help" by removing "bad" data. But the AI is better positioned to judge context.
+### 2. CLI Command for Sanitisation
 
----
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| `lucy sanitize <path>` CLI command | Gives false sense of security — patterns cannot detect semantic identifiers like "Caffeine" | No CLI. Skill explicitly documents: "There is no CLI for sanitisation. It requires AI reasoning." |
+| Automated pattern-only sanitisation | Misses chemical names, creates undetected contamination | AI reviews extracted text, applies chemistry knowledge, generates manifest |
+| "One-click" sanitisation promise | Impossible to deliver correctly, undermines scientific validity | Emphasize that sanitisation is thorough manual review with AI assistance |
 
-### AF-2: Automatic Symmetry Constraints
+**Rationale:** Chemical names are semantic, not syntactic. "Indigo" could be many things. Only AI with chemistry knowledge can identify it as a compound name. A CLI would make users think they're safe when they're not.
 
-**What NOT to build:** Python code that detects equivalent atoms from HSQC intensities and automatically generates SYME commands.
+**Design principle:** If correctness requires reasoning, don't pretend automation works.
 
-**Why avoid:**
-- Intensity ratios are approximate (2.3x vs 2.0x doesn't mean 3 vs 2 equivalents)
-- Symmetry detection requires structural reasoning (para-benzene vs meta-benzene)
-- False symmetry detection over-constrains LSD
+### 3. Directive Intervention in Supervision
 
-**What to do instead:**
-- Tool reports: "C-3 at 128.5 ppm has 2.1x intensity vs median"
-- AI reasons: "2.1x suggests 2 equivalent positions, consistent with para-substitution"
-- AI manually writes SYME commands with commentary
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| "Change line 15 from X to Y" interventions | Removes CASE agent autonomy, creates brittle coupling | Advisory: "Check sp2 count is even before retrying" |
+| Directly editing LSD files from supervisor | Supervisor becomes executor, defeats purpose of delegation | Supervisor diagnoses, advises; CASE agent implements fix |
+| "Add this exact constraint" commands | Agent cannot learn or adapt strategy | Explain WHAT is wrong and WHY, let agent decide HOW to fix |
 
-**Root cause of temptation:** Symmetry analysis (v1.0 feature) was built to "help" the AI. In practice, the AI ignores it and reasons from raw data.
+**Rationale:** The supervisor orchestrates, does not execute. Directive control creates tight coupling and removes agent autonomy. Advisory guidance maintains separation and allows agent to learn.
 
----
+**Design principle:** Supervisor constrains WHAT must be addressed, agent retains autonomy for HOW.
 
-### AF-3: Automatic Threshold Tuning
+### 4. Global Intervention Counter
 
-**What NOT to build:** Adaptive peak picking that iteratively adjusts threshold until "optimal" peak count is reached.
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| Single counter for all loop types | Prevents targeted diagnosis, escalates too early or too late | Per-pattern counters: count_elim, count_zero, count_explosion, count_churning |
+| "10 interventions total" threshold | Different patterns have different root causes and fix strategies | Escalate after 10 cycles WITH THE SAME PATTERN |
 
-**Why avoid:**
-- "Optimal" is context-dependent (depends on S/N, what you're looking for)
-- Hides decision from AI (threshold becomes a magic number)
-- May over-fit to noisy data
+**Rationale:** ELIM thrashing (sp2 count issue) is unrelated to solution explosion (need heteroatom constraints). Conflating them produces poor diagnostics.
 
-**What to do instead:**
-- Tool exposes threshold as parameter
-- AI tries threshold=0.05, gets 200 peaks, notes "too many, likely noise"
-- AI tries threshold=0.10, gets 45 peaks, notes "matches expected count"
-- AI documents: "Used threshold=0.10 for HMBC based on expected peak count"
+**Design principle:** Track state relevant to the failure mode.
 
-**Root cause of temptation:** DEPT-guided HSQC picking (v1.0 feature) worked well. Tried to generalize to HMBC, but context is different.
+### 5. One-Shot CASE Execution
 
----
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| CASE agent spawned once, returns result | CASE requires iterative refinement, cannot complete in one shot | Multi-iteration lifecycle: spawn → monitor → intervene → re-spawn |
+| No progress monitoring | Supervisor cannot detect loops or provide guidance | CASE-PROGRESS.md after every iteration |
+| "Run until done" without safety cap | Token consumption runaway, stuck in unproductive loops | Hard cap at ~20 iterations, escalate if not converged |
 
-### AF-4: One-Shot LSD Generation
+**Rationale:** CASE is inherently iterative. Initial constraints (MULT + HSQC) produce hundreds of solutions. HMBC batches incrementally refine. Pretending it's one-shot ignores the domain.
 
-**What NOT to build:** A "smart" LSD generator that includes all HMBC correlations and all heteroatom constraints in one shot.
+**Design principle:** Match agent lifecycle to task structure.
 
-**Why avoid:**
-- Incremental strategy is more robust
-- One-shot works for easy cases, fails for hard cases
-- AI can't see intermediate results to adjust strategy
+### 6. Embedding Skill Knowledge in Orchestrator
 
-**What to do instead:**
-- Tool builds MULT and HSQC commands from peak list
-- AI manually adds HMBC correlations in phases (5-10 at a time)
-- AI generates multiple LSD files (Phase1.lsd, Phase2.lsd, Phase3.lsd)
-- AI can see solution count at each phase and adjust
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| CASE domain knowledge (HMBC strategy, LSD commands) in orchestrator skill | Duplication, drift, maintenance burden | Orchestrator references skill/SKILL.md, does not duplicate |
+| Diagnostic procedures in orchestrator | Bloat, wrong level of abstraction | Supervisor has loop detection and basic diagnosis, delegates deep diagnosis to specialist |
+| LSD manual in supervisor skill | Wrong specialist | Diagnostic specialist references skill/diagnostic/SKILL.md |
 
-**Root cause of temptation:** Automation bias. "Why make the AI do manual work?" But the manual work IS the intelligence.
+**Rationale:** Knowledge should live in one canonical place. Orchestrator coordinates; specialists hold domain expertise.
 
----
-
-### AF-5: Solution Ranking by Single Metric
-
-**What NOT to build:** Ranking that uses ONLY MAE or ONLY constraint satisfaction count.
-
-**Why avoid:**
-- MAE can be low for wrong structure if most carbons are in crowded regions
-- Constraint satisfaction can be high if constraints are weak
-- Need multi-criteria ranking
-
-**What to do instead:**
-- Tool reports MAE, constraint satisfaction, and structural reasonableness
-- AI weighs criteria based on context
-- AI can ask Explainer specialist for comparative report
-
-**Root cause of temptation:** Simple ranking is easier to implement and explain. But chemistry is complex.
+**Design principle:** Reference, don't duplicate. Separation of concerns applies to knowledge, not just code.
 
 ---
 
 ## Feature Dependencies
 
 ```
-Supervisor Agent (TS-1)
-    ↓ monitors
-CASE Agent with Incremental Strategy (TS-2)
-    ↓ uses
-Thin Peak Picker Tools (TS-5)
-    ↓ provides data to
-Error Tolerance Knowledge (TS-3)
-    ↓ reasons about
-Diagnostic Specialist (TS-4)
-    ↓ called when stuck
+Dependency flow (features that require other features):
 
-Optional specialists:
-- Constraint Explorer (DIFF-2) - called for ambiguous cases
-- Solution Explainer (DIFF-4) - called for user questions
+/lucy-ng:case orchestrator
+├─ Autonomous CASE agent definition (NEW, critical path)
+├─ CASE-PROGRESS.md format (EXISTING: skill/supervisor/SKILL.md Section 7)
+├─ Loop detection patterns (EXISTING: skill/supervisor/SKILL.md Section 4)
+├─ Diagnostic specialist agent (EXISTING: .claude/agents/diagnostic-specialist.md, needs orchestrator integration)
+├─ skill/SKILL.md (EXISTING: CASE workflow knowledge)
+└─ skill/supervisor/SKILL.md (EXISTING: supervisor knowledge)
+
+/lucy-ng:sanitise orchestrator
+├─ lucy_text_extractor.py (EXISTING: skill/sanitize/)
+├─ lucy_bulk_sanitize.py (EXISTING: skill/sanitize/)
+├─ Chemistry domain knowledge for identifier detection (EXISTING: in AI training)
+└─ Sanitisation workflow documentation (NEW: how to use the helpers)
+
+/lucy-ng:dereplicate
+├─ lucy dereplicate c13 CLI (EXISTING)
+└─ Database with 928K compounds (EXISTING)
+
+/lucy-ng:predict
+├─ lucy predict c13 CLI (EXISTING)
+└─ Database with 7.9M HOSE stats (EXISTING)
+
+/lucy-ng:status
+├─ All lucy CLI commands (EXISTING)
+└─ Environment check logic (NEW: minimal wrapper)
+
+/lucy-ng landing page
+└─ All sub-command skills exist (DEPENDENT on above)
 ```
+
+**Critical path:** Autonomous CASE agent definition is the only truly new component. Everything else either exists or is thin orchestration wrappers.
 
 ---
 
 ## MVP Recommendation
 
-For v2.0 MVP, prioritize:
+For v2.1 MVP, prioritize in this order:
 
-1. **TS-2: Incremental HMBC Strategy Skill** (easiest, highest impact)
-   - Rewrite CASE section of CLAUDE.md
-   - Add examples from literature
-   - Remove "throw everything in" guidance
+### Must Have (Core Value)
 
-2. **TS-5: Simplify Peak Picking Tools** (reduces code complexity)
-   - Keep `read_2d_peaks(threshold)` - raw peaks only
-   - Remove DEPT-guided adaptive logic
-   - Remove HMBC filtering logic
+1. **/lucy-ng:case orchestrator** — Delivers the core value of autonomous supervised CASE
+   - Spawn autonomous CASE agent via Task tool
+   - Monitor CASE-PROGRESS.md
+   - Detect 4 loop patterns
+   - Basic diagnosis + advisory intervention
+   - Per-pattern intervention counters
+   - Escalation after 10 cycles
+   - NEVER attempt dereplication (anti-pattern enforcement)
 
-3. **TS-3: Error Tolerance Skill Content** (medium effort)
-   - Document close-shift detection patterns
-   - Document DEPT phase inversion
-   - Document ambiguous HMBC assignment
+2. **Autonomous CASE agent definition** — The worker agent that CASE orchestrator spawns
+   - Full CASE workflow implementation
+   - Write CASE-PROGRESS.md after every iteration
+   - Implement advisory constraints from supervisor
+   - Follow skill/SKILL.md CASE methodology
 
-4. **TS-1: Basic Supervisor** (enables iteration)
-   - Detect 3 consecutive zero-solution attempts
-   - Detect ELIM command addition
-   - Inject: "Have you validated sp2 count and hydrogen budget?"
+3. **/lucy-ng landing page** — Discovery mechanism for new sub-command structure
+   - Route to sub-commands
+   - Deprecation notice for old skill
 
-Defer to post-MVP:
-- **TS-4: Diagnostic Specialist** - Can be simulated by skill content initially
-- **DIFF-2: Constraint Explorer** - Nice to have, not essential
-- **DIFF-4: Solution Explainer** - User can ask questions manually
+### Should Have (Quick Wins)
 
----
+4. **/lucy-ng:dereplicate** — Simple, existing functionality (Low effort, high clarity)
+5. **/lucy-ng:predict** — Simple, existing functionality (Low effort, high clarity)
+6. **/lucy-ng:status** — Useful for troubleshooting (Low effort, prevents support burden)
 
-## Quality Gates
+### Could Have (Lower Priority)
 
-Before declaring v2.0 complete:
+7. **/lucy-ng:sanitise** — Important for blind evaluation, but not critical for basic CASE workflows
+   - Can be deferred to v2.2 if timeline is tight
+   - Users can manually sanitise for now
 
-- [ ] CASE skill includes incremental HMBC strategy with 3 phases
-- [ ] CASE skill includes error tolerance patterns (close shifts, DEPT conflicts, HMBC ambiguity)
-- [ ] Supervisor detects and intervenes in at least 3 loop patterns
-- [ ] MCP tools reduced from 16 to <10 (removed intelligence, kept data access)
-- [ ] Virgiline (CASE7) passes: correct structure in top 5 solutions
-- [ ] System documents ambiguity instead of guessing ("C-5/C-7 assignment unclear")
+8. **Diagnostic specialist delegation** — Nice to have for deep failures, but basic diagnosis handles most cases
+   - Can be deferred if autonomous CASE + basic supervision works well
+   - Add when failure patterns reveal need
+
+### Defer to Post-MVP
+
+- Interactive CASE mode with user feedback loop
+- COSY correlation support
+- Stereochemistry handling
+- Advanced convergence strategies
+
+**Rationale for ordering:**
+- MVP delivers core value: working autonomous supervised CASE (items 1-3)
+- Quick wins add clarity with minimal effort (items 4-6)
+- Lower priority items are nice-to-have but not critical for v2.1 goal (items 7-8)
+
+**Timeline estimate:**
+- Must Have: 2-3 phases (CASE orchestrator + agent definition + landing page)
+- Should Have: 1 phase (3 simple wrappers in parallel)
+- Could Have: 1-2 phases (sanitise is medium complexity, diagnostic delegation needs integration work)
+
+**Success criteria for MVP:**
+- User invokes `/lucy-ng:case` with compound path and formula
+- Orchestrator spawns autonomous CASE agent
+- Agent iterates through CASE workflow, writing CASE-PROGRESS.md
+- Supervisor detects if stuck, diagnoses, intervenes with advisory
+- Either converges to solution (≤10 candidates) or escalates with diagnostic context
+- User receives ranked structures or clear escalation report
 
 ---
 
 ## Sources
 
-**Multi-Agent Orchestration:**
-- [LLMs as Orchestrators for Constraint-Compliant Optimization](https://arxiv.org/html/2601.19121)
-- [Multi-Agent Orchestration: The New Operating System](https://www.kore.ai/blog/what-is-multi-agent-orchestration)
-- [Supervisor-Based Orchestration Patterns](https://www.kore.ai/blog/choosing-the-right-orchestration-pattern-for-multi-agent-systems)
+**Multi-Agent Orchestration Patterns:**
+- [AI Agent Orchestration Guide - Patterns and Tools (2026) | Fast.io](https://fast.io/resources/ai-agent-orchestration/)
+- [AI Agent Orchestration in 2026: Coordination, Scale and Strategy](https://kanerika.com/blogs/ai-agent-orchestration/)
+- [How to Build Multi-Agent Systems: Complete 2026 Guide - DEV Community](https://dev.to/eira-wexford/how-to-build-multi-agent-systems-complete-2026-guide-1io6)
+- [Multi Agent Orchestration: The new Operating System powering Enterprise AI](https://www.kore.ai/blog/what-is-multi-agent-orchestration)
+- [Choosing the right orchestration pattern for multi agent systems](https://www.kore.ai/blog/choosing-the-right-orchestration-pattern-for-multi-agent-systems)
 
-**Loop Detection and Intervention:**
-- [Human-in-the-Loop Evolution: AI Oversee AI](https://siliconangle.com/2026/01/18/human-loop-hit-wall-time-ai-oversee-ai/)
-- [Agentic AI Governance and Intervention Patterns](https://www.detectionatscale.com/p/ai-security-operations-2025-patterns)
+**Agent Spawning and Supervision:**
+- [2026 Agentic Coding Trends Report - Anthropic](https://resources.anthropic.com/hubfs/2026%20Agentic%20Coding%20Trends%20Report.pdf?hsLang=en)
+- [The Task Tool: Claude Code's Agent Orchestration System - DEV Community](https://dev.to/bhaidar/the-task-tool-claude-codes-agent-orchestration-system-4bf2)
+- [Top 10+ Agentic Orchestration Frameworks & Tools in 2026](https://aimultiple.com/agentic-orchestration)
 
-**NMR Structure Elucidation:**
-- [Structure Elucidator Suite 2025 Features](https://www.acdlabs.com/technical-support/current-software-versions/structure-elucidator-suite/)
-- [HMBC Correlation Network Reconstruction](https://pubs.acs.org/doi/10.1021/acs.jcim.7b00653)
-- [NMR-Solver: Automated Structure Elucidation Framework](https://www.arxiv.org/pdf/2509.00640)
+**Research on Multi-Agent Systems:**
+- [AgentOrchestra: A Hierarchical Multi-Agent Framework for General-Purpose Task Solving](https://arxiv.org/html/2506.12508v1)
+- [Multi-Agent Collaboration via Evolving Orchestration](https://arxiv.org/html/2505.19591v1)
 
-**Spectroscopy Ambiguity:**
-- [NMRexp Database: Chemical Shift Variations](https://www.nature.com/articles/s41597-025-06245-5)
-- [Peak Overlap and Assignment Challenges](https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-13-S3-S4)
+**GSD Pattern and Claude Code:**
+- [GitHub - rokicool/gsd-opencode: Get-Shit-Done by TACHES for OpenCode](https://github.com/rokicool/gsd-opencode)
+- [Claude Code Swarm Orchestration Skill - GitHub Gist](https://gist.github.com/kieranklaassen/4f2aba89594a4aea4ad64d753984b2ea)
+- [Build Agent Skills Faster with Claude Code 2.1 Release | Medium](https://medium.com/@richardhightower/build-agent-skills-faster-with-claude-code-2-1-release-6d821d5b8179)
+- [Create custom subagents - Claude Code Docs](https://code.claude.com/docs/en/sub-agents)
 
-**Constraint Satisfaction:**
-- [Soft Constraints in CSP](https://arxiv.org/abs/1303.5427)
-- [Constraint Satisfaction Problems Overview](https://www.geeksforgeeks.org/artificial-intelligence/constraint-satisfaction-problems-csp-in-artificial-intelligence/)
+**Chemical Identifier Detection:**
+- [How to crack a SMILES: automatic crosschecked chemical structure resolution | Journal of Cheminformatics](https://link.springer.com/article/10.1186/s13321-025-01064-7)
+- [Regular Expressions for validating SMILES, InChi, InChiKey · GitHub](https://gist.github.com/lsauer/1312860/264ae813c2bd2c27a769d261c8c6b38da34e22fb)
+- [Chemistry Regex: SMILES, InChi, InChiKey notation validated by regular expressions](https://www.ketikan.eu.org/2013/11/chemistry-regex-smiles-inchi-inchikey.html)
+- [CAS Registry Number - Wikipedia](https://en.wikipedia.org/wiki/CAS_Registry_Number)
+- [Extract the Names of Drugs & Chemicals | Healthcare NLP](https://nlp.johnsnowlabs.com/2021/11/04/ner_chemd_clinical_en.html)
+
+**NMR Datasets and CASE Systems:**
+- [Unraveling Molecular Structure: A Multimodal Spectroscopic Dataset for Chemistry](https://arxiv.org/html/2407.17492v2)
+- [Blind trials of computer-assisted structure elucidation software - PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC3349476/)
+- [COCONUT online: Collection of Open Natural Products database | Journal of Cheminformatics](https://jcheminf.biomedcentral.com/articles/10.1186/s13321-020-00478-9)
+- [NMRShiftDB – compound identification and structure elucidation support - ScienceDirect](https://www.sciencedirect.com/science/article/abs/pii/S003194220400408X)

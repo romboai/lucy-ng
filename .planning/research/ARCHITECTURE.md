@@ -1,600 +1,1085 @@
-# Architecture Patterns: Multi-Agent CASE Integration
+# Architecture Patterns: Multi-Agent CASE Orchestration
 
-**Domain:** Computer-Assisted Structure Elucidation (CASE)
-**Researched:** 2026-02-06
-**Focus:** Multi-agent + skill-first architecture for robust CASE
+**Domain:** Multi-agent NMR structure elucidation system
+**Researched:** 2026-02-08
+**Focus:** Sub-command skill integration with existing lucy-ng architecture
 
 ## Executive Summary
 
-The v2.0 multi-agent architecture represents a paradigm shift from tool-heavy to skill-first design. The current system (v1.2) has 16 MCP tools with embedded intelligence (DEPT-guided picking, HMBC filtering, LSD generation). The new architecture pushes domain knowledge into skill instructions while simplifying tools to thin data access wrappers, with a supervisor agent preventing unproductive loops during structure elucidation.
+The v2.1 architecture integrates GSD-pattern sub-command skills with the existing lucy-ng CLI system, replacing the monolithic `/lucy-ng` skill and paper-only agent definitions with working multi-agent orchestration. This is an **integration milestone**, not a rewrite — we're adding orchestration to a complete, working system (v2.0: thin CLI validated in Phase 26).
 
-**Key finding:** Research shows hybrid architectures with hierarchical skill routing and supervisor patterns dominate enterprise AI in 2026. Tool-heavy systems degrade beyond 50-100 tools, while skill-first approaches with dynamic capability loading maintain performance.
+**Key architectural shift:** Supervisor logic dissolves from a separate agent (supervisor.md) into an orchestrator skill (case.md). Sub-command skills become the entry points, spawning worker agents with inlined skill content.
 
-**Integration strategy:** Incremental refactoring, not rewrite. Keep working tools, layer in multi-agent orchestration, migrate intelligence from Python to skill over time.
+**Integration challenge:** Context management. skill/SKILL.md (1,079 lines) + skill/CASE/SKILL.md (~300 lines) must be accessible to spawned agents. Solution: hybrid inlining (critical workflow inlined in Task() instructions, detailed reference via file paths).
+
+**Build order:** Sub-command skills → agent definitions → orchestration logic → diagnostic integration → validation.
+
+---
 
 ## Recommended Architecture
 
-### Three-Layer Model
+### System Structure (v2.1)
 
 ```
-┌─────────────────────────────────────────────────────┐
-│              SKILL LAYER (Intelligence)              │
-│  - CLAUDE.md (project-level instructions)           │
-│  - skill/SKILL.md (workflow strategy)               │
-│  - Supervisor rules (loop detection, redirection)   │
-│  - Domain knowledge (tolerances, error handling)    │
-└─────────────────────────────────────────────────────┘
-                          │
-                          ↓
-┌─────────────────────────────────────────────────────┐
-│         MULTI-AGENT LAYER (Orchestration)           │
-│  - Supervisor Agent (watches progress)              │
-│  - CASE Agent (drives elucidation)                  │
-│  - Specialist Agents (optional: peak picking, etc.) │
-└─────────────────────────────────────────────────────┘
-                          │
-                          ↓
-┌─────────────────────────────────────────────────────┐
-│            TOOL LAYER (Data Access)                  │
-│  - 16 MCP tools (thin wrappers)                     │
-│  - Python libraries (nmrglue, RDKit, LSD)           │
-│  - SQLite database (928K compounds, 7.9M HOSE)      │
-└─────────────────────────────────────────────────────┘
+~/.claude/commands/lucy-ng/          Sub-command skills (orchestrators)
+    ├── case.md                       CASE orchestrator (spawns agents, monitors, intervenes)
+    ├── sanitise.md                   AI-driven dataset sanitization
+    ├── dereplicate.md                Thin wrapper for CLI dereplication
+    ├── predict.md                    Thin wrapper for CLI prediction
+    └── status.md                     System status checks
+
+~/.claude/agents/                    Agent definitions (workers)
+    ├── lucy-case-agent.md            Autonomous CASE worker
+    └── lucy-diagnostic.md            LSD failure diagnosis specialist
+
+/project/skill/                      Domain knowledge (referenced by agents)
+    ├── SKILL.md                      Core NMR/CASE domain knowledge (1,079 lines)
+    ├── CASE/SKILL.md                 CASE workflow procedures
+    ├── supervisor/SKILL.md           Loop detection, intervention patterns (827 lines)
+    ├── diagnostic/SKILL.md           LSD manual, diagnostic procedures (1,874 lines)
+    ├── dereplicate/SKILL.md          Dereplication scoring rules
+    └── sanitize/SKILL.md             Dataset sanitization patterns
+
+/project/src/lucy_ng/cli/           Thin CLI commands (data access only)
+    ├── read.py                       Read NMR spectra
+    ├── pick.py                       Raw peak picking (no intelligence)
+    ├── analyze.py                    Raw symmetry data
+    ├── dereplicate.py                Database matching
+    ├── predict.py                    13C shift prediction
+    └── lsd.py                        LSD runner, solution ranking
+
+/project/CLAUDE.md                   Project-level CLI reference only (305 lines)
 ```
 
-### Agent Roles
+### Architectural Principles
 
-| Agent | Responsibility | Knowledge Source |
-|-------|---------------|------------------|
-| **Supervisor** | Monitor CASE progress, detect loops, redirect strategy | Supervisor rules in skill |
-| **CASE Agent** | Execute structure elucidation workflow | SKILL.md workflow |
-| **Peak Picker** (optional) | Specialist for spectral analysis | Peak picking section of skill |
-| **LSD Specialist** (optional) | Constraint debugging, LSD file tuning | LSD troubleshooting section |
+1. **Sub-command skills are orchestrators** — route requests, spawn agents, monitor progress, handle failures
+2. **Agents are autonomous workers** — receive inlined skill content + compound data, execute workflows, write progress files
+3. **Skill documents are referenced, not duplicated** — agents receive file paths to read OR critical sections inlined
+4. **CLI commands are thin data pipes** — all intelligence lives in skills/agents, not Python (validated in v2.0 Phase 26)
+5. **Progress files are the IPC mechanism** — CASE-PROGRESS.md and DIAGNOSTIC-REPORT.md enable orchestrator monitoring
 
-## Component Analysis: Current vs Target
+---
 
-### 1. SKILL ARCHITECTURE
+## Component Boundaries
 
-**Current State (v1.2):**
-- Single monolithic CLAUDE.md (1080 lines)
-- Single SKILL.md (descriptive front matter + duplicate of CLAUDE.md)
-- All knowledge in one document
-- No separation of concerns
+### Sub-Command Skills (Orchestrators)
 
-**Target State (v2.0):**
+| Skill | Responsibility | Spawns Agents | Writes Files |
+|-------|---------------|---------------|--------------|
+| `case.md` | CASE orchestration, progress monitoring, loop detection, intervention | lucy-case-agent, lucy-diagnostic | None (reads CASE-PROGRESS.md, DIAGNOSTIC-REPORT.md) |
+| `sanitise.md` | AI-driven dataset sanitization (identify compound identifiers, remove/redact) | None (direct execution) | SANITIZATION-REPORT.md |
+| `dereplicate.md` | Thin wrapper: `lucy dereplicate c13 <path> <formula>` | None (direct CLI) | None |
+| `predict.md` | Thin wrapper: `lucy predict c13 <smiles>` | None (direct CLI) | None |
+| `status.md` | System checks: lucy version, LSD availability, database presence | None (direct CLI) | None |
 
-**Option A: Single Skill with Role Sections** (RECOMMENDED)
-```
-CLAUDE.md (project-level, applies to ALL agents)
-  - Setup instructions
-  - Database information
-  - Common reference data
-  - Quick reference card
+### Agent Definitions (Workers)
 
-skill/SKILL.md (CASE workflow, primary agent)
-  - Full CASE workflow (dereplication → peak picking → LSD → ranking)
-  - Domain knowledge (tolerances, shift regions, symmetry)
-  - Supervisor rules (embedded in workflow checkpoints)
+| Agent | Responsibility | Reads | Writes | Spawned By |
+|-------|---------------|-------|--------|------------|
+| `lucy-case-agent.md` | Autonomous CASE: peak picking → LSD writing → solving → ranking | skill/SKILL.md, skill/CASE/SKILL.md (via inlined content + file paths), compound spectra | CASE-PROGRESS.md (after each iteration), LSD files | case.md orchestrator |
+| `lucy-diagnostic.md` | LSD failure diagnosis: systematic checks, root cause analysis, fix recommendations | skill/diagnostic/SKILL.md (via file path), CASE-PROGRESS.md, LSD files | DIAGNOSTIC-REPORT.md | case.md orchestrator |
 
-skill/SUPERVISOR.md (supervisor-specific rules)
-  - Loop detection patterns
-  - Redirection strategies
-  - Progress checkpoints
-  - Escalation criteria
-```
+### Skill Documents (Domain Knowledge)
 
-**Option B: Modular Skills per Agent** (Alternative)
-```
-CLAUDE.md (project-level)
-  - As above
+| File | Lines | Purpose | Primary Consumer |
+|------|-------|---------|------------------|
+| skill/SKILL.md | 1,079 | Core NMR/CASE domain knowledge, peak picking, symmetry, LSD basics, HMBC strategy, ranking, confidence | lucy-case-agent (inlined excerpts + file path reference) |
+| skill/CASE/SKILL.md | ~300 | CASE workflow step-by-step, CASE-PROGRESS.md format | lucy-case-agent (inlined in Task() instructions) |
+| skill/supervisor/SKILL.md | 827 | Loop detection patterns, diagnostic procedures, intervention templates, convergence criteria | case.md orchestrator (read directly, not inlined) |
+| skill/diagnostic/SKILL.md | 1,874 | LSD command reference, systematic diagnostic procedures, report template | lucy-diagnostic agent (file path reference) |
+| skill/dereplicate/SKILL.md | ~100 | Dereplication scoring interpretation | dereplicate.md skill (read directly) |
+| skill/sanitize/SKILL.md | ~200 | Dataset sanitization patterns (compound name/SMILES removal) | sanitise.md skill (read directly) |
 
-skill/CASE.md (main CASE agent)
-  - Workflow steps
-  - Integration with specialists
+**Note:** skill/ hierarchy is complete from v2.0. NO restructuring needed for v2.1.
 
-skill/SUPERVISOR.md (supervisor agent)
-  - Loop detection
-  - Progress monitoring
+### Existing Python CLI (Thin Tools)
 
-skill/PEAK_PICKING.md (optional specialist)
-  - DEPT-guided strategy
-  - HMBC filtering knowledge
+**Status:** Complete from v2.0 Phase 26. All CLI commands are thin data-access wrappers with no embedded intelligence.
 
-skill/LSD_DEBUG.md (optional specialist)
-  - Constraint troubleshooting
-  - sp2 counting rules
-```
+| CLI Group | Intelligence Level | Changes for v2.1 |
+|-----------|-------------------|------------------|
+| `lucy read 1d/2d` | None (pure data access) | No change |
+| `lucy pick 1d/2d/hsqc/hmbc` | None (raw peaks above threshold) | No change |
+| `lucy analyze symmetry` | None (raw carbon counts, intensity data) | No change |
+| `lucy dereplicate c13` | Minimal (formula-indexed DB query, score calculation) | No change |
+| `lucy predict c13` | Minimal (HOSE lookup, statistics) | No change |
+| `lucy lsd run/rank` | None (LSD runner, 13C prediction for ranking) | No change |
+| `lucy visualize correlations` | None (diagram generation) | No change |
+| `lucy database info/download` | None (SQLite metadata, Figshare fetch) | No change |
+| `lucy fetch nmrxiv` | None (API wrapper) | No change |
 
-**Recommendation:** Start with Option A (single skill + supervisor rules). Only split to Option B if the main skill grows unwieldy (>2000 lines) or specialists are actively used.
+**Validation:** Phase 26-05 (Ibuprofen CASE) already validated that thin CLI + skill knowledge produces correct results.
 
-**Rationale:**
-- Simpler to maintain
-- Less duplication
-- Clearer for AI to understand role
-- Easier to ensure consistency
+---
 
-### 2. TOOL LAYER ANALYSIS
+## Data Flow Patterns
 
-Current tools categorized by intelligence level:
-
-#### Tier 1: Pure Data Access (KEEP AS-IS)
-These are thin wrappers, no intelligence to extract.
-
-| Tool | Function | Intelligence Level |
-|------|----------|-------------------|
-| `read_spectrum_1d` | Read Bruker 1D file | **None** - pure data access |
-| `read_spectrum_2d` | Read Bruker 2D file | **None** - pure data access |
-| `check_lsd_availability` | Check if LSD installed | **None** - environment check |
-| `run_lsd` | Execute LSD solver | **None** - subprocess wrapper |
-| `fetch_nmrxiv_dataset` | Download from NMRXiv | **None** - API wrapper |
-| `dereplicate_c13` | Database lookup | **None** - SQL query wrapper |
-| `predict_c13_shifts` | HOSE-based prediction | **None** - database lookup |
-| `get_hose_stats_info` | Database statistics | **None** - metadata query |
-
-**Verdict:** 8/16 tools are already thin. No changes needed.
-
-#### Tier 2: Moderate Intelligence (MIGRATE TO SKILL)
-These encode strategy or filtering logic.
-
-| Tool | Intelligence to Extract | Target Location |
-|------|------------------------|-----------------|
-| `pick_peaks_1d` | Threshold selection (default 0.05) | SKILL: "use threshold 0.05 for 1D, adjust if needed" |
-| `pick_hsqc_peaks` | DEPT-guided adaptive algorithm | SKILL: "DEPT-guided picking ensures all carbons found" |
-| `pick_hmbc_peaks` | Reference-based filtering (±1.5 ppm C, ±0.1 ppm H) | SKILL: "guided HMBC requires C match and H match" |
-| `analyze_symmetry` | Interpretation hints in output | SKILL: "symmetry analysis checks observed vs expected" |
-| `rank_lsd_solutions` | Tolerance (default 3.0 ppm), top_n selection | SKILL: "ranking uses 3 ppm tolerance for MAE" |
-
-**Verdict:** Tools stay, but skill should explain WHEN and HOW to use them. The intelligence is the strategy (adaptive thresholding concept), not the parameter values.
-
-**Action:**
-1. Document the picking strategies in SKILL.md
-2. Explain tolerance values and when to adjust
-3. Tools remain as-is (backwards compatible)
-
-#### Tier 3: Complex Intelligence (REFACTOR LATER)
-These generate complex structures from NMR data.
-
-| Tool | Intelligence | Refactoring Strategy |
-|------|-------------|---------------------|
-| `generate_lsd_input` | - Auto-detect experiments<br>- Map spectra to LSD atoms<br>- Generate MULT/HSQC/HMBC commands<br>- Heteroatom constraint logic | **Phase 2 refactor:**<br>- Move heteroatom logic to skill<br>- Simplify to data mapper<br>- AI constructs LSD file guided by skill |
-| `generate_correlation_diagram` | - Parse LSD files<br>- Route arrows<br>- Layout optimization | **Keep as-is** (visualization, not CASE-critical) |
-
-**Verdict:** `generate_lsd_input` is the most complex tool. Defer refactoring until supervisor architecture is validated. The AI can already bypass it by constructing LSD files directly (as seen in Virgiline case).
-
-### 3. MULTI-AGENT FLOW
-
-**Data flow between agents:**
+### Flow 1: Simple Sub-Commands (dereplicate, predict, status)
 
 ```
-User Request
-    ↓
-┌──────────────────────────────────────────────┐
-│ Supervisor Agent                              │
-│ - Spawns CASE agent with full context        │
-│ - Monitors progress via checkpoints           │
-│ - Receives status reports from CASE          │
-└──────────────────────────────────────────────┘
-    ↓ (spawn)
-┌──────────────────────────────────────────────┐
-│ CASE Agent                                    │
-│ - Reads SKILL.md for workflow                │
-│ - Executes: dereplication → symmetry → ...   │
-│ - Reports to supervisor at checkpoints       │
-│ - May spawn specialists for subtasks         │
-└──────────────────────────────────────────────┘
-    ↓ (optional spawn)
-┌──────────────────────────────────────────────┐
-│ Specialist Agents (if needed)                │
-│ - Peak Picker: troubleshoot noisy HMBC       │
-│ - LSD Debug: diagnose 0 solutions            │
-│ - Return findings to CASE agent              │
-└──────────────────────────────────────────────┘
+User invokes: /lucy-ng:dereplicate <path> C13H18O2
+
+┌─────────────────────────────────────┐
+│ ~/.claude/commands/lucy-ng/         │
+│ dereplicate.md                       │
+│ (orchestrator skill)                 │
+└──────────────┬──────────────────────┘
+               │
+               │ Bash: lucy dereplicate c13 <path> <formula> --format json
+               ▼
+┌─────────────────────────────────────┐
+│ src/lucy_ng/cli/dereplicate.py      │
+│ (thin CLI wrapper)                   │
+└──────────────┬──────────────────────┘
+               │
+               │ Query SQLite DB
+               ▼
+┌─────────────────────────────────────┐
+│ data/reference/lucy-ng-derep.db     │
+└──────────────┬──────────────────────┘
+               │
+               │ Return JSON: {is_match, top_matches, ...}
+               ▼
+┌─────────────────────────────────────┐
+│ dereplicate.md interprets results    │
+│ Uses skill/dereplicate/SKILL.md     │
+│ Reports to user                      │
+└─────────────────────────────────────┘
 ```
 
-**Communication protocol:**
+### Flow 2: CASE Orchestration (Multi-Agent)
 
-Based on Claude Code's TeammateTool pattern (2026):
+```
+User invokes: /lucy-ng:case <compound_path> C13H18O2
 
-1. **Task List:** Shared markdown file `analysis/TASKS.md`
-   - Supervisor writes high-level goal
-   - CASE agent claims task
-   - Checkpoints documented as completed tasks
+┌──────────────────────────────────────────────────────────────────┐
+│ ~/.claude/commands/lucy-ng/case.md                                │
+│ (orchestrator skill)                                               │
+│ - Reads skill/supervisor/SKILL.md for loop detection patterns     │
+│ - Prepares inlined content:                                        │
+│   • NMR background (skill/SKILL.md Section 1)                     │
+│   • CASE workflow (skill/CASE/SKILL.md)                           │
+│   • LSD command syntax (skill/diagnostic/SKILL.md Section 1)      │
+│   • CASE-PROGRESS.md format (skill/supervisor/SKILL.md Section 7) │
+│ - Prepares file path references for detailed domain knowledge     │
+│ - Provides compound context (path, formula, experiments)          │
+└──────────────┬───────────────────────────────────────────────────┘
+               │
+               │ Task(instructions=<inlined content + file paths + compound context>)
+               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ ~/.claude/agents/lucy-case-agent.md                               │
+│ (autonomous CASE worker)                                           │
+│ - Receives inlined skill content in Task() instructions           │
+│ - Reads detailed reference via file paths (skill/SKILL.md full)   │
+│ - Reads compound spectra via: lucy read 1d/2d, lucy pick ...      │
+│ - Applies domain intelligence from skill content                  │
+│ - Writes LSD files directly using LSD command knowledge           │
+│ - Runs LSD: lucy lsd run <file>.lsd --format json                 │
+│ - Ranks solutions: lucy lsd rank <solutions>.smi --spectrum ...   │
+│ - Writes CASE-PROGRESS.md after each LSD iteration                │
+└──────────────┬───────────────────────────────────────────────────┘
+               │
+               │ CASE-PROGRESS.md written (append-only)
+               │ Contains: iteration N, solution count, constraints added/removed,
+               │ effectiveness, confidence, sp2/H budget checks
+               │
+               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ case.md reads CASE-PROGRESS.md                                    │
+│ Parses iterations to detect loop patterns:                        │
+│ - ELIM thrashing (ELIM added 2+ times without diagnosis)          │
+│ - Zero-solution loop (3+ consecutive 0 solutions)                 │
+│ - Solution explosion (3+ iterations >100 solutions, <10% reduction)│
+│ - Constraint churning (5+ iterations high add/remove, no converge)│
+└──────────────┬───────────────────────────────────────────────────┘
+               │
+               ├─ NO LOOP DETECTED → Allow CASE agent to continue
+               │
+               └─ LOOP DETECTED → Diagnose root cause
+                                   │
+                                   ├─ Basic diagnosis sufficient?
+                                   │  YES → Formulate advisory constraints
+                                   │        Re-spawn CASE agent with advice
+                                   │        Increment intervention_counts[pattern]
+                                   │        If counts[pattern] >= 10: escalate to user
+                                   │
+                                   └─ Need deep LSD analysis?
+                                      (After 2+ failed interventions with same pattern)
+                                      │
+                                      ▼
+                  ┌───────────────────────────────────────────────────────┐
+                  │ Task(agent_type="lucy-diagnostic")                     │
+                  │ - Pass: compound path, LSD file, failure type          │
+                  │ - Provide file path: skill/diagnostic/SKILL.md         │
+                  │ - Diagnostic runs systematic checks:                   │
+                  │   • sp2 count (must be even)                           │
+                  │   • H budget (must match formula)                      │
+                  │   • 1J artifacts (HMBC vs HSQC position check)         │
+                  │   • Correlation order (HSQC before HMBC)               │
+                  │   • Close carbon ambiguity (digital resolution)        │
+                  │ - Identifies root cause with quantitative evidence     │
+                  │ - Writes DIAGNOSTIC-REPORT.md                          │
+                  └───────────────┬───────────────────────────────────────┘
+                                  │
+                                  │ DIAGNOSTIC-REPORT.md written
+                                  │ Contains: findings, root cause, recommended fixes
+                                  │ (with LSD command examples), confidence ratings
+                                  │
+                                  ▼
+                  ┌───────────────────────────────────────────────────────┐
+                  │ case.md reads DIAGNOSTIC-REPORT.md                     │
+                  │ Extracts:                                              │
+                  │ - Root cause (primary + contributing factors)          │
+                  │ - Primary fix (specific LSD commands + verification)   │
+                  │ Formulates diagnostic-informed advisory:               │
+                  │ - Reference report for full analysis                   │
+                  │ - Include specific fix action with commands            │
+                  │ - Include verification steps                           │
+                  │ Re-spawns CASE agent with diagnostic-informed advice   │
+                  └───────────────────────────────────────────────────────┘
+```
 
-2. **Messaging:** Inbox files in `analysis/messages/`
-   - CASE → Supervisor: `progress_report_N.md`
-   - Supervisor → CASE: `redirect_strategy.md`
+### Flow 3: AI-Driven Sanitization
 
-3. **State Tracking:** `analysis/STATE.md`
-   - Current workflow step
-   - LSD solution count
-   - Iterations attempted
-   - Issues encountered
+```
+User invokes: /lucy-ng:sanitise <dataset_path>
 
-**Checkpoints (Supervisor monitors):**
+┌──────────────────────────────────────────────────────────────────┐
+│ ~/.claude/commands/lucy-ng/sanitise.md                            │
+│ (AI-driven skill, no CLI equivalent)                              │
+│ - Reads skill/sanitize/SKILL.md for patterns                      │
+│ - Reads dataset metadata files (nmr_parameters.json, etc.)        │
+│ - Applies pattern matching:                                       │
+│   • Compound names (e.g., "Ibuprofen", "Caffeine")               │
+│   • SMILES strings (alphanumeric with brackets, @ signs)          │
+│   • InChI strings ("InChI=...")                                   │
+│   • Database IDs ("COCONUT_123456")                               │
+│ - Redacts/removes identified content                              │
+│ - Writes SANITIZATION-REPORT.md (redaction summary)               │
+│ - Reports to user                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
 
-| Checkpoint | Normal Progress | Warning Signs | Supervisor Action |
-|------------|----------------|---------------|-------------------|
-| After dereplication | Match found OR no match | N/A | None (continue) |
-| After symmetry | Discrepancy explained | Unexplained missing carbons | Ask CASE to investigate |
-| After LSD run 1 | 1-10 solutions | 0 or >100 solutions | Normal (CASE iterates per skill) |
-| After LSD run 2 | 1-10 solutions | Still 0 or >100 | Review constraints with CASE |
-| After LSD run 3+ | 1-10 solutions | **Same error repeated** | **INTERVENTION:** Redirect |
+---
 
-**Loop Detection Pattern:**
+## Integration Points with Existing Components
+
+### 1. Skill Documents (skill/*)
+
+**Current state (v2.0):**
+- skill/SKILL.md (1,079 lines) — core NMR/CASE knowledge
+- skill/supervisor/SKILL.md (827 lines) — loop detection, intervention
+- skill/diagnostic/SKILL.md (1,874 lines) — LSD manual, diagnostics
+- skill/CASE/SKILL.md (~300 lines) — CASE workflow
+- skill/dereplicate/SKILL.md, skill/sanitize/SKILL.md — specialized
+
+**Integration approach for v2.1:**
+- **NO restructuring needed** — existing hierarchy already supports sub-command pattern
+- Sub-command skills REFERENCE these documents (file paths or inlined content)
+- Agent definitions receive critical sections inlined in Task() instructions
+
+**Inlining strategy (for case.md → lucy-case-agent):**
 
 ```python
-# Pseudocode for supervisor
-loop_detected = (
-    (last_3_actions == ["modify HMBC", "run LSD", "0 solutions"]) or
-    (iterations > 5 and solution_count_unchanged)
+# Conceptual structure (case.md orchestrator)
+
+inlined_content = f"""
+=== NMR Background (skill/SKILL.md Section 1) ===
+{read_section('skill/SKILL.md', section=1, subsections=['Experiment Types', '13C Shift Regions', 'Common Pitfalls'])}
+
+=== CASE Workflow (skill/CASE/SKILL.md) ===
+{read_file('skill/CASE/SKILL.md')}  # ~300 lines, full inline
+
+=== LSD Command Syntax (skill/diagnostic/SKILL.md Section 1 excerpt) ===
+{read_section('skill/diagnostic/SKILL.md', section=1, commands=['MULT', 'HSQC', 'HMBC', 'BOND', 'LIST'])}
+
+=== CASE-PROGRESS.md Format (skill/supervisor/SKILL.md Section 7) ===
+{read_section('skill/supervisor/SKILL.md', section=7)}
+"""
+
+file_path_references = f"""
+For detailed domain knowledge, read:
+- {project_path}/skill/SKILL.md (Sections 2-11: peak picking, symmetry, HMBC strategy, ranking, confidence)
+- {project_path}/skill/diagnostic/SKILL.md (full LSD manual with all commands)
+"""
+
+compound_context = f"""
+Compound path: {compound_path}
+Formula: {formula}
+Available experiments: {auto_detected_experiments}
+"""
+
+Task(
+  instructions=f"{inlined_content}\n\n{file_path_references}\n\n{compound_context}\n\nPerform CASE workflow. Write CASE-PROGRESS.md after EVERY LSD iteration."
 )
-
-if loop_detected:
-    # Supervisor intervenes
-    send_message("redirect_strategy.md", content="""
-    You've tried adjusting HMBC 3 times with 0 solutions each time.
-
-    Alternative strategies:
-    1. Check sp2 count (must be EVEN)
-    2. Verify hydrogen count matches formula
-    3. Try ELIM 1 0 (last resort)
-    4. Question: Is the molecular formula correct?
-
-    Choose one approach and document why.
-    """)
 ```
 
-### 4. STATE MANAGEMENT
+**Rationale:**
+- Critical workflow content (~500-700 lines) inlined for immediate access
+- Detailed reference material (peak picking strategies, full LSD manual) via file paths
+- Agent can Read tool to access full documents when needed
+- Balances context window limits with completeness
 
-**What supervisor tracks:**
+### 2. Agent Definitions (.claude/agents/)
+
+**Current state (v2.0):**
+- supervisor.md (484 lines) — monolithic supervisor, spawns CASE agent generically
+- diagnostic-specialist.md (455 lines) — LSD diagnostics
+
+**Changes needed for v2.1:**
+
+| File | Action | Rationale |
+|------|--------|-----------|
+| supervisor.md | **DELETE** | Supervisor logic dissolves into case.md orchestrator skill |
+| diagnostic-specialist.md | **RENAME** to lucy-diagnostic.md, **UPDATE** frontmatter | Keep logic, update to be spawned by case.md (change agent_type reference) |
+| lucy-case-agent.md | **CREATE** | New autonomous CASE worker definition |
+
+**New agent frontmatter:**
 
 ```yaml
-# analysis/STATE.md (structured markdown)
-workflow_stage: "lsd_solving"
-iteration: 3
-solution_count: 0
-last_action: "Added ELIM 1 0"
-issues:
-  - sp2_count_verified: true
-  - hydrogen_count_verified: true
-  - formula_questioned: false
-flags:
-  loop_detected: true
-  intervention_count: 1
+# ~/.claude/agents/lucy-case-agent.md
+---
+name: lucy-case-agent
+description: >
+  Autonomous CASE worker. Performs complete structure elucidation workflow:
+  peak picking, symmetry analysis, LSD file writing, solving, ranking.
+  Writes CASE-PROGRESS.md after each LSD iteration for orchestrator monitoring.
+tools:
+  - Read
+  - Write
+  - Bash
+  - Glob
+  - Grep
+model: sonnet
+---
 ```
 
-**State transitions:**
-
+```yaml
+# ~/.claude/agents/lucy-diagnostic.md (updated from diagnostic-specialist.md)
+---
+name: lucy-diagnostic
+description: >
+  LSD failure diagnostic specialist. Systematic root cause analysis for
+  zero-solution and solution-explosion failures. Produces structured
+  diagnostic reports with findings, root cause, and recommended fixes.
+tools:
+  - Read
+  - Bash
+model: sonnet
+---
 ```
-INIT → DEREPLICATION → SYMMETRY → PEAK_PICKING → LSD_GENERATION
-  → LSD_SOLVING → [iteration loop] → RANKING → COMPLETE
+
+**Key difference from v2.0:**
+- v2.0: supervisor.md was a separate agent that spawned CASE agent
+- v2.1: case.md skill IS the orchestrator (reads supervisor/SKILL.md for rules), spawns lucy-case-agent
+- Supervisor logic is now in the skill, not a separate agent definition
+
+### 3. CLAUDE.md (Project Instructions)
+
+**Current state (v2.0):**
+- 305 lines, CLI-only reference
+- No MCP content (removed in Phase 26)
+- Thin CLI command syntax and output formats
+- References skill/SKILL.md for domain knowledge
+
+**Changes needed for v2.1:**
+- **Add section:** "Sub-Command Skills" with table of `/lucy-ng:*` commands
+- **Update:** Entry point is now `/lucy-ng:case` for CASE workflows (not direct supervisor invocation)
+- **NO other changes** — CLAUDE.md remains project-level CLI reference
+
+**New section to add:**
+
+```markdown
+## Sub-Command Skills
+
+lucy-ng provides specialized sub-commands for different workflows:
+
+| Command | Purpose | Agent Spawning |
+|---------|---------|----------------|
+| /lucy-ng:case | Full CASE orchestration | Spawns lucy-case-agent, monitors progress, spawns lucy-diagnostic if needed |
+| /lucy-ng:sanitise | AI-driven dataset sanitization | Direct execution (no agent spawning) |
+| /lucy-ng:dereplicate | Database matching only | Direct CLI execution |
+| /lucy-ng:predict | 13C shift prediction only | Direct CLI execution |
+| /lucy-ng:status | System status checks | Direct CLI execution |
+
+For CASE workflow: Use `/lucy-ng:case <compound_path> <formula>`. The orchestrator handles agent spawning, progress monitoring, loop detection, and intervention automatically.
 ```
 
-**Loop back conditions:**
-- LSD returns 0 solutions → iterate (up to N times)
-- LSD returns >10 solutions → add constraints, iterate
-- After N iterations with no progress → supervisor intervenes
+### 4. CLI Commands (src/lucy_ng/cli/)
 
-## Integration Points with Existing System
+**Current state (v2.0 Phase 26):**
+- 9 command groups, 22 commands
+- All commands are thin data-access wrappers
+- No embedded intelligence (DEPT-guided picking removed, HMBC cross-validation removed, LSD generator removed)
+- Validated on Ibuprofen CASE (Phase 26-05)
 
-### Integration Point 1: MCP Tools
-**Current:** 16 tools directly callable
-**New:** Same tools, but CASE agent calls them (not user directly)
-**Change:** None to tools themselves, usage context changes
+**Changes needed for v2.1:**
+- **NONE** — CLI is complete and thin as required
+- v2.1 focuses on orchestration layer (skills + agents), not tool layer
 
-### Integration Point 2: Database
-**Current:** SQLite with 928K compounds, 7.9M HOSE stats
-**New:** Shared resource, all agents access same database
-**Change:** None
+**Architecture validation:**
+- Phase 26-05 proved thin CLI + skill knowledge works (Ibuprofen correctly identified top-3)
+- v2.1 builds on this validated foundation
 
-### Integration Point 3: LSD Solver
-**Current:** External binary, Python wrapper (`run_lsd`)
-**New:** CASE agent orchestrates LSD runs with iterative refinement
-**Change:** More sophisticated retry logic in SKILL, not code
+### 5. Codebase Structure
 
-### Integration Point 4: Skill Files
-**Current:** CLAUDE.md + SKILL.md (duplicative)
-**New:** CLAUDE.md (project-level) + SKILL.md (workflow) + SUPERVISOR.md (rules)
-**Change:** Reorganize content, no new concepts needed
+**Current state (v2.0):**
+```
+src/lucy_ng/
+├── models/          # Pydantic v2 data models (Spectrum1D, Spectrum2D, Peak1D, etc.)
+├── readers/         # NMR file readers (BrukerReader)
+├── processing/      # Peak picking, signal processing (thin, no DEPT guidance)
+├── dereplication/   # Database matching (SpectrumMatcher, formula-indexed)
+├── prediction/      # HOSE-based 13C prediction (C13Predictor)
+├── solvers/         # LSD runner, solution parsing
+├── database/        # SQLite schema, query API, DatabaseFinder
+└── cli/             # Click CLI (thin wrappers, 9 groups, 22 commands)
+```
+
+**Changes needed for v2.1:**
+- **NONE** — Code structure is stable post-Phase 26
+
+**Integration stability:**
+- Python codebase is mature (17,500 lines, 642 tests)
+- All tests pass (verified in Phase 26)
+- v2.1 is purely additive (orchestration layer on top)
+
+---
 
 ## New Components Needed
 
-### Component 1: Supervisor Skill Document
+### 1. Sub-Command Skills (5 files)
 
-**File:** `skill/SUPERVISOR.md`
+| File | Lines (Est.) | Content | Dependencies |
+|------|--------------|---------|--------------|
+| ~/.claude/commands/lucy-ng/case.md | ~400 | CASE orchestration: agent spawning with inlined content, progress monitoring (read CASE-PROGRESS.md), loop detection (4 patterns), basic diagnosis, intervention logic, diagnostic specialist spawning (after 2 failed interventions), escalation (after 10 cycles per pattern) | skill/SKILL.md, skill/CASE/SKILL.md, skill/supervisor/SKILL.md, skill/diagnostic/SKILL.md |
+| ~/.claude/commands/lucy-ng/sanitise.md | ~200 | AI-driven sanitization: pattern matching for compound identifiers (names, SMILES, InChI, IDs), redaction logic, SANITIZATION-REPORT.md writing | skill/sanitize/SKILL.md |
+| ~/.claude/commands/lucy-ng/dereplicate.md | ~100 | Thin wrapper: CLI execution (`lucy dereplicate c13 <path> <formula>`), JSON parsing, score interpretation (>= 0.95 match, 0.85-0.95 possible, < 0.65 no match), user reporting | skill/dereplicate/SKILL.md |
+| ~/.claude/commands/lucy-ng/predict.md | ~80 | Thin wrapper: CLI execution (`lucy predict c13 <smiles>`), JSON parsing, result interpretation (MAE, prediction quality), user reporting | skill/SKILL.md Section 8 (ranking/prediction) |
+| ~/.claude/commands/lucy-ng/status.md | ~60 | System checks: `lucy --version`, `lucy lsd check`, `lucy database info`, report availability, suggest setup steps if missing | CLAUDE.md (setup instructions) |
 
-**Contents:**
-- Loop detection patterns
-- Checkpoint monitoring rules
-- Intervention strategies
-- Escalation criteria
+**Total:** ~840 lines of new orchestration logic
 
-**Integration:** Supervisor agent reads this instead of main SKILL.md
+**Critical file:** case.md (~400 lines) is the most complex, containing loop detection, diagnostic delegation, and intervention tracking.
 
-### Component 2: State Tracking Templates
+### 2. Agent Definition (1 new file)
 
-**File:** `analysis/STATE.md` (template)
+| File | Lines (Est.) | Content | Dependencies |
+|------|--------------|---------|--------------|
+| ~/.claude/agents/lucy-case-agent.md | ~600 | Autonomous CASE worker: frontmatter (name, description, tools, model), instructions (receive inlined skill content in Task(), read reference files, perform CASE workflow, write CASE-PROGRESS.md checkpoints), workflow guidance (peak picking → symmetry → LSD writing → solving → ranking), error handling, convergence criteria | Inlined from skill/SKILL.md + skill/CASE/SKILL.md in Task() instructions |
 
-**Contents:**
-- Current stage
-- Iteration count
-- Issues encountered
-- Flags for supervisor
+**Note:** lucy-diagnostic.md already exists as diagnostic-specialist.md (455 lines). Rename and update frontmatter (~50 line change, primarily changing `agent_type` reference and description).
 
-**Integration:** CASE agent updates, supervisor reads
+### 3. Progress File Formats (Already Specified in v2.0)
 
-### Component 3: Task List
+| File | Written By | Read By | Format Spec Location |
+|------|-----------|---------|---------------------|
+| CASE-PROGRESS.md | lucy-case-agent | case.md orchestrator | skill/supervisor/SKILL.md Section 7 |
+| DIAGNOSTIC-REPORT.md | lucy-diagnostic | case.md orchestrator | skill/diagnostic/SKILL.md Section 3 |
+| SANITIZATION-REPORT.md | sanitise.md skill | User (documentation) | skill/sanitize/SKILL.md (to be created in v2.1) |
 
-**File:** `analysis/TASKS.md`
+**No new format design needed** — CASE-PROGRESS.md and DIAGNOSTIC-REPORT.md formats already fully specified in v2.0 Phases 24-25.
 
-**Contents:**
-- High-level goal from user
-- Subtasks (checkpoints)
-- Completion status
+---
 
-**Integration:** Both agents read/write
+## Context Management Strategy
 
-### Component 4: Message Inbox
+### Problem: Skill Content Size
 
-**Directory:** `analysis/messages/`
+| Document | Lines | Full Inline Feasible? |
+|----------|-------|-----------------------|
+| skill/SKILL.md | 1,079 | NO — too large |
+| skill/CASE/SKILL.md | ~300 | YES — workflow is critical |
+| skill/supervisor/SKILL.md | 827 | NO — but case.md reads it directly (not passed to agent) |
+| skill/diagnostic/SKILL.md | 1,874 | NO — but diagnostic agent reads via file path |
 
-**Contents:**
-- `progress_report_N.md` (CASE → Supervisor)
-- `redirect_strategy.md` (Supervisor → CASE)
+### Solution: Hybrid Inlining Strategy
 
-**Integration:** Asynchronous communication between agents
+**For CASE agent spawning (case.md → lucy-case-agent):**
 
-## Build Order (Considering Dependencies)
+**Inline (~500-700 lines):**
+1. **NMR background** (skill/SKILL.md Section 1): Experiment types, 13C shift regions, common pitfalls (~150 lines)
+2. **CASE workflow** (skill/CASE/SKILL.md): Full step-by-step procedure (~300 lines)
+3. **LSD command syntax** (skill/diagnostic/SKILL.md Section 1 excerpt): MULT, HSQC, HMBC, BOND, LIST syntax (~100 lines)
+4. **CASE-PROGRESS.md format** (skill/supervisor/SKILL.md Section 7): Template with required fields, example (~50 lines)
 
-### Phase 1: Foundation (Can Start Immediately)
-**Goal:** Set up multi-agent infrastructure without changing tools
+**Provide file paths for reference:**
+- {project_path}/skill/SKILL.md — for detailed domain knowledge (Sections 2-11: peak picking, symmetry, HMBC strategy, ranking, confidence)
+- {project_path}/skill/diagnostic/SKILL.md — for full LSD manual if needed during LSD writing
 
-**Tasks:**
-1. Create `skill/SUPERVISOR.md` with loop detection rules
-2. Create state tracking templates (`analysis/STATE.md`, `TASKS.md`)
-3. Document supervisor intervention patterns
-4. Write test scenarios (simple cases)
+**Provide compound context:**
+- Compound path: {compound_path}
+- Formula: {formula}
+- Available experiments: [auto-detected list from `lucy read`]
 
-**Dependencies:** None
-**Risk:** Low (additive, doesn't break anything)
+**For diagnostic agent spawning (case.md → lucy-diagnostic):**
 
-### Phase 2: Skill Restructure (Parallel with Phase 1)
-**Goal:** Reorganize skill content without changing behavior
+**Inline (~100 lines):**
+1. **Failure context**: Failure type (0 solutions, 1000+ solutions), latest iteration summary from CASE-PROGRESS.md
+2. **Diagnostic task**: Instructions for systematic checks, report writing
 
-**Tasks:**
-1. Audit CLAUDE.md: separate project-level from workflow
-2. Extract workflow to SKILL.md
-3. Remove duplication
-4. Add checkpoint markers in workflow
-5. Document tool usage strategy (not code changes)
+**Provide file paths:**
+- {compound_path}/CASE-PROGRESS.md — iteration history
+- {compound_path}/{lsd_file} — LSD file to diagnose
+- {project_path}/skill/diagnostic/SKILL.md — full LSD manual and diagnostic procedures
 
-**Dependencies:** None (content reorganization)
-**Risk:** Low (documentation change)
+**Rationale:**
+- Task() instructions have practical size limits (~2000 lines max for readability)
+- Critical workflow content must be inlined (agent can't assume project context loaded)
+- Detailed reference material can be read by agent via Read tool (agents have Read in their tool list)
+- Absolute file paths resolve context ambiguity
 
-### Phase 3: Supervisor Integration (Depends on Phase 1)
-**Goal:** Implement supervisor agent watching CASE agent
+### Agent Context Loading Pattern (Pseudocode)
 
-**Tasks:**
-1. Create supervisor spawn pattern (based on TeammateTool)
-2. Implement checkpoint monitoring
-3. Test loop detection on known failure cases (Virgiline)
-4. Validate intervention strategies
+```python
+# In case.md orchestrator skill
 
-**Dependencies:** Phase 1 complete
-**Risk:** Medium (new agent interaction pattern)
+def spawn_case_agent(compound_path, formula):
+    # 1. Prepare inlined content (critical workflow)
+    inlined_content = (
+        "=== NMR Background ===\n"
+        + read_section('skill/SKILL.md', section=1)
+        + "\n\n=== CASE Workflow ===\n"
+        + read_file('skill/CASE/SKILL.md')
+        + "\n\n=== LSD Command Syntax ===\n"
+        + read_section('skill/diagnostic/SKILL.md', section=1, excerpt=True)
+        + "\n\n=== CASE-PROGRESS.md Format ===\n"
+        + read_section('skill/supervisor/SKILL.md', section=7)
+    )
 
-### Phase 4: Tool Simplification (Depends on Phase 2, 3 validated)
-**Goal:** Migrate intelligence from tools to skill
+    # 2. Prepare reference paths
+    project_path = os.getcwd()
+    references = f"""
+For detailed domain knowledge, read:
+- {project_path}/skill/SKILL.md (Sections 2-11)
+- {project_path}/skill/diagnostic/SKILL.md (full LSD manual)
+"""
 
-**Tasks:**
-1. Document picking strategies in SKILL.md
-2. Document tolerance values and adjustment criteria
-3. (Optional) Simplify `generate_lsd_input` if supervisor approach works
-4. Add error tolerance knowledge to skill
+    # 3. Prepare compound context
+    experiments = auto_detect_experiments(compound_path)
+    compound_context = f"""
+Compound path: {compound_path}
+Formula: {formula}
+Available experiments: {experiments}
+"""
 
-**Dependencies:** Phases 2 and 3 complete, multi-agent validated
-**Risk:** Medium (behavior changes, needs testing)
-
-### Phase 5: Specialist Agents (Optional, Depends on Phase 3)
-**Goal:** Add specialist agents for complex subtasks
-
-**Tasks:**
-1. Create Peak Picker specialist skill
-2. Create LSD Debug specialist skill
-3. Implement spawn/return pattern
-4. Test on difficult cases
-
-**Dependencies:** Phase 3 validated
-**Risk:** High (complex, may not be needed if supervisor works well)
-
-**Recommendation:** Skip Phase 5 initially. Supervisor + CASE agent may be sufficient.
-
-## Suggested Build Order Summary
-
+    # 4. Spawn agent
+    Task(
+        instructions=(
+            f"{inlined_content}\n\n"
+            f"{references}\n\n"
+            f"{compound_context}\n\n"
+            "Perform CASE workflow. Write CASE-PROGRESS.md after EVERY LSD iteration. Stop when solution count <= 10 or after ~20 iterations."
+        )
+    )
 ```
-IMMEDIATE:
-├─ Phase 1: Supervisor infrastructure (templates, rules)
-└─ Phase 2: Skill restructure (parallel)
 
-AFTER VALIDATION:
-├─ Phase 3: Supervisor integration (depends on 1)
-└─ Phase 4: Tool simplification (depends on 2, 3 working)
+---
 
-OPTIONAL (DEFER):
-└─ Phase 5: Specialist agents (only if needed)
+## Inter-Agent Communication
+
+### CASE-PROGRESS.md (CASE Agent → Orchestrator)
+
+**Purpose:** Enable orchestrator to monitor progress and detect loop patterns
+
+**Format:** Append-only markdown with structured sections (human-readable, AI-parseable)
+
+**Location:** {compound_path}/CASE-PROGRESS.md
+
+**Written by:** lucy-case-agent after EVERY LSD iteration
+
+**Read by:** case.md orchestrator
+
+**Required fields per iteration:**
+- Iteration N: brief description
+- Time: timestamp
+- LSD file: filename
+- Solution count: number
+- Constraints added: list with reasoning
+- Constraints removed: list with reasoning (or "None")
+- Why: natural language explanation of strategy
+- Constraint effectiveness: % reduction or "baseline" or "over-constrained"
+- Confidence: qualitative assessment (too many solutions / converging / stuck)
+- HMBC correlations used: X/Y (running total)
+- Notes: sp2 count (even/odd), H budget (matches/mismatch), observations
+
+**Format specification:** skill/supervisor/SKILL.md Section 7 (complete with 3-iteration example)
+
+**Example iteration:**
+```markdown
+## Iteration 3: Add quaternary carbon HMBC batch
+
+**Time:** 2026-02-08 10:45:23
+**LSD file:** ibuprofen-03.lsd
+**Solution count:** 47
+
+**Constraints added:**
+- HMBC 1 8 (C172.4 to H7.2, quaternary carboxyl)
+- HMBC 5 4 (C138.8 to H1.2, quaternary aromatic)
+- HMBC 9 3 (C155.2 to H2.1, quaternary aromatic)
+
+**Constraints removed:** None
+
+**Why:** Target quaternary carbons to reduce solution space. Selected high-confidence correlations with unique proton assignments and strong intensities.
+
+**Constraint effectiveness:** 96% reduction (1234 → 47 solutions)
+**Confidence:** Converging, expect single-digit solutions after next batch
+**HMBC correlations used:** 12/47
+
+**Notes:**
+- sp2 count: 8 (even) ✓
+- H budget: 18 matches formula ✓
+- All quaternary carbons now have at least 1 HMBC
 ```
 
-**Critical path:** Phase 1 → Phase 3 (supervisor working)
-**Parallel work:** Phase 2 can happen anytime
-**Deferred:** Phase 5 (specialists) until supervisor pattern validated
+### DIAGNOSTIC-REPORT.md (Diagnostic Agent → Orchestrator)
 
-## Architecture Patterns from Research
+**Purpose:** Provide deep LSD failure analysis with root cause and fixes
 
-### Supervisor Pattern (Databricks, Microsoft Azure, 2026)
+**Format:** Structured markdown with sections (findings, root cause, fixes)
 
-**Key principle:** Exactly ONE agent designated as orchestrator to prevent coordination conflicts.
+**Location:** {compound_path}/DIAGNOSTIC-REPORT.md
+
+**Written by:** lucy-diagnostic agent when spawned for complex failures
+
+**Read by:** case.md orchestrator (extracts root cause and primary fix)
+
+**Required sections:**
+1. **Summary** (executive overview, root cause one-liner, confidence)
+2. **Findings** (2-5 findings with evidence, impact, confidence)
+3. **Root Cause** (primary + contributing factors, mechanism explanation)
+4. **Recommended Fixes** (1-3 fixes with LSD command examples, verification, priority, confidence)
+5. **Supporting Data** (LSD file stats, iteration history, spectral quality)
+6. **Next Steps** (immediate action, verification, follow-up)
+7. **Diagnostic Methodology** (all systematic checks with PASS/FAIL)
+8. **Metadata** (confidence breakdown)
+
+**Format specification:** skill/diagnostic/SKILL.md Section 3 (complete template with examples)
+
+**Orchestrator extraction pattern:**
+```python
+# In case.md orchestrator
+
+def extract_diagnostic_guidance(report_path):
+    report = read_file(report_path)
+
+    # Extract root cause section
+    root_cause = extract_section(report, "## Root Cause")
+
+    # Extract primary fix
+    fixes_section = extract_section(report, "## Recommended Fixes")
+    primary_fix = [f for f in parse_fixes(fixes_section) if "PRIMARY" in f][0]
+
+    # Format advisory for CASE agent
+    advisory = f"""
+DIAGNOSTIC GUIDANCE:
+
+{root_cause}
+
+{primary_fix}
+
+See {report_path} for full analysis.
+"""
+
+    return advisory
+```
+
+### SANITIZATION-REPORT.md (Sanitize Skill → User)
+
+**Purpose:** Document all redactions for dataset sanitization
+
+**Format:** Structured markdown with redaction summary
+
+**Location:** {dataset_path}/SANITIZATION-REPORT.md
+
+**Written by:** sanitise.md skill
+
+**Read by:** User (for documentation and validation)
+
+**Required sections:**
+1. **Summary** (files processed, identifiers removed, changes made)
+2. **Redactions** (list of all redacted content with file:line references)
+3. **Verification** (steps to confirm sanitization complete)
+
+**Format specification:** skill/sanitize/SKILL.md (to be created in v2.1)
+
+---
+
+## Patterns to Follow
+
+### Pattern 1: Orchestrator Skill with Agent Spawning (CASE)
+
+**When:** Complex multi-iteration workflows requiring monitoring and intervention
+
+**Structure:**
+1. Validate inputs (compound path, formula)
+2. Inline critical skill content (NMR background, CASE workflow, LSD basics, CASE-PROGRESS.md format)
+3. Spawn CASE agent via Task() with inlined content + file path references + compound context
+4. Monitor progress by reading CASE-PROGRESS.md after agent returns
+5. Detect loop patterns using criteria from skill/supervisor/SKILL.md Section 4:
+   - ELIM thrashing: ELIM added 2+ times without diagnosis
+   - Zero-solution loop: 3+ consecutive iterations with 0 solutions
+   - Solution explosion: 3+ iterations >100 solutions, <10% reduction each
+   - Constraint churning: 5+ iterations high add/remove, no convergence
+6. Diagnose root cause using pattern-specific procedure
+7. If basic diagnosis insufficient (2+ failed interventions with same pattern):
+   - Spawn diagnostic specialist via Task(agent_type="lucy-diagnostic")
+   - Read DIAGNOSTIC-REPORT.md
+   - Extract root cause and primary fix
+8. Re-spawn CASE agent with advisory constraints (WHAT to fix, not HOW)
+9. Track intervention_counts[pattern] separately for each pattern
+10. Escalate to user after 10 failed interventions with same pattern
+
+**Example:**
+```markdown
+# ~/.claude/commands/lucy-ng/case.md
+
+## Orchestration Logic
+
+When loop detected:
+1. Read CASE-PROGRESS.md
+2. Identify pattern (ELIM thrashing, zero-solution, explosion, churning)
+3. Run basic diagnosis:
+   - Check sp2 count (must be even)
+   - Check H budget (must match formula)
+   - Check for obvious issues (1J artifacts, close carbons)
+4. If intervention_counts[pattern] >= 2:
+   - Spawn diagnostic specialist
+   - Wait for DIAGNOSTIC-REPORT.md
+   - Extract root cause and fix
+5. Formulate advisory:
+   - WHAT is wrong (sp2 count odd, 1J artifact detected, etc.)
+   - WHAT to check/fix (verify sp2, remove correlation, etc.)
+   - NOT HOW to edit files (CASE agent decides)
+6. Re-spawn CASE agent with advisory in instructions
+7. Increment intervention_counts[pattern]
+8. If intervention_counts[pattern] >= 10: escalate to user
+```
+
+### Pattern 2: Thin Wrapper Skill (Dereplicate, Predict)
+
+**When:** Simple single-step operations with CLI tools
+
+**Structure:**
+1. Validate inputs
+2. Execute CLI command: `lucy <command> <args> --format json`
+3. Parse JSON result
+4. Interpret using skill knowledge (score thresholds, result quality)
+5. Report to user
+
+**Example:**
+```markdown
+# ~/.claude/commands/lucy-ng/dereplicate.md
+
+1. Validate: compound_path exists, formula is valid
+2. Execute: `lucy dereplicate c13 {compound_path} {formula} --format json`
+3. Parse JSON: {is_match, top_matches: [{name, smiles, score}, ...]}
+4. Interpret (from skill/dereplicate/SKILL.md):
+   - score >= 0.95: Match (report top hit, DONE)
+   - score 0.85-0.95: Possible match (report, ask user)
+   - score 0.65-0.85: Weak match (report, recommend CASE)
+   - score < 0.65: No match (recommend CASE)
+5. Report results to user
+```
+
+### Pattern 3: AI-Driven Skill (Sanitize)
+
+**When:** Tasks requiring AI pattern recognition, no CLI tool exists
+
+**Structure:**
+1. Validate input (dataset path)
+2. Read dataset files (metadata, NMR parameters, README, etc.)
+3. Apply patterns from skill document (compound names, SMILES, InChI, IDs)
+4. Identify all instances of compound identifiers
+5. Redact/remove identified content
+6. Write SANITIZATION-REPORT.md with summary
+7. Report to user
+
+**Example:**
+```markdown
+# ~/.claude/commands/lucy-ng/sanitise.md
+
+1. Read skill/sanitize/SKILL.md for patterns
+2. Scan dataset for files: *.json, *.md, *.txt
+3. For each file, detect:
+   - Compound names (capitalized chemistry terms, matched against known list)
+   - SMILES (pattern: alphanumeric with brackets, parentheses, @, =, #)
+   - InChI (pattern: "InChI=...")
+   - Database IDs (pattern: "COCONUT_", "NPC", "CNP", followed by numbers)
+4. For each detected identifier:
+   - Record in redaction list (file, line, original text)
+   - Replace/remove (compound name → "Unknown Compound", SMILES/InChI → delete field)
+5. Write SANITIZATION-REPORT.md
+6. Report summary to user
+```
+
+### Pattern 4: Progress File Monitoring (Loop Detection)
+
+**When:** Orchestrator needs to detect patterns in agent behavior
 
 **Implementation:**
-- Central coordinator receives request
-- Decomposes into subtasks
-- Delegates to specialists
-- Monitors progress
-- Validates outputs
-- Synthesizes final response
+```python
+# In case.md orchestrator
 
-**Lucy-ng application:**
-- Supervisor = orchestrator
-- CASE agent = primary specialist
-- Optional specialists for peak picking, LSD debug
+def detect_loops(progress_file):
+    iterations = parse_iterations(progress_file)
 
-### Skill-First vs Tool-Heavy (HyperAI, 2026)
+    # ELIM thrashing: ELIM added 2+ times
+    if count_constraint_additions(iterations, "ELIM") >= 2:
+        return "elim_thrashing"
 
-**Research finding:** Tool-heavy systems degrade beyond 50-100 tools due to semantic confusion and cognitive overload.
+    # Zero-solution loop: 3+ consecutive 0 solutions
+    if all(i.solution_count == 0 for i in iterations[-3:]):
+        return "zero_solution_loop"
 
-**Solution:** Skill-first with hierarchical routing:
-- Core LLM dynamically loads reusable capabilities
-- Skills organized into categories (math, retrieval, coding)
-- Restores accuracy by up to 40% in large skill libraries
+    # Solution explosion: 3+ iterations >100, <10% reduction
+    if len(iterations) >= 3:
+        recent = iterations[-3:]
+        if all(i.solution_count > 100 for i in recent):
+            reductions = [
+                (recent[j-1].solution_count - recent[j].solution_count) / recent[j-1].solution_count
+                for j in range(1, 3)
+            ]
+            if all(r < 0.10 for r in reductions):
+                return "solution_explosion"
 
-**Lucy-ng application:**
-- Current: 16 tools (below degradation threshold, but growing)
-- Target: Thin tools + skill-based strategy routing
-- Prevents future scalability issues
+    # Constraint churning: 5+ iterations, high add/remove, no convergence
+    if len(iterations) >= 5:
+        recent = iterations[-5:]
+        if all(len(i.constraints_added) > 10 and len(i.constraints_removed) > 5 for i in recent):
+            if recent[0].solution_count - recent[-1].solution_count < 10:
+                return "constraint_churning"
 
-### TeammateTool Pattern (Claude Code 2.1, 2026)
+    return None  # No loop detected
+```
 
-**Architecture:**
-- Team lead spawns teammates (independent context windows)
-- Shared task list with dependency tracking
-- Inbox-based messaging for communication
-- Teammates self-claim work as they finish
+**Full detection criteria:** skill/supervisor/SKILL.md Section 4
 
-**Lucy-ng application:**
-- Supervisor = team lead
-- CASE agent = primary teammate
-- Shared analysis/ directory for tasks and state
-- Messaging via markdown files
+---
 
-## References and Sources
+## Anti-Patterns to Avoid
 
-**Multi-Agent Orchestration:**
-- [Multi-Agent Supervisor Architecture: Orchestrating Enterprise AI at Scale | Databricks](https://www.databricks.com/blog/multi-agent-supervisor-architecture-orchestrating-enterprise-ai-scale)
-- [AI Agent Orchestration Patterns - Azure Architecture Center | Microsoft Learn](https://learn.microsoft.com/en-us/azure/architecture/ai-ml/guide/ai-agent-design-patterns)
-- [Choosing the right orchestration pattern for multi agent systems | Kore.ai](https://www.kore.ai/blog/choosing-the-right-orchestration-pattern-for-multi-agent-systems)
+### Anti-Pattern 1: Duplicating Skill Content
 
-**Claude Code Agent Teams:**
-- [Claude Code's Hidden Multi-Agent System | Paddo.dev](https://paddo.dev/blog/claude-code-hidden-swarm/)
-- [Create custom subagents - Claude Code Docs](https://code.claude.com/docs/en/sub-agents)
-- [Build Agent Skills Faster with Claude Code 2.1 Release | Medium](https://medium.com/@richardhightower/build-agent-skills-faster-with-claude-code-2-1-release-6d821d5b8179)
+**Wrong:** Copy entire skill documents into agent definitions
 
-**Skill-First Architecture:**
-- [AI Agent Architectures: Efficiency vs. Scaling Limits in 2026 | HyperAI](https://beta.hyper.ai/en/stories/53d4fafdd3b77c15bc7008b4122bc84c)
-- [Multi-Agent AI Systems: The Complete Enterprise Guide for 2026 | Neomanex](https://neomanex.com/posts/multi-agent-ai-systems-orchestration)
+**Right:** Agent definitions reference skill documents; orchestrator inlines critical sections in Task() instructions
 
-## Critical Decisions
+**Why:** Single source of truth prevents sync issues
 
-| Decision | Rationale |
-|----------|-----------|
-| **Single supervisor + CASE agent (not swarm)** | CASE is sequential workflow, not parallel tasks; supervisor prevents loops |
-| **State tracking via markdown files** | Follows TeammateTool pattern; readable by AI and humans; no complex infrastructure |
-| **Skill restructure before tool changes** | Safer; content changes don't break code; validates approach before refactoring |
-| **Defer specialist agents** | Complexity not justified until supervisor pattern validated; may not be needed |
-| **Keep 16 MCP tools as-is initially** | Backwards compatible; working system; migrate intelligence incrementally |
-| **Extract heteroatom logic last** | Most complex tool intelligence; defer until supervisor proves value |
+### Anti-Pattern 2: Embedding Intelligence in CLI
 
-## Risks and Mitigations
+**Wrong:** Add domain logic to Python CLI commands
 
-| Risk | Severity | Mitigation |
-|------|----------|------------|
-| Supervisor adds latency | Low | Checkpoints only, not continuous monitoring |
-| State tracking fragile | Medium | Use structured markdown with validation |
-| Skills diverge/duplicate | Medium | Regular audits, clear ownership (project vs workflow) |
-| Specialist agents underutilized | Low | Don't build until proven needed (Phase 5 optional) |
-| Tool simplification breaks backward compat | High | Keep dual mode (intelligent tools + skill guidance) during transition |
+**Right:** CLI returns raw data, agents apply intelligence from skills
+
+**Why:** v2.0 Phase 26 established thin CLI architecture, don't regress
+
+### Anti-Pattern 3: Global Intervention Counters
+
+**Wrong:** Track total interventions across all patterns
+
+**Right:** Track interventions per pattern separately
+
+**Why:** Different patterns have different root causes, need targeted tracking
+
+### Anti-Pattern 4: Directive Interventions
+
+**Wrong:** Tell CASE agent exactly which file line to edit
+
+**Right:** Tell CASE agent WHAT problem exists and WHAT needs checking
+
+**Why:** CASE agent retains autonomy, supervisor provides constraints not commands
+
+### Anti-Pattern 5: Spawning Diagnostic Specialist Too Early
+
+**Wrong:** Spawn specialist on first loop detection
+
+**Right:** Basic diagnosis first (1-2 interventions), specialist only if that fails
+
+**Why:** Basic diagnosis often sufficient, specialist is for complex failures
+
+---
+
+## Build Order and Dependencies
+
+### Phase Structure Recommendation
+
+**v2.1 Milestone: Working Multi-Agent CASE**
+
+**Phase 27: Sub-Command Skills Foundation** (3-4 hours)
+- Create ~/.claude/commands/lucy-ng/ directory
+- Implement simple skills: status.md, predict.md, dereplicate.md
+- Test each skill executes CLI and reports correctly
+- **Dependencies:** None (uses existing v2.0 CLI)
+- **Validation:** `status.md` reports system state, `dereplicate.md` on test compound returns results
+
+**Phase 28: CASE Agent Definition** (4-5 hours)
+- Create ~/.claude/agents/lucy-case-agent.md
+- Define frontmatter (name, description, tools, model)
+- Write agent instructions (workflow overview, checkpoint writing)
+- Test agent can be spawned with Task() and receives instructions
+- **Dependencies:** Phase 27 (directory structure exists)
+- **Validation:** Spawn agent with test instructions, verify it executes and writes CASE-PROGRESS.md
+
+**Phase 29: CASE Orchestrator Skill** (6-8 hours)
+- Create ~/.claude/commands/lucy-ng/case.md
+- Implement agent spawning with inlined skill content (NMR background, CASE workflow, LSD basics, CASE-PROGRESS.md format)
+- Implement progress monitoring (read CASE-PROGRESS.md after agent returns)
+- Implement loop detection (4 patterns from skill/supervisor/SKILL.md Section 4)
+- Implement basic diagnosis and advisory intervention
+- Test spawn → monitor → detect loop → intervene workflow
+- **Dependencies:** Phase 27 (directory), Phase 28 (agent exists)
+- **Validation:** Run on test compound, verify loop detection triggers, advisory sent to agent
+
+**Phase 30: Diagnostic Specialist Integration** (3-4 hours)
+- Rename .claude/agents/diagnostic-specialist.md → lucy-diagnostic.md
+- Update frontmatter (name, agent_type reference)
+- Integrate diagnostic spawning in case.md (after 2 failed interventions with same pattern)
+- Implement DIAGNOSTIC-REPORT.md reading and primary fix extraction
+- Test loop → basic diagnosis fails → spawn specialist → read report → re-advise CASE agent
+- **Dependencies:** Phase 29 (orchestrator exists)
+- **Validation:** Force repeated failures with same pattern, verify specialist spawned, report generated
+
+**Phase 31: Sanitization Skill** (2-3 hours)
+- Create ~/.claude/commands/lucy-ng/sanitise.md
+- Create skill/sanitize/SKILL.md (pattern definitions)
+- Implement AI-driven pattern matching (compound names, SMILES, InChI, IDs)
+- Implement redaction logic
+- Write SANITIZATION-REPORT.md
+- Test on dataset with known identifiers (e.g., Virgiline)
+- **Dependencies:** Phase 27 (directory structure)
+- **Validation:** Sanitize test dataset, verify compound name removed, report lists redactions
+
+**Phase 32: End-to-End Validation** (2-3 hours)
+- Test `/lucy-ng:case` on Ibuprofen de novo CASE (known working from Phase 26-05)
+- Test `/lucy-ng:case` on Virgiline (known failure — should trigger diagnostics)
+- Test `/lucy-ng:sanitise` on public dataset
+- Test `/lucy-ng:dereplicate`, `/lucy-ng:predict`, `/lucy-ng:status`
+- Update CLAUDE.md with sub-command reference section
+- **Dependencies:** Phases 27-31 (all skills implemented)
+- **Validation:** Ibuprofen top-3 ranked, Virgiline triggers diagnostic specialist, all simple skills work
+
+**Phase 33: Documentation and Cleanup** (1-2 hours)
+- Delete .claude/agents/supervisor.md (logic now in case.md)
+- Update PROJECT.md decisions table (v2.1 architecture choices)
+- Update STATE.md with v2.1 milestone completion
+- Write v2.1 release notes
+- **Dependencies:** Phase 32 (validation complete)
+- **Validation:** Old supervisor.md deleted, documentation updated, no loose ends
+
+### Dependency Graph
+
+```
+Phase 27 (Skills Foundation)
+    ↓
+    ├─→ Phase 28 (CASE Agent)
+    │       ↓
+    │   Phase 29 (CASE Orchestrator)
+    │       ↓
+    │   Phase 30 (Diagnostic Integration)
+    │
+    └─→ Phase 31 (Sanitization)
+
+Phase 29, 30, 31 → Phase 32 (Validation) → Phase 33 (Cleanup)
+```
+
+### Critical Path
+
+**Phases 27 → 28 → 29 → 30 → 32 → 33** (16-20 hours total)
+
+Core CASE orchestration with diagnostics is the critical functionality.
+
+**Phase 31 (Sanitization) can be parallelized** if multiple people are working on v2.1.
+
+### Risk Mitigation
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|-----------|--------|------------|
+| Task() context size limits | Medium | High | Hybrid inlining: ~500-700 lines inlined, rest via file paths |
+| Agent doesn't write CASE-PROGRESS.md | Medium | High | Explicit instructions in inlined content, format template included, verification in Phase 32 |
+| Loop detection too sensitive (false positives) | Low | Medium | Conservative thresholds (3+ iterations for zero-solution, 5+ for churning) |
+| Loop detection too lenient (misses loops) | Low | Medium | Test on known failure cases (Virgiline) in Phase 32 |
+| Diagnostic specialist spawning loops | Low | High | Track specialist spawning separately, escalate if called 3+ times without progress |
+| Virgiline still fails after v2.1 | Medium | Low | Expected on first attempt — refine diagnostic procedures iteratively |
+| Intervention count tracking bugs | Medium | Medium | Per-pattern tracking, clear increment/escalation logic, test in Phase 30 |
+
+---
 
 ## Success Criteria
 
-**Supervisor agent working:**
-- [ ] Detects loop: same error 3x in a row
-- [ ] Intervenes: sends redirect message to CASE agent
-- [ ] CASE agent changes strategy based on supervisor input
+v2.1 Working Multi-Agent CASE is complete when:
 
-**Skill-first validated:**
-- [ ] CASE agent constructs LSD file without `generate_lsd_input` (using skill knowledge)
-- [ ] Error tolerance handled by AI reasoning, not Python code
-- [ ] Picking strategy decisions documented in analysis/, not hard-coded
+**Infrastructure:**
+- [ ] All 5 sub-command skills exist in ~/.claude/commands/lucy-ng/
+- [ ] lucy-case-agent.md exists in ~/.claude/agents/
+- [ ] lucy-diagnostic.md exists (renamed from diagnostic-specialist.md) in ~/.claude/agents/
+- [ ] supervisor.md deleted (logic dissolved into case.md)
 
-**Integration complete:**
-- [ ] Backward compatible: existing CLI usage still works
-- [ ] Multi-agent mode: supervisor + CASE agent successfully solve difficult case (Virgiline)
-- [ ] State tracking: clear audit trail in analysis/ directory
+**Functionality:**
+- [ ] `/lucy-ng:case` on Ibuprofen produces correct top-3 ranked solution (reproduces Phase 26-05 success)
+- [ ] `/lucy-ng:case` on a failing compound triggers loop detection (verify on constructed test case)
+- [ ] Loop detection correctly identifies all 4 patterns (ELIM thrashing, zero-solution, explosion, churning)
+- [ ] After 2 failed interventions with same pattern, diagnostic specialist spawned
+- [ ] CASE-PROGRESS.md written by CASE agent after each iteration with all required fields
+- [ ] DIAGNOSTIC-REPORT.md written by diagnostic specialist with findings, root cause, fixes
+- [ ] Orchestrator reads progress files and extracts information correctly
+- [ ] Intervention tracking is per-pattern (not global), escalates after 10 cycles per pattern
+- [ ] `/lucy-ng:sanitise` removes compound identifiers from test dataset
+- [ ] `/lucy-ng:dereplicate`, `/lucy-ng:predict`, `/lucy-ng:status` execute CLI and report correctly
 
-## Open Questions for Roadmap Phase Structure
+**Documentation:**
+- [ ] CLAUDE.md updated with sub-command reference section
+- [ ] PROJECT.md decisions table updated with v2.1 architecture
+- [ ] STATE.md shows v2.1 milestone complete
 
-**1. Should audit happen before or after supervisor prototype?**
-- **Before:** Understand full codebase before adding complexity
-- **After:** Validate supervisor approach first, audit informed by what worked
+**Regression:**
+- [ ] All existing tests pass (no regression from v2.0)
+- [ ] CLI commands still work standalone (backward compatibility)
 
-**Recommendation:** Parallel. Quick audit (categorize tools) informs Phase 1. Deep audit in Phase 4.
+---
 
-**2. How minimal should the first supervisor be?**
-- **Minimal:** Just loop detection + redirect message
-- **Full:** Complete checkpoint monitoring, state tracking, all intervention strategies
+## Integration Points Summary
 
-**Recommendation:** Start minimal. Add monitoring incrementally as patterns emerge.
+| Component | Status | Changes Needed |
+|-----------|--------|----------------|
+| skill/*.md documents | Complete (v2.0) | None — reference as-is |
+| src/lucy_ng/cli/*.py | Complete (v2.0 Phase 26) | None — thin CLI validated |
+| CLAUDE.md | Needs minor update | Add sub-command section (~20 lines) |
+| .claude/agents/supervisor.md | Delete | Logic moves to case.md orchestrator |
+| .claude/agents/diagnostic-specialist.md | Rename/rework | → lucy-diagnostic.md (~50 line change) |
+| .claude/agents/lucy-case-agent.md | Create new | Autonomous CASE worker (~600 lines) |
+| ~/.claude/commands/lucy-ng/*.md | Create 5 new | Orchestrator skills (~840 lines total) |
 
-**3. Should specialist agents be in scope for v2.0?**
-- **Yes:** Complete multi-agent architecture
-- **No:** Supervisor + CASE is sufficient, defer to v2.1
+**Total new code:** ~1,440 lines (skills + agent)
+**Total modifications:** ~70 lines (CLAUDE.md update, diagnostic frontmatter)
+**Total deletions:** ~484 lines (supervisor.md)
+**Net addition:** ~1,000 lines of orchestration logic
 
-**Recommendation:** No. Supervisor alone addresses the Virgiline loop problem. Specialists are premature optimization.
+---
 
-**4. What's the migration path for existing users?**
-- **Breaking:** New skill structure, must update
-- **Compatible:** Dual mode (tools work standalone, multi-agent optional)
+## Sources
 
-**Recommendation:** Compatible. CLI tools work standalone (existing behavior). Multi-agent is additive feature.
+**Existing Architecture (v2.0):**
+- .claude/agents/supervisor.md (484 lines) — Current supervisor approach
+- .claude/agents/diagnostic-specialist.md (455 lines) — Diagnostic logic
+- skill/SKILL.md (1,079 lines) — Core domain knowledge
+- skill/supervisor/SKILL.md (827 lines) — Loop detection patterns
+- skill/diagnostic/SKILL.md (1,874 lines) — LSD manual
+- Phase 26 validation: .planning/phases/26-thin-tools/26-05-PLAN.md (Ibuprofen CASE success)
 
-## Implications for Roadmap
+**GSD Pattern:**
+- ~/.claude/commands/gsd/new-project.md — Sub-command structure reference
 
-**Suggested phase structure based on build order:**
+**Project Context:**
+- .planning/PROJECT.md — v2.1 architecture decisions
+- .planning/STATE.md — Current milestone status
+- .planning/phases/26-thin-tools/26-CONTEXT.md — Thin CLI architecture rationale
 
-1. **Phase: Supervisor Infrastructure** (Foundation)
-   - Create supervisor skill document
-   - Design state tracking templates
-   - Document loop detection rules
-   - Can start immediately, low risk
-
-2. **Phase: Skill Restructure** (Parallel with #1)
-   - Audit CLAUDE.md vs SKILL.md
-   - Extract project-level vs workflow
-   - Remove duplication
-   - Add checkpoint markers
-   - Low risk, content changes only
-
-3. **Phase: Supervisor Integration** (Depends on #1)
-   - Implement supervisor spawn pattern
-   - Add checkpoint monitoring
-   - Test on known failure cases
-   - Validate intervention strategies
-   - Medium risk, new agent interaction
-
-4. **Phase: Tool Intelligence Migration** (Depends on #2, #3 validated)
-   - Document strategies in skill
-   - Add error tolerance knowledge
-   - Simplify tools incrementally
-   - Test backward compatibility
-   - Medium risk, behavior changes
-
-**Phase ordering rationale:**
-- Phases 1 and 2 can run in parallel (independent)
-- Phase 3 depends on 1 (needs supervisor templates)
-- Phase 4 depends on 2 (skill must exist) and 3 (multi-agent validated before changing tools)
-
-**Research flags for phases:**
-- **Phase 1:** Low risk, standard pattern from literature
-- **Phase 2:** Low risk, documentation restructure
-- **Phase 3:** May need iteration on loop detection logic (test with real cases)
-- **Phase 4:** Tool changes need careful validation (regression testing)
-
-**Specialist agents (Phase 5) recommended for v2.1, not v2.0.**
+**Confidence:** HIGH
+- v2.0 provides complete foundation (thin CLI validated, skill documents complete)
+- GSD pattern well-understood (existing /gsd:* commands as reference)
+- Integration points clearly defined (no ambiguous dependencies)
+- Build order considers existing dependencies (Phase 27 → 28 → 29 → 30 → 32)
