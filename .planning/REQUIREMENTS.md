@@ -107,9 +107,9 @@ Requirements for v2.1 Working Multi-Agent CASE. Sub-command skills, real agent o
 
 ### Diagnostic Specialist Integration
 
-- [ ] **DIAG-06**: Diagnostic specialist agent renamed to `~/.claude/agents/lucy-diagnostic.md` with updated frontmatter
-- [ ] **DIAG-07**: Orchestrator delegates to diagnostic specialist after 2 failed interventions with same loop pattern
-- [ ] **DIAG-08**: Orchestrator reads DIAGNOSTIC-REPORT.md and extracts root cause + primary fix for CASE agent advisory
+- [x] **DIAG-06**: Diagnostic specialist agent renamed to `~/.claude/agents/lucy-diagnostic.md` with updated frontmatter
+- [x] **DIAG-07**: Orchestrator delegates to diagnostic specialist after 2 failed interventions with same loop pattern
+- [x] **DIAG-08**: Orchestrator reads DIAGNOSTIC-REPORT.md and extracts root cause + primary fix for CASE agent advisory
 
 ### AI-Driven Sanitisation
 
@@ -214,9 +214,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ORCH-06 | Phase 29 | Complete |
 | ORCH-07 | Phase 29 | Complete |
 | ORCH-08 | Phase 29 | Complete |
-| DIAG-06 | Phase 30 | Pending |
-| DIAG-07 | Phase 30 | Pending |
-| DIAG-08 | Phase 30 | Pending |
+| DIAG-06 | Phase 30 | Complete |
+| DIAG-07 | Phase 30 | Complete |
+| DIAG-08 | Phase 30 | Complete |
 | SCMD-03 | Phase 31 | Pending |
 | SANT-01 | Phase 31 | Pending |
 | SANT-02 | Phase 31 | Pending |
@@ -239,4 +239,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-06 (v2.0), 2026-02-08 (v2.1)*
-*Last updated: 2026-02-08 after Phase 29 complete*
+*Last updated: 2026-02-08 after Phase 30 complete*
