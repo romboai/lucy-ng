@@ -400,15 +400,21 @@ Plans:
 ---
 
 ### Phase 26: Thin Tools
-**Goal**: MCP tools are data access wrappers with no embedded domain logic; intelligence previously in Python has been migrated to the skill where the AI can reason about it
+**Goal**: MCP removed entirely, CLI commands are thin data-access wrappers, AI agent is sole intelligence layer using skill documents for all reasoning
 **Depends on**: Phases 22, 23, 24 (skill content must encode the intelligence being removed from tools; multi-agent validated)
-**Requirements**: TOOL-01, TOOL-02, TOOL-03, TOOL-04
+**Requirements**: TOOL-01 (overridden: remove MCP entirely), TOOL-02, TOOL-03, TOOL-04 (overridden: CLI thin too)
 **Success Criteria** (what must be TRUE):
-  1. MCP tools contain no embedded domain logic -- peak picking tools return raw peaks above threshold without DEPT-guided filtering or HMBC validation
-  2. Intelligence previously in Python (adaptive thresholding, conflict resolution, auto-constraint generation) is documented in SKILL.md as AI-executable strategy
-  3. CLI retains smart behavior for backward compatibility (dual mode: `lucy pick hsqc` still uses DEPT-guided algorithm; MCP tool returns raw peaks)
-  4. An AI agent using the thin MCP tools plus SKILL.md can reproduce the same analysis quality as the current smart tools -- validated on at least one test compound
-**Plans**: TBD
+  1. MCP server removed entirely -- no src/lucy_ng/mcp/, no lucy-mcp entry point
+  2. CLI commands are thin data-access wrappers -- pick hsqc/hmbc return raw peaks, analyze symmetry returns raw counts, lsd generate removed
+  3. Intelligence previously in Python documented in SKILL.md as AI-executable strategy
+  4. AI agent using thin CLI + SKILL.md solves Ibuprofen de novo CASE with correct structure in top 3
+**Plans**: 5 plans
+Plans:
+- [ ] 26-01-PLAN.md -- Remove MCP server entirely and clean up pyproject.toml
+- [ ] 26-02-PLAN.md -- Thin Tier 3 CLI commands (pick hsqc/hmbc raw, remove lsd generate, thin analyze symmetry)
+- [ ] 26-03-PLAN.md -- Consolidate duplicated code (database finder, LSD parser)
+- [ ] 26-04-PLAN.md -- Update CLAUDE.md, skill files, and agent definitions for CLI-only architecture
+- [ ] 26-05-PLAN.md -- Validate Ibuprofen de novo CASE with thin CLI + skill knowledge
 
 ---
 
@@ -446,7 +452,7 @@ Plans:
 | 23. Error Tolerance + Confidence | v2.0 | 2/2 | Complete | 2026-02-07 |
 | 24. Supervisor Agent | v2.0 | 2/2 | Complete | 2026-02-07 |
 | 25. Diagnostic Specialist | v2.0 | 2/2 | Complete | 2026-02-07 |
-| 26. Thin Tools | v2.0 | TBD | Not started | - |
+| 26. Thin Tools | v2.0 | 0/5 | In progress | - |
 
 ---
-*Last updated: 2026-02-07 after Phase 25 completion*
+*Last updated: 2026-02-08 after Phase 26 planning*
