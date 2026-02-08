@@ -432,7 +432,7 @@ Plans:
 
 - [x] **Phase 27: Sub-Command Skills Foundation** -- COMPLETE 2026-02-08. ~/.claude/commands/lucy-ng/ with 4 files (status, dereplicate, predict, routing page)
 - [x] **Phase 28: CASE Agent Definition** -- COMPLETE 2026-02-08. ~/.claude/agents/lucy-case-agent.md (613 lines, 528 inlined knowledge, all 5 CASE reqs validated)
-- [ ] **Phase 29: CASE Orchestrator Skill** -- Core orchestration: spawn, monitor, detect loops, intervene, escalate
+- [x] **Phase 29: CASE Orchestrator Skill** -- COMPLETE 2026-02-08. ~/.claude/commands/lucy-ng/case.md (622 lines, 9 requirements, 12-step orchestration)
 - [ ] **Phase 30: Diagnostic Specialist Integration** -- Deep diagnosis after 2 failed basic interventions
 - [ ] **Phase 31: Sanitization Skill** -- AI-driven dataset sanitization (no CLI)
 - [ ] **Phase 32: End-to-End Validation** -- Minimum 10 integration tests, Ibuprofen CASE via orchestrator
@@ -494,7 +494,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 29-01-PLAN.md -- Create case.md orchestrator skill with spawning, monitoring, loop detection, diagnosis, advisory, escalation, re-spawning; update routing page
+- [x] 29-01-PLAN.md -- Create case.md orchestrator skill with spawning, monitoring, loop detection, diagnosis, advisory, escalation, re-spawning; update routing page
 
 ---
 
@@ -592,11 +592,11 @@ Plans:
 | 26. Thin Tools | v2.0 | 5/5 | Complete | 2026-02-08 |
 | 27. Sub-Command Skills Foundation | v2.1 | 2/2 | Complete | 2026-02-08 |
 | 28. CASE Agent Definition | v2.1 | 1/1 | Complete | 2026-02-08 |
-| 29. CASE Orchestrator Skill | v2.1 | 0/TBD | Pending | - |
+| 29. CASE Orchestrator Skill | v2.1 | 1/1 | Complete | 2026-02-08 |
 | 30. Diagnostic Specialist Integration | v2.1 | 0/TBD | Pending | - |
 | 31. Sanitization Skill | v2.1 | 0/TBD | Pending | - |
 | 32. End-to-End Validation | v2.1 | 0/TBD | Pending | - |
 | 33. Documentation and Cleanup | v2.1 | 0/TBD | Pending | - |
 
 ---
-*Last updated: 2026-02-08 after Phase 28 execution complete*
+*Last updated: 2026-02-08 after Phase 29 execution complete*

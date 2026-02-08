@@ -79,7 +79,7 @@ Requirements for v2.1 Working Multi-Agent CASE. Sub-command skills, real agent o
 ### Sub-Command Skills
 
 - [ ] **SCMD-01**: Create `~/.claude/commands/lucy-ng/` directory with sub-command skills following GSD pattern (YAML frontmatter + markdown body)
-- [ ] **SCMD-02**: `/lucy-ng:case` orchestrator skill that spawns autonomous CASE agent via Task(), monitors progress, detects loops, intervenes with advisory, delegates to diagnostic specialist
+- [x] **SCMD-02**: `/lucy-ng:case` orchestrator skill that spawns autonomous CASE agent via Task(), monitors progress, detects loops, intervenes with advisory, delegates to diagnostic specialist
 - [ ] **SCMD-03**: `/lucy-ng:sanitise` AI-driven skill for compound identifier removal (no CLI — requires AI reasoning)
 - [ ] **SCMD-04**: `/lucy-ng:dereplicate` thin wrapper skill around `lucy dereplicate c13` CLI
 - [ ] **SCMD-05**: `/lucy-ng:predict` thin wrapper skill around `lucy predict c13` CLI
@@ -96,14 +96,14 @@ Requirements for v2.1 Working Multi-Agent CASE. Sub-command skills, real agent o
 
 ### CASE Orchestration
 
-- [ ] **ORCH-01**: Orchestrator spawns CASE agent with hybrid context inlining (~500-700 lines critical content inlined, detailed references via file paths)
-- [ ] **ORCH-02**: Orchestrator reads CASE-PROGRESS.md after agent returns to monitor progress
-- [ ] **ORCH-03**: Orchestrator detects 4 loop patterns: ELIM thrashing, zero-solution loop, solution explosion, constraint churning
-- [ ] **ORCH-04**: Orchestrator performs basic diagnosis before intervention (sp2 count, H budget, 1J artifacts)
-- [ ] **ORCH-05**: Orchestrator generates advisory interventions (WHAT not HOW) — never prescribes specific LSD file edits
-- [ ] **ORCH-06**: Orchestrator tracks intervention counts per pattern (not global counter)
-- [ ] **ORCH-07**: Orchestrator escalates to user after 10 failed intervention cycles per pattern
-- [ ] **ORCH-08**: Orchestrator re-spawns CASE agent with advisory constraints and skip-completed-work instructions
+- [x] **ORCH-01**: Orchestrator spawns CASE agent with hybrid context inlining (~500-700 lines critical content inlined, detailed references via file paths)
+- [x] **ORCH-02**: Orchestrator reads CASE-PROGRESS.md after agent returns to monitor progress
+- [x] **ORCH-03**: Orchestrator detects 4 loop patterns: ELIM thrashing, zero-solution loop, solution explosion, constraint churning
+- [x] **ORCH-04**: Orchestrator performs basic diagnosis before intervention (sp2 count, H budget, 1J artifacts)
+- [x] **ORCH-05**: Orchestrator generates advisory interventions (WHAT not HOW) — never prescribes specific LSD file edits
+- [x] **ORCH-06**: Orchestrator tracks intervention counts per pattern (not global counter)
+- [x] **ORCH-07**: Orchestrator escalates to user after 10 failed intervention cycles per pattern
+- [x] **ORCH-08**: Orchestrator re-spawns CASE agent with advisory constraints and skip-completed-work instructions
 
 ### Diagnostic Specialist Integration
 
@@ -205,15 +205,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CASE-03 | Phase 28 | Complete |
 | CASE-04 | Phase 28 | Complete |
 | CASE-05 | Phase 28 | Complete |
-| SCMD-02 | Phase 29 | Pending |
-| ORCH-01 | Phase 29 | Pending |
-| ORCH-02 | Phase 29 | Pending |
-| ORCH-03 | Phase 29 | Pending |
-| ORCH-04 | Phase 29 | Pending |
-| ORCH-05 | Phase 29 | Pending |
-| ORCH-06 | Phase 29 | Pending |
-| ORCH-07 | Phase 29 | Pending |
-| ORCH-08 | Phase 29 | Pending |
+| SCMD-02 | Phase 29 | Complete |
+| ORCH-01 | Phase 29 | Complete |
+| ORCH-02 | Phase 29 | Complete |
+| ORCH-03 | Phase 29 | Complete |
+| ORCH-04 | Phase 29 | Complete |
+| ORCH-05 | Phase 29 | Complete |
+| ORCH-06 | Phase 29 | Complete |
+| ORCH-07 | Phase 29 | Complete |
+| ORCH-08 | Phase 29 | Complete |
 | DIAG-06 | Phase 30 | Pending |
 | DIAG-07 | Phase 30 | Pending |
 | DIAG-08 | Phase 30 | Pending |
@@ -239,4 +239,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-06 (v2.0), 2026-02-08 (v2.1)*
-*Last updated: 2026-02-08 after v2.1 roadmap creation*
+*Last updated: 2026-02-08 after Phase 29 complete*
