@@ -1,9 +1,9 @@
-# Requirements: lucy-ng v2.0
+# Requirements: lucy-ng v2.1
 
-**Defined:** 2026-02-06
-**Core Value:** An AI agent can autonomously determine the structure of an unknown organic compound from its NMR spectra, with a multi-agent architecture that prevents unproductive loops and keeps the elucidation on track.
+**Defined:** 2026-02-08
+**Core Value:** An AI agent can autonomously determine the structure of an unknown organic compound from its NMR spectra, with working multi-agent orchestration that prevents unproductive loops via sub-command skills following the GSD pattern.
 
-## v2.0 Requirements
+## v2.0 Requirements (Complete)
 
 Requirements for v2.0 Robust Multi-Agent CASE. Each maps to roadmap phases.
 
@@ -74,7 +74,67 @@ Requirements for v2.0 Robust Multi-Agent CASE. Each maps to roadmap phases.
 
 ## v2.1 Requirements
 
-Deferred to future release. Tracked but not in current roadmap.
+Requirements for v2.1 Working Multi-Agent CASE. Sub-command skills, real agent orchestration, working AI-driven sanitisation.
+
+### Sub-Command Skills
+
+- [ ] **SCMD-01**: Create `~/.claude/commands/lucy-ng/` directory with sub-command skills following GSD pattern (YAML frontmatter + markdown body)
+- [ ] **SCMD-02**: `/lucy-ng:case` orchestrator skill that spawns autonomous CASE agent via Task(), monitors progress, detects loops, intervenes with advisory, delegates to diagnostic specialist
+- [ ] **SCMD-03**: `/lucy-ng:sanitise` AI-driven skill for compound identifier removal (no CLI — requires AI reasoning)
+- [ ] **SCMD-04**: `/lucy-ng:dereplicate` thin wrapper skill around `lucy dereplicate c13` CLI
+- [ ] **SCMD-05**: `/lucy-ng:predict` thin wrapper skill around `lucy predict c13` CLI
+- [ ] **SCMD-06**: `/lucy-ng:status` environment readiness check skill (lucy-ng, LSD, database)
+- [ ] **SCMD-07**: Old monolithic `/lucy-ng` skill replaced by sub-command routing page
+
+### Autonomous CASE Agent
+
+- [ ] **CASE-01**: CASE agent definition at `~/.claude/agents/lucy-case-agent.md` with YAML frontmatter (name, description, tools: Read + Write + Bash + Glob + Grep)
+- [ ] **CASE-02**: CASE agent receives inlined skill content (NMR background, CASE workflow, LSD basics, CASE-PROGRESS.md format) plus file path references for detailed domain knowledge
+- [ ] **CASE-03**: CASE agent writes CASE-PROGRESS.md after EVERY LSD iteration with required fields (solution count, constraints added/removed, reasoning, confidence, sp2/H checks)
+- [ ] **CASE-04**: CASE agent follows skill/CASE/SKILL.md workflow — NEVER attempts dereplication (absolute separation)
+- [ ] **CASE-05**: CASE agent implements advisory constraints from supervisor (understands WHAT to fix, decides HOW autonomously)
+
+### CASE Orchestration
+
+- [ ] **ORCH-01**: Orchestrator spawns CASE agent with hybrid context inlining (~500-700 lines critical content inlined, detailed references via file paths)
+- [ ] **ORCH-02**: Orchestrator reads CASE-PROGRESS.md after agent returns to monitor progress
+- [ ] **ORCH-03**: Orchestrator detects 4 loop patterns: ELIM thrashing, zero-solution loop, solution explosion, constraint churning
+- [ ] **ORCH-04**: Orchestrator performs basic diagnosis before intervention (sp2 count, H budget, 1J artifacts)
+- [ ] **ORCH-05**: Orchestrator generates advisory interventions (WHAT not HOW) — never prescribes specific LSD file edits
+- [ ] **ORCH-06**: Orchestrator tracks intervention counts per pattern (not global counter)
+- [ ] **ORCH-07**: Orchestrator escalates to user after 10 failed intervention cycles per pattern
+- [ ] **ORCH-08**: Orchestrator re-spawns CASE agent with advisory constraints and skip-completed-work instructions
+
+### Diagnostic Specialist Integration
+
+- [ ] **DIAG-06**: Diagnostic specialist agent renamed to `~/.claude/agents/lucy-diagnostic.md` with updated frontmatter
+- [ ] **DIAG-07**: Orchestrator delegates to diagnostic specialist after 2 failed interventions with same loop pattern
+- [ ] **DIAG-08**: Orchestrator reads DIAGNOSTIC-REPORT.md and extracts root cause + primary fix for CASE agent advisory
+
+### AI-Driven Sanitisation
+
+- [ ] **SANT-01**: Sanitise skill explicitly states there is NO CLI command for sanitisation — it requires AI reasoning
+- [ ] **SANT-02**: AI detects compound identifiers: chemical names, SMILES, InChI, InChIKey, CAS numbers, MOL file structures, dataset naming patterns
+- [ ] **SANT-03**: AI generates redaction manifest and applies bulk sanitisation using existing helper scripts (lucy_text_extractor.py, lucy_bulk_sanitize.py)
+- [ ] **SANT-04**: Sanitise skill verifies completeness by re-extracting text and confirming no identifiers remain
+
+### Validation Gate
+
+- [ ] **VALD-01**: End-to-end integration test: orchestrator spawns CASE agent, agent writes progress, orchestrator reads and monitors
+- [ ] **VALD-02**: Loop detection test: force known failure patterns, verify detection and intervention
+- [ ] **VALD-03**: Diagnostic delegation test: repeated failures trigger specialist, report generated
+- [ ] **VALD-04**: Ibuprofen CASE passes via `/lucy-ng:case` (reproduces Phase 26-05 success through orchestration)
+- [ ] **VALD-05**: All simple sub-commands work (`/lucy-ng:dereplicate`, `/lucy-ng:predict`, `/lucy-ng:status`)
+
+### Cleanup
+
+- [ ] **CLNP-01**: Delete `.claude/agents/supervisor.md` (logic dissolved into case.md orchestrator)
+- [ ] **CLNP-02**: Update CLAUDE.md with sub-command reference section
+- [ ] **CLNP-03**: Update PROJECT.md decisions table with v2.1 architecture choices
+
+## Deferred Requirements
+
+Tracked but not in v2.1 scope.
 
 ### Constraint Explorer Specialist
 
@@ -100,7 +160,7 @@ Explicitly excluded. Documented to prevent scope creep.
 |---------|--------|
 | COSY correlation support | Notoriously difficult to analyze, deferred indefinitely |
 | Stereochemistry handling (E/Z, R/S) | Requires different NMR experiments, out of scope |
-| Interactive CASE with user feedback loop | v2.0 focuses on unattended elucidation |
+| Interactive CASE with user feedback loop | v2.1 focuses on unattended elucidation |
 | Automatic HMBC conflict resolution (Python) | Anti-feature: AI should reason about conflicts, not code |
 | Automatic symmetry constraint generation | Anti-feature: AI reasons better from raw intensity data |
 | Automatic threshold tuning | Anti-feature: hides decisions from AI, context-dependent |
@@ -108,57 +168,47 @@ Explicitly excluded. Documented to prevent scope creep.
 | New Python dependencies for orchestration | Claude Code Task tool provides all primitives natively |
 | GUI or web visualization | Purely programmatic interface |
 | Non-Bruker vendor formats | Bruker only |
+| CLI command for sanitisation | Anti-feature: requires AI reasoning, CLI gives false security |
+| Dereplication in CASE orchestrator | Anti-feature: absolute separation, user invokes separately |
+| Directive supervision (HOW not WHAT) | Anti-feature: removes agent autonomy |
+| Global intervention counter | Anti-feature: different patterns need different tracking |
 
 ## Traceability
 
 Which phases cover which requirements. Updated during roadmap creation.
 
+### v2.0 (Complete)
+
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUDT-01 | Phase 20 | Complete |
-| AUDT-02 | Phase 20 | Complete |
-| AUDT-03 | Phase 20 | Complete |
-| AUDT-04 | Phase 20 | Complete |
-| SKIL-01 | Phase 21 | Complete |
-| SKIL-02 | Phase 21 | Complete |
-| SKIL-03 | Phase 21 | Complete |
-| SKIL-04 | Phase 21 | Complete |
-| HMBC-01 | Phase 22 | Complete |
-| HMBC-02 | Phase 22 | Complete |
-| HMBC-03 | Phase 22 | Complete |
-| HMBC-04 | Phase 22 | Complete |
-| QUAL-01 | Phase 22 | Complete |
-| QUAL-02 | Phase 22 | Complete |
-| QUAL-03 | Phase 22 | Complete |
-| ETOL-01 | Phase 23 | Complete |
-| ETOL-02 | Phase 23 | Complete |
-| ETOL-03 | Phase 23 | Complete |
-| ETOL-04 | Phase 23 | Complete |
-| CONF-01 | Phase 23 | Complete |
-| CONF-02 | Phase 23 | Complete |
-| CONF-03 | Phase 23 | Complete |
-| SUPV-01 | Phase 24 | Complete |
-| SUPV-02 | Phase 24 | Complete |
-| SUPV-03 | Phase 24 | Complete |
-| SUPV-04 | Phase 24 | Complete |
-| SUPV-05 | Phase 24 | Complete |
-| SUPV-06 | Phase 24 | Complete |
-| SUPV-07 | Phase 24 | Complete |
-| DIAG-01 | Phase 25 | Complete |
-| DIAG-02 | Phase 25 | Complete |
-| DIAG-03 | Phase 25 | Complete |
-| DIAG-04 | Phase 25 | Complete |
-| DIAG-05 | Phase 25 | Complete |
-| TOOL-01 | Phase 26 | Pending |
-| TOOL-02 | Phase 26 | Pending |
-| TOOL-03 | Phase 26 | Pending |
-| TOOL-04 | Phase 26 | Pending |
+| AUDT-01..04 | Phase 20 | Complete |
+| SKIL-01..04 | Phase 21 | Complete |
+| HMBC-01..04 | Phase 22 | Complete |
+| QUAL-01..03 | Phase 22 | Complete |
+| ETOL-01..04 | Phase 23 | Complete |
+| CONF-01..03 | Phase 23 | Complete |
+| SUPV-01..07 | Phase 24 | Complete |
+| DIAG-01..05 | Phase 25 | Complete |
+| TOOL-01..04 | Phase 26 | Complete |
+
+### v2.1 (Active)
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| SCMD-01..07 | — | Pending |
+| CASE-01..05 | — | Pending |
+| ORCH-01..08 | — | Pending |
+| DIAG-06..08 | — | Pending |
+| SANT-01..04 | — | Pending |
+| VALD-01..05 | — | Pending |
+| CLNP-01..03 | — | Pending |
 
 **Coverage:**
-- v2.0 requirements: 38 total
-- Mapped to phases: 38
-- Unmapped: 0
+- v2.0 requirements: 38 total (all complete)
+- v2.1 requirements: 30 total
+- Mapped to phases: 0 (pending roadmap)
+- Unmapped: 30
 
 ---
-*Requirements defined: 2026-02-06*
-*Last updated: 2026-02-07 after Phase 25 completion*
+*Requirements defined: 2026-02-06 (v2.0), 2026-02-08 (v2.1)*
+*Last updated: 2026-02-08 after v2.1 scope confirmed*
