@@ -10,12 +10,12 @@ See: .planning/PROJECT.md (updated 2026-02-08)
 ## Current Position
 
 **Milestone**: v2.1 Working Multi-Agent CASE
-**Phase**: Phase 28 (CASE Agent Definition)
-**Plan**: 28-01 complete
+**Phase**: Phase 29 (CASE Orchestrator Skill)
+**Plan**: 29-01 complete
 **Status**: Phase complete
-**Last activity**: 2026-02-08 — Completed 28-01-PLAN.md (CASE agent definition)
+**Last activity**: 2026-02-08 — Completed 29-01-PLAN.md (CASE orchestrator skill)
 
-Progress: [██████░░░░░░░░░░░░░░░░░░░░░░░] 29% (2/7 phases)
+Progress: [████████░░░░░░░░░░░░░░░░░░░░░] 43% (3/7 phases)
 
 ## Completed Milestones
 
@@ -29,9 +29,9 @@ Progress: [██████░░░░░░░░░░░░░░░░░
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 33 (v1.0-v2.1)
-- Average duration: ~3 hours per phase (v1.0-v1.2), < 15 min per phase (v2.0-v2.1 docs/skills), ~6 min per plan (v2.1 implementation)
-- Total execution time: ~64.6 hours
+- Total plans completed: 34 (v1.0-v2.1)
+- Average duration: ~3 hours per phase (v1.0-v1.2), < 15 min per phase (v2.0-v2.1 docs/skills), ~4 min per plan (v2.1 implementation)
+- Total execution time: ~64.65 hours
 
 **v2.1 Roadmap:**
 - 7 phases defined (27-33)
@@ -55,14 +55,17 @@ Recent decisions affecting current work:
 - v2.1: Validation-first development — prove Task() spawning works before expanding skills
 - v2.1: Hybrid context inlining — 500-700 lines critical content inlined, detailed references via file paths
 - v2.1: Per-pattern intervention counters — track failures separately, 10-cycle escalation per pattern
+- v2.1: Advisory interventions say WHAT not HOW — preserves agent autonomy
+- v2.1: Batch monitoring over synchronous — spawn once for ~10 iterations, read progress after batch
 - Phase 28: Agent files live in ~/.claude/agents/ (user-global, not project-specific)
 - Phase 28: CASE-PROGRESS.md append-only format for supervisor monitoring
+- Phase 29: Orchestrator skill dissolves v2.0 supervisor.md logic into case.md sub-command
 
 ### Pending Todos
 
-- Plan Phase 29 (CASE Orchestrator Skill)
+- Plan Phase 30 (Diagnostic Specialist Agent)
 - Prove Task() spawning works with autonomous CASE agent (Phase 32)
-- Phase 28 agent definition complete — ready for orchestrator integration
+- Phase 29 orchestrator skill complete — ready for diagnostic specialist integration
 
 ### Blockers/Concerns
 
@@ -74,8 +77,8 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed Phase 28 Plan 01 (CASE agent definition)
-Resume file: .planning/ROADMAP.md (Phase 29 next)
+Stopped at: Completed Phase 29 Plan 01 (CASE orchestrator skill)
+Resume file: .planning/ROADMAP.md (Phase 30 next)
 
 ---
-*Last updated: 2026-02-08 after Phase 28-01 completion*
+*Last updated: 2026-02-08 after Phase 29-01 completion*
