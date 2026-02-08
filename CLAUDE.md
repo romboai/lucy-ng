@@ -48,30 +48,24 @@ Verify installation:
 lucy database info data/reference/lucy-ng-derep.db
 ```
 
-### 5. Create Permissions File
-Create `.claude/settings.json` in the working directory:
-```json
-{
-  "permissions": {
-    "allow": ["Bash(lucy:*)", "Bash(python3:*)", "Bash(ls:*)", "Bash(mkdir:*)"]
-  }
-}
-```
-
 ---
 
-## Tool Output Reference
+## CLI Output Reference
 
-| Tool | Key Output Fields |
-|------|------------------|
-| `read_spectrum_1d` | nucleus, frequency, ppm_range, data_points |
-| `pick_peaks_1d` | peaks (ppm, intensity), count |
-| `pick_hsqc_peaks` | peaks (carbon_ppm, proton_ppm), multiplicities |
-| `pick_hmbc_peaks` | peaks (carbon_ppm, proton_ppm), validated_count |
-| `analyze_symmetry` | expected_carbons, observed_carbons, symmetry_detected |
-| `dereplicate_c13` | is_match, top_matches (name, smiles, score) |
-| `predict_c13_shifts` | predictions (atom_index, shift, confidence), success |
-| `rank_lsd_solutions` | ranked_solutions (smiles, mae, quality, deviations, within_3ppm, within_5ppm) |
+All lucy-ng commands support `--format json` for programmatic use. The AI agent uses thin CLI commands via Bash, applying domain intelligence from skill/SKILL.md.
+
+| Command | Key Output Fields (JSON) |
+|---------|--------------------------|
+| `lucy read 1d` | nucleus, frequency, ppm_range, data_points |
+| `lucy read 2d` | experiment_type, nuclei, frequency, shape |
+| `lucy pick 1d` | count, peaks (ppm, intensity) |
+| `lucy pick 2d` | experiment_type, count, peaks (f1, f2, intensity) |
+| `lucy pick hsqc` | experiment_type, count, peaks (f1, f2, intensity) |
+| `lucy pick hmbc` | experiment_type, count, peaks (f1, f2, intensity) |
+| `lucy analyze symmetry` | formula, expected_carbons, observed_peaks, difference |
+| `lucy dereplicate c13` | is_match, top_matches (name, smiles, score) |
+| `lucy predict c13` | predictions (atom_index, shift, confidence), success |
+| `lucy lsd rank` | ranked_solutions (smiles, mae, quality, deviations) |
 
 ---
 
@@ -110,7 +104,11 @@ outlsd 5 < compound.sol > solutions.smi
 lucy lsd rank solutions.smi --shifts "155.08,151.58,..."
 ```
 
-**LSD file structure example:**
+**LSD file structure:**
+
+The AI agent writes LSD files directly using skill knowledge (see skill/CASE/SKILL.md and skill/diagnostic/SKILL.md for LSD command reference).
+
+Example structure:
 ```
 ; Comments start with semicolon
 MULT 1 C 2 0    ; Define atoms with MULT
@@ -152,6 +150,8 @@ print(result.summary())
 ---
 
 ## Peak Picking API Reference
+
+**Note:** These Python APIs are available for library use. The AI agent uses thin CLI commands via Bash instead — see skill/SKILL.md for the recommended workflow where the AI applies domain intelligence (DEPT-guided filtering, HMBC cross-validation) on raw CLI peak lists.
 
 ### HSQC: DEPT-Guided Picker
 
