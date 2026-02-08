@@ -451,7 +451,11 @@ Plans:
   4. /lucy-ng:predict wraps `lucy predict c13` and returns shift predictions with confidence
   5. Old monolithic /lucy-ng skill replaced with routing page listing all sub-commands
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 27-01-PLAN.md -- Create directory, status.md, and dereplicate.md skills
+- [ ] 27-02-PLAN.md -- Create predict.md skill and routing page
 
 ---
 
@@ -580,7 +584,7 @@ Plans:
 | 24. Supervisor Agent | v2.0 | 2/2 | Complete | 2026-02-07 |
 | 25. Diagnostic Specialist | v2.0 | 2/2 | Complete | 2026-02-07 |
 | 26. Thin Tools | v2.0 | 5/5 | Complete | 2026-02-08 |
-| 27. Sub-Command Skills Foundation | v2.1 | 0/TBD | Pending | - |
+| 27. Sub-Command Skills Foundation | v2.1 | 0/2 | Planned | - |
 | 28. CASE Agent Definition | v2.1 | 0/TBD | Pending | - |
 | 29. CASE Orchestrator Skill | v2.1 | 0/TBD | Pending | - |
 | 30. Diagnostic Specialist Integration | v2.1 | 0/TBD | Pending | - |
