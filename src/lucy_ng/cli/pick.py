@@ -3,6 +3,7 @@
 import json
 
 import click
+import numpy as np
 
 from lucy_ng.processing import (
     AdaptivePeakPicker,
@@ -37,14 +38,31 @@ def pick_1d(path: str, threshold: float | None, output_format: str) -> None:
     """Pick peaks from a 1D spectrum.
 
     PATH is the path to the Bruker experiment directory.
+
+    Automatically detects negative peaks in spectra that contain them
+    (e.g., DEPT-135 where CH2 peaks are negative).
     """
     spectrum = BrukerReader.read_1d(path)
-    picker = AdaptivePeakPicker()
-    peaks = picker.pick_peaks(spectrum, threshold=threshold) if threshold else picker.pick_peaks(spectrum)
+
+    # Auto-detect negative peaks: if spectrum has significant negative values
+    # (e.g., DEPT-135 CH2 peaks), enable negative peak detection automatically.
+    effective_threshold = threshold if threshold is not None else 0.05
+    max_abs = float(np.max(np.abs(spectrum.data)))
+    has_significant_negative = bool(np.min(spectrum.data) < -effective_threshold * max_abs)
+
+    if threshold is not None:
+        peaks = AdaptivePeakPicker.pick_peaks(
+            spectrum, threshold=threshold, detect_negative=has_significant_negative
+        )
+    else:
+        peaks = AdaptivePeakPicker.pick_peaks(
+            spectrum, detect_negative=has_significant_negative
+        )
 
     if output_format == "json":
         data = {
             "count": len(peaks.peaks),
+            "negative_detected": has_significant_negative,
             "peaks": [
                 {
                     "ppm": p.position,
@@ -55,7 +73,12 @@ def pick_1d(path: str, threshold: float | None, output_format: str) -> None:
         }
         click.echo(json.dumps(data, indent=2))
     else:
-        click.echo(f"Found {len(peaks.peaks)} peaks:")
+        if has_significant_negative:
+            click.echo(
+                f"Found {len(peaks.peaks)} peaks (negative peak detection enabled):"
+            )
+        else:
+            click.echo(f"Found {len(peaks.peaks)} peaks:")
         for p in sorted(peaks.peaks, key=lambda x: -x.position):
             click.echo(f"  {p.position:8.2f} ppm  (intensity: {p.intensity:.2e})")
 

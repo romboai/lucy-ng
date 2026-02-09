@@ -39,6 +39,41 @@ class TestPick1D:
         assert result.exit_code == 0
         assert "Found" in result.output
 
+    def test_pick_1d_dept135_detects_negative(self) -> None:
+        """Test that DEPT-135 auto-detects negative CH2 peaks."""
+        runner = CliRunner()
+        result = runner.invoke(pick, ["1d", "data/Ibuprofen/3"])  # DEPT-135
+        assert result.exit_code == 0
+        assert "negative peak detection enabled" in result.output
+        # Should find the CH2 peak at ~45 ppm with negative intensity
+        assert "-" in result.output  # negative intensity value
+
+    def test_pick_1d_dept135_json_negative(self) -> None:
+        """Test DEPT-135 JSON output includes negative peaks."""
+        runner = CliRunner()
+        result = runner.invoke(
+            pick, ["1d", "data/Ibuprofen/3", "--format", "json"]
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["negative_detected"] is True
+        # At least one peak should have negative intensity (CH2)
+        negative_peaks = [p for p in data["peaks"] if p["intensity"] < 0]
+        assert len(negative_peaks) > 0
+
+    def test_pick_1d_c13_no_negative(self) -> None:
+        """Test that regular 13C does not trigger negative detection."""
+        runner = CliRunner()
+        result = runner.invoke(
+            pick, ["1d", "data/Ibuprofen/2", "--format", "json"]
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["negative_detected"] is False
+        # All peaks should have positive intensity
+        for p in data["peaks"]:
+            assert p["intensity"] > 0
+
 
 class TestPick2D:
     """Tests for lucy pick 2d command."""
