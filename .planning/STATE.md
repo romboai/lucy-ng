@@ -10,12 +10,12 @@ See: .planning/PROJECT.md (updated 2026-02-08)
 ## Current Position
 
 **Milestone**: v2.1 Working Multi-Agent CASE
-**Phase**: Phase 32 (End-to-End Validation) — COMPLETE
-**Plan**: 32-01 complete, verified (6/6 must-haves)
-**Status**: Phase complete, verified — user test execution pending
-**Last activity**: 2026-02-08 — Phase 32 verified and closed
+**Phase**: Phase 33 (Documentation and Cleanup) — IN PROGRESS
+**Plan**: 33-01 complete (CLAUDE.md updates, v2.1 release notes)
+**Status**: Phase in progress — 1 of 3 plans complete
+**Last activity**: 2026-02-09 — Completed 33-01-PLAN.md
 
-Progress: [██████████████░░░░░░░░░░░░░░░] 86% (6/7 phases)
+Progress: [██████████████░░░░░░░░░░░░░░░] 86% (6/7 phases, 1/3 plans in Phase 33)
 
 ## Completed Milestones
 
@@ -29,9 +29,9 @@ Progress: [██████████████░░░░░░░░░
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 37 (v1.0-v2.1)
+- Total plans completed: 38 (v1.0-v2.1)
 - Average duration: ~3 hours per phase (v1.0-v1.2), < 15 min per phase (v2.0-v2.1 docs/skills), ~3 min per plan (v2.1 implementation)
-- Total execution time: ~64.77 hours
+- Total execution time: ~64.82 hours
 
 **v2.1 Roadmap:**
 - 7 phases defined (27-33)
@@ -69,6 +69,9 @@ Recent decisions affecting current work:
 - Phase 32: Pre-flight checks before validation guide creation (document actual readiness)
 - Phase 32: Exact paths in test instructions (no placeholders for copy-paste ease)
 - Phase 32: 7 known failure modes documented with symptoms, causes, fixes
+- Phase 33: CLAUDE.md points to sub-commands as entry points, not skill/SKILL.md
+- Phase 33: Document actual agent filenames (lucy-case-agent.md, lucy-diagnostic.md) not vague language
+- Phase 33: v2.1 release notes capture working orchestration vs v2.0 paper architecture
 
 ### Pending Todos
 
@@ -85,9 +88,9 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-02-08
-Stopped at: Phase 32 complete
-Resume file: .planning/ROADMAP.md (Phase 33 next)
+Last session: 2026-02-09
+Stopped at: Completed 33-01-PLAN.md
+Resume file: .planning/phases/33-documentation-and-cleanup/33-02-PLAN.md (next plan in Phase 33)
 
 ---
-*Last updated: 2026-02-08 after Phase 32 execution complete*
+*Last updated: 2026-02-09 after 33-01 execution complete*
