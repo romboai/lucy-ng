@@ -2,7 +2,7 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-08)
+See: .planning/PROJECT.md (updated 2026-02-09)
 
 **Core value:** AI agent autonomously determines compound structures from NMR, with multi-agent architecture preventing loops
 **Current focus:** v2.1 Working Multi-Agent CASE — sub-command skills, real agent orchestration, validation-first development
@@ -10,12 +10,12 @@ See: .planning/PROJECT.md (updated 2026-02-08)
 ## Current Position
 
 **Milestone**: v2.1 Working Multi-Agent CASE
-**Phase**: Phase 33 (Documentation and Cleanup) — IN PROGRESS
-**Plan**: 33-01 complete (CLAUDE.md updates, v2.1 release notes)
-**Status**: Phase in progress — 1 of 3 plans complete
-**Last activity**: 2026-02-09 — Completed 33-01-PLAN.md
+**Phase**: Phase 33 (Documentation and Cleanup) — COMPLETE
+**Plan**: 33-02 complete (PROJECT.md refresh, diagnostic agent inlining)
+**Status**: Phase complete — all v2.1 phases shipped
+**Last activity**: 2026-02-09 — Completed 33-02-PLAN.md
 
-Progress: [██████████████░░░░░░░░░░░░░░░] 86% (6/7 phases, 1/3 plans in Phase 33)
+Progress: [███████████████████████████████] 100% (7/7 phases complete)
 
 ## Completed Milestones
 
@@ -25,13 +25,14 @@ Progress: [██████████████░░░░░░░░░
 | v1.1 Database-Backed Dereplication | 11-15 | 2026-01-15 |
 | v1.2 HOSE Database Prediction | 16-19 | 2026-01-18 |
 | v2.0 Robust Multi-Agent CASE | 20-26 | 2026-02-08 |
+| v2.1 Working Multi-Agent CASE | 27-33 | 2026-02-09 |
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 38 (v1.0-v2.1)
-- Average duration: ~3 hours per phase (v1.0-v1.2), < 15 min per phase (v2.0-v2.1 docs/skills), ~3 min per plan (v2.1 implementation)
-- Total execution time: ~64.82 hours
+- Total plans completed: 39 (v1.0-v2.1)
+- Average duration: ~3 hours per phase (v1.0-v1.2), < 15 min per phase (v2.0-v2.1 docs/skills), ~4 min per plan (v2.1 implementation)
+- Total execution time: ~64.92 hours
 
 **v2.1 Roadmap:**
 - 7 phases defined (27-33)
@@ -77,20 +78,18 @@ Recent decisions affecting current work:
 
 - Execute validation tests per 32-VALIDATION-GUIDE.md (user action)
 - Prove Task() spawning works with autonomous CASE agent (Phase 32 user test)
-- Complete Phase 33 (cleanup) after validation passes
 
 ### Blockers/Concerns
 
-- v2.0 multi-agent architecture exists only on paper — agents defined but never invoked
-- Critical risk: Repeating v2.0's paper architecture mistake (mitigation: validation gates in every phase)
-- Virgiline (CASE7) failure is the motivating case — working multi-agent should address root causes
-- Task tool model parameter bug (#18873) — use `model: inherit` workaround
+- v2.1 multi-agent architecture complete but UNVALIDATED — awaiting user test per 32-VALIDATION-GUIDE.md
+- Virgiline (CASE7) failure is the motivating test case — working multi-agent should address root causes
+- Task tool model parameter bug (#18873) — mitigated with `model: inherit` workaround in all agents
 
 ## Session Continuity
 
 Last session: 2026-02-09
-Stopped at: Completed 33-01-PLAN.md
-Resume file: .planning/phases/33-documentation-and-cleanup/33-02-PLAN.md (next plan in Phase 33)
+Stopped at: Phase 33 complete — v2.1 milestone SHIPPED
+Resume file: None (all planned phases complete, ready for user validation per 32-VALIDATION-GUIDE.md)
 
 ---
-*Last updated: 2026-02-09 after 33-01 execution complete*
+*Last updated: 2026-02-09 after Phase 33 complete (v2.1 shipped)*
