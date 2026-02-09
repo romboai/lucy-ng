@@ -6,7 +6,7 @@
 - ✅ [v1.1 Database-Backed Dereplication](milestones/v1.1-ROADMAP.md) - Phases 11-15 (shipped 2026-01-15)
 - ✅ [v1.2 HOSE Database Prediction](milestones/v1.2-ROADMAP.md) - Phases 16-19 (shipped 2026-01-18)
 - ✅ **v2.0 Robust Multi-Agent CASE** - Phases 20-26 (completed 2026-02-08)
-- **v2.1 Working Multi-Agent CASE** - Phases 27-33 (in progress)
+- ✅ **v2.1 Working Multi-Agent CASE** - Phases 27-33 (completed 2026-02-09)
 
 ---
 
@@ -436,7 +436,7 @@ Plans:
 - [x] **Phase 30: Diagnostic Specialist Integration** -- COMPLETE 2026-02-08. ~/.claude/agents/lucy-diagnostic.md + delegation wired into case.md (3 requirements, 7/7 must-haves)
 - [x] **Phase 31: Sanitization Skill** -- COMPLETE 2026-02-08. ~/.claude/commands/lucy-ng/sanitise.md (422 lines, pure AI workflow, 5 requirements, 7/7 must-haves)
 - [x] **Phase 32: End-to-End Validation** -- COMPLETE 2026-02-08. 31/31 pre-flight checks passed, 530-line validation guide created, all VALD requirements documented
-- [ ] **Phase 33: Documentation and Cleanup** -- Delete supervisor.md, update docs, release notes
+- [x] **Phase 33: Documentation and Cleanup** -- COMPLETE 2026-02-09. CLAUDE.md updated with sub-command reference, PROJECT.md refreshed, diagnostic agent hybrid inlined (1,145 lines), v2.1 release notes written
 
 ---
 
@@ -565,8 +565,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 33-01-PLAN.md -- Update CLAUDE.md with sub-command reference and corrected architecture; write v2.1 release notes
-- [ ] 33-02-PLAN.md -- Refresh PROJECT.md to v2.1 reality; inline LSD knowledge into diagnostic agent; confirm supervisor.md deletion
+- [x] 33-01-PLAN.md -- Update CLAUDE.md with sub-command reference and corrected architecture; write v2.1 release notes
+- [x] 33-02-PLAN.md -- Refresh PROJECT.md to v2.1 reality; inline LSD knowledge into diagnostic agent; confirm supervisor.md deletion
 
 ---
 
@@ -611,7 +611,7 @@ Plans:
 | 30. Diagnostic Specialist Integration | v2.1 | 1/1 | Complete | 2026-02-08 |
 | 31. Sanitization Skill | v2.1 | 1/1 | Complete | 2026-02-08 |
 | 32. End-to-End Validation | v2.1 | 1/1 | Complete | 2026-02-08 |
-| 33. Documentation and Cleanup | v2.1 | 0/TBD | Pending | - |
+| 33. Documentation and Cleanup | v2.1 | 2/2 | Complete | 2026-02-09 |
 
 ---
-*Last updated: 2026-02-08 after Phase 32 execution complete*
+*Last updated: 2026-02-09 after Phase 33 execution complete*

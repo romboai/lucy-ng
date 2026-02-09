@@ -128,9 +128,9 @@ Requirements for v2.1 Working Multi-Agent CASE. Sub-command skills, real agent o
 
 ### Cleanup
 
-- [ ] **CLNP-01**: Delete `.claude/agents/supervisor.md` (logic dissolved into case.md orchestrator)
-- [ ] **CLNP-02**: Update CLAUDE.md with sub-command reference section
-- [ ] **CLNP-03**: Update PROJECT.md decisions table with v2.1 architecture choices
+- [x] **CLNP-01**: Delete `.claude/agents/supervisor.md` (logic dissolved into case.md orchestrator)
+- [x] **CLNP-02**: Update CLAUDE.md with sub-command reference section
+- [x] **CLNP-03**: Update PROJECT.md decisions table with v2.1 architecture choices
 
 ## Deferred Requirements
 
@@ -227,9 +227,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VALD-03 | Phase 32 | Complete |
 | VALD-04 | Phase 32 | Complete |
 | VALD-05 | Phase 32 | Complete |
-| CLNP-01 | Phase 33 | Pending |
-| CLNP-02 | Phase 33 | Pending |
-| CLNP-03 | Phase 33 | Pending |
+| CLNP-01 | Phase 33 | Complete |
+| CLNP-02 | Phase 33 | Complete |
+| CLNP-03 | Phase 33 | Complete |
 
 **Coverage:**
 - v2.0 requirements: 38 total (all complete)
