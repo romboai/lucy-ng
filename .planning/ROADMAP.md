@@ -600,15 +600,14 @@ Plans:
   1. Database schema extended with hybridization column in hose_stats table (TEXT storing sp3/sp2/sp1)
   2. Statistics generator computes sp2/sp3/sp1 fractions during HOSE processing and stores in database
   3. CLI command `lucy detect hybridisation <db> <shift>` returns JSON with sp2/sp3/sp1 fractions and confidence
-  4. Detection queries shift ± 2 ppm window and returns distributions excluding states <1% frequency
+  4. Detection queries shift +/- 2 ppm window and returns distributions excluding states <1% frequency
   5. Command works on existing lucy-ng-derep.db after schema migration or fresh generation
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 34-01-PLAN.md: Extend database schema with hybridization column, write migration script
-- [ ] 34-02-PLAN.md: Update stats_generator.py to compute hybridisation fractions from HOSE prefixes
-- [ ] 34-03-PLAN.md: Create detection module (src/lucy_ng/detection/detector.py) with StatisticalDetector class
-- [ ] 34-04-PLAN.md: Create CLI command (src/lucy_ng/cli/detect.py) with hybridisation subcommand
+- [ ] 34-01-PLAN.md -- Extend database schema (v3->v4), migration script, shift-window query method
+- [ ] 34-02-PLAN.md -- Update stats_generator.py to extract and store hybridisation during HOSE processing
+- [ ] 34-03-PLAN.md -- Create detection module and `lucy detect hybridisation` CLI command
 
 ---
 
@@ -770,7 +769,7 @@ Plans:
 | 31. Sanitization Skill | v2.1 | 1/1 | Complete | 2026-02-08 |
 | 32. End-to-End Validation | v2.1 | 1/1 | Complete | 2026-02-08 |
 | 33. Documentation and Cleanup | v2.1 | 2/2 | Complete | 2026-02-09 |
-| 34. Hybridisation Detection | v3.0 | 0/4 | Not started | - |
+| 34. Hybridisation Detection | v3.0 | 0/3 | Planned | - |
 | 35. Neighbourhood Detection | v3.0 | 0/4 | Not started | - |
 | 36. HHB and Ring Detection | v3.0 | 0/3 | Not started | - |
 | 37. Signal Grouping | v3.0 | 0/3 | Not started | - |
@@ -779,4 +778,4 @@ Plans:
 | 40. Validation | v3.0 | 0/3 | Not started | - |
 
 ---
-*Last updated: 2026-02-10 after v3.0 roadmap creation*
+*Last updated: 2026-02-10 after Phase 34 planning*
