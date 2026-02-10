@@ -1,242 +1,121 @@
-# Requirements: lucy-ng v2.1
+# Requirements: lucy-ng v3.0 Statistical Detection
 
-**Defined:** 2026-02-08
-**Core Value:** An AI agent can autonomously determine the structure of an unknown organic compound from its NMR spectra, with working multi-agent orchestration that prevents unproductive loops via sub-command skills following the GSD pattern.
+**Defined:** 2026-02-10
+**Core Value:** AI agent autonomously determines compound structures from NMR, with data-driven statistical constraints replacing guesswork
 
-## v2.0 Requirements (Complete)
+## v3.0 Requirements
 
-Requirements for v2.0 Robust Multi-Agent CASE. Each maps to roadmap phases.
+Requirements for v3.0 milestone. Each maps to roadmap phases.
 
-### Audit
+### Statistical Detection
 
-- [x] **AUDT-01**: Audit all 16 MCP tools -- classify each as Tier 1 (pure data access, keep), Tier 2 (moderate intelligence, migrate to skill), or Tier 3 (complex logic, refactor to thin wrapper)
-- [x] **AUDT-02**: Audit all 7 CLI command groups -- identify which intelligence should move to skill vs stay in code
-- [x] **AUDT-03**: Audit CLAUDE.md (1080 lines) -- identify duplication, misplaced intelligence, sections that should move to separate skill documents
-- [x] **AUDT-04**: Produce audit report with specific recommendations for each component
+- [ ] **DETECT-01**: CLI command detects hybridisation (sp1/sp2/sp3) for a given 13C shift from HOSE database frequency distributions
+- [ ] **DETECT-02**: CLI command detects forbidden neighbour atoms (<1% frequency) for a given 13C shift and multiplicity
+- [ ] **DETECT-03**: CLI command detects mandatory neighbour atoms (>95% frequency) for a given 13C shift and multiplicity
+- [ ] **DETECT-04**: CLI command detects hetero-hetero bond allowance from bond pair statistics (1% threshold)
+- [ ] **DETECT-05**: CLI command detects signal grouping (shifts within 0.25 ppm tolerance with matching multiplicities)
+- [ ] **DETECT-06**: Database schema extended with hybridisation and neighbour statistics in hose_stats table
+- [ ] **DETECT-07**: Statistics generator computes detection statistics during HOSE stats generation
 
-### Skill Architecture
+### Ranking & Filtering
 
-- [x] **SKIL-01**: Split CLAUDE.md into project-level document (setup, database, references, developer info) and CASE workflow document (SKILL.md)
-- [x] **SKIL-02**: Create SUPERVISOR.md with loop detection patterns, intervention strategies, and escalation criteria
-- [x] **SKIL-03**: Remove duplication between CLAUDE.md and skill documents
-- [x] **SKIL-04**: Skill documents sized appropriately -- CLAUDE.md <800 lines, SKILL.md <1500 lines, SUPERVISOR.md <500 lines
+- [ ] **RANK-01**: Two-tier ranking scores solutions by signal match count first, then average deviation
+- [ ] **RANK-02**: Solutions with fewer matched signals rank lower regardless of MAE
+- [ ] **RANK-03**: Badlist filter excludes solutions containing 3-membered rings
+- [ ] **RANK-04**: Badlist filter excludes solutions containing 4-membered rings
 
-### Incremental HMBC Strategy
+### Agent Integration
 
-- [x] **HMBC-01**: Skill encodes adaptive incremental constraint strategy: start with high-confidence correlations, add 3-5 per iteration, observe solution count change (replaces fixed 3-phase recipe per CONTEXT.md decision)
-- [x] **HMBC-02**: Skill explicitly teaches "start with 5-10 high-confidence HMBC correlations, not all"
-- [x] **HMBC-03**: Skill includes decision tree for when to add more correlations vs when to investigate failures
-- [x] **HMBC-04**: Skill explicitly prohibits "throw everything in" approach -- no guidance saying "use all correlations from peak picking"
+- [ ] **AGENT-01**: CASE agent calls lucy detect CLI commands to generate statistical constraints before writing LSD files
+- [ ] **AGENT-02**: CASE agent uses hybridisation detection to set MULT hybridisation values in LSD
+- [ ] **AGENT-03**: CASE agent uses neighbourhood detection to add ELIM/LIST constraints in LSD
+- [ ] **AGENT-04**: CASE agent uses HHB detection to add or omit hetero-hetero BOND constraints in LSD
+- [ ] **AGENT-05**: CASE agent applies chemistry-first hierarchy — NMR knowledge takes priority, statistics augment but don't override
+- [ ] **AGENT-06**: CASE agent uses signal grouping detection to identify ambiguous carbon assignments
 
-### Error Tolerance
+## Previous Milestones (Complete)
 
-- [x] **ETOL-01**: Skill teaches resolution-based close carbon detection -- AI identifies unresolvable carbons using digital resolution (pts/ppm) and documents ambiguity with LIST/PROP encoding
-- [x] **ETOL-02**: Skill teaches context-dependent DEPT/HSQC conflict resolution -- priority tree (DEPT-90 > S/N > shift > consistency) with documented reasoning
-- [x] **ETOL-03**: Skill teaches ambiguous HMBC assignment -- AI uses LSD LIST/PROP mechanism in single file (NOT separate variant files) for close carbon positions
-- [x] **ETOL-04**: Skill teaches quaternary carbon HMBC sparsity -- shift-based constraints + incremental 20% threshold reduction for targeted correlation search
+### v2.0 Requirements (38 total — all complete)
 
-### Supervisor Agent
+Audit (AUDT-01..04), Skill Architecture (SKIL-01..04), Incremental HMBC (HMBC-01..04), Error Tolerance (ETOL-01..04), Supervisor Agent (SUPV-01..07), Diagnostic Specialist (DIAG-01..05), Thin Tools (TOOL-01..04), Spectral Quality (QUAL-01..03), Confidence Output (CONF-01..03).
 
-- [x] **SUPV-01**: Supervisor agent defined as Claude Code subagent at .claude/agents/supervisor.md (383 lines) with YAML frontmatter (name, tools, model) and complete system prompt
-- [x] **SUPV-02**: Supervisor detects ELIM thrashing -- CASE-PROGRESS.md shows ELIM added 2+ times; diagnostic checks sp2 count, H budget, 1J artifacts
-- [x] **SUPV-03**: Supervisor detects zero-solution loops -- 3+ iterations with 0 solutions; diagnostic removes last batch, tests individual correlations
-- [x] **SUPV-04**: Supervisor detects solution explosion -- 3+ iterations >100 solutions with <10% reduction; checks ELIM, heteroatom constraints, quaternary carbons
-- [x] **SUPV-05**: Supervisor detects constraint churning -- 5+ iterations with high add/remove activity; resets to last good state, follows incremental HMBC strategy
-- [x] **SUPV-06**: Supervisor interventions are advisory -- tells CASE agent WHAT to fix (specific diagnosis) not HOW; four advisory message templates with per-pattern diagnostic procedures
-- [x] **SUPV-07**: Supervisor escalates to user after 10 failed intervention cycles per pattern (per CONTEXT.md decision, overrides original 3-attempt spec)
+### v2.1 Requirements (30 total — all complete)
 
-### Diagnostic & LSD Expert Specialist
+Sub-Command Skills (SCMD-01..07), Autonomous CASE Agent (CASE-01..05), CASE Orchestration (ORCH-01..08), Diagnostic Integration (DIAG-06..08), AI-Driven Sanitisation (SANT-01..04), Validation Gate (VALD-01..05), Cleanup (CLNP-01..03).
 
-- [x] **DIAG-01**: Diagnostic specialist agent at .claude/agents/diagnostic-specialist.md (455 lines) with YAML frontmatter, 5-step workflow, tools: Read + Bash, model: sonnet
-- [x] **DIAG-02**: For 0 solutions: 5-check procedure (sp2 count even, H budget, 1J artifacts ±1.5/±0.3 ppm, correlation order, close carbons) in skill/diagnostic/SKILL.md Section 2.1
-- [x] **DIAG-03**: For 1000+ solutions: 5-check procedure (ELIM presence, constraint/atom ratio 0.5, quaternary connectivity, heteroatom constraints, symmetry encoding) in Section 2.2
-- [x] **DIAG-04**: Structured DIAGNOSTIC-REPORT.md template (8 sections: Summary, Findings, Root Cause, Recommended Fixes with LSD commands, Supporting Data, Next Steps, Methodology, Metadata)
-- [x] **DIAG-05**: Full LSD manual in skill/diagnostic/SKILL.md Section 1 (1,874 lines total): MULT, HSQC, HMBC, BOND, LIST, PROP, ELEM, SYME, DEFF, ELIM with edge cases and error patterns
+## Future Requirements
 
-### Thin Tools
+Deferred to later milestones. Tracked but not in current roadmap.
 
-- [x] **TOOL-01**: MCP tools reduced to thin data access wrappers -- no embedded domain logic
-- [x] **TOOL-02**: Peak picking tools return raw peaks above threshold without DEPT-guided filtering or HMBC validation
-- [x] **TOOL-03**: Intelligence previously in Python (adaptive thresholding, conflict resolution, auto-constraint generation) migrated to skill
-- [x] **TOOL-04**: CLI retains smart behavior for backward compatibility (dual mode: smart CLI, thin MCP)
+### Signal Grouping Combinatorial Exchange (v3.1)
 
-### Spectral Quality Assessment
+- **GROUP-01**: Combinatorial atom exchange for grouped signals (try all permutations)
+- **GROUP-02**: Automatic retry with swapped assignments when first attempt yields 0 solutions
 
-- [x] **QUAL-01**: Skill teaches S/N assessment -- AI evaluates signal-to-noise and adjusts expectations
-- [x] **QUAL-02**: Skill teaches digital resolution impact -- AI documents when close carbons may alias
-- [x] **QUAL-03**: Skill teaches artifact recognition -- AI identifies 1J correlations, t1 noise, baseline roll
+### Fragment Library (v3.2)
 
-### Confidence-Annotated Output
+- **FRAG-01**: Fragment library built from 24.5M substructure-subspectrum correlations (SSCs)
+- **FRAG-02**: Fragment search by shift pattern to suggest substructures
+- **FRAG-03**: Fragment constraints integrated into LSD input generation
 
-- [x] **CONF-01**: CASE workflow produces assignments with qualitative confidence levels (High/Medium/Low based on 3-factor judgment: resolution, HOSE MAE, correlations) -- NOT computed percentages
-- [x] **CONF-02**: Ambiguous assignments explicitly documented with reasoning in mandatory Ambiguities Detected table (Carbon/Issue, Type, Resolution Detail, Impact on Constraints)
-- [x] **CONF-03**: Analysis output suggests specific additional NMR experiments (WHAT experiment, WHY it helps, WHICH atom/issue it resolves) for Medium/Low confidence atoms
-
-## v2.1 Requirements
-
-Requirements for v2.1 Working Multi-Agent CASE. Sub-command skills, real agent orchestration, working AI-driven sanitisation.
-
-### Sub-Command Skills
-
-- [ ] **SCMD-01**: Create `~/.claude/commands/lucy-ng/` directory with sub-command skills following GSD pattern (YAML frontmatter + markdown body)
-- [x] **SCMD-02**: `/lucy-ng:case` orchestrator skill that spawns autonomous CASE agent via Task(), monitors progress, detects loops, intervenes with advisory, delegates to diagnostic specialist
-- [ ] **SCMD-03**: `/lucy-ng:sanitise` AI-driven skill for compound identifier removal (no CLI — requires AI reasoning)
-- [ ] **SCMD-04**: `/lucy-ng:dereplicate` thin wrapper skill around `lucy dereplicate c13` CLI
-- [ ] **SCMD-05**: `/lucy-ng:predict` thin wrapper skill around `lucy predict c13` CLI
-- [ ] **SCMD-06**: `/lucy-ng:status` environment readiness check skill (lucy-ng, LSD, database)
-- [ ] **SCMD-07**: Old monolithic `/lucy-ng` skill replaced by sub-command routing page
-
-### Autonomous CASE Agent
-
-- [x] **CASE-01**: CASE agent definition at `~/.claude/agents/lucy-case-agent.md` with YAML frontmatter (name, description, tools: Read + Write + Bash + Glob + Grep)
-- [x] **CASE-02**: CASE agent receives inlined skill content (NMR background, CASE workflow, LSD basics, CASE-PROGRESS.md format) plus file path references for detailed domain knowledge
-- [x] **CASE-03**: CASE agent writes CASE-PROGRESS.md after EVERY LSD iteration with required fields (solution count, constraints added/removed, reasoning, confidence, sp2/H checks)
-- [x] **CASE-04**: CASE agent follows skill/CASE/SKILL.md workflow — NEVER attempts dereplication (absolute separation)
-- [x] **CASE-05**: CASE agent implements advisory constraints from supervisor (understands WHAT to fix, decides HOW autonomously)
-
-### CASE Orchestration
-
-- [x] **ORCH-01**: Orchestrator spawns CASE agent with hybrid context inlining (~500-700 lines critical content inlined, detailed references via file paths)
-- [x] **ORCH-02**: Orchestrator reads CASE-PROGRESS.md after agent returns to monitor progress
-- [x] **ORCH-03**: Orchestrator detects 4 loop patterns: ELIM thrashing, zero-solution loop, solution explosion, constraint churning
-- [x] **ORCH-04**: Orchestrator performs basic diagnosis before intervention (sp2 count, H budget, 1J artifacts)
-- [x] **ORCH-05**: Orchestrator generates advisory interventions (WHAT not HOW) — never prescribes specific LSD file edits
-- [x] **ORCH-06**: Orchestrator tracks intervention counts per pattern (not global counter)
-- [x] **ORCH-07**: Orchestrator escalates to user after 10 failed intervention cycles per pattern
-- [x] **ORCH-08**: Orchestrator re-spawns CASE agent with advisory constraints and skip-completed-work instructions
-
-### Diagnostic Specialist Integration
-
-- [x] **DIAG-06**: Diagnostic specialist agent renamed to `~/.claude/agents/lucy-diagnostic.md` with updated frontmatter
-- [x] **DIAG-07**: Orchestrator delegates to diagnostic specialist after 2 failed interventions with same loop pattern
-- [x] **DIAG-08**: Orchestrator reads DIAGNOSTIC-REPORT.md and extracts root cause + primary fix for CASE agent advisory
-
-### AI-Driven Sanitisation
-
-- [ ] **SANT-01**: Sanitise skill explicitly states there is NO CLI command for sanitisation — it requires AI reasoning
-- [ ] **SANT-02**: AI detects compound identifiers: chemical names, SMILES, InChI, InChIKey, CAS numbers, MOL file structures, dataset naming patterns
-- [ ] **SANT-03**: AI generates redaction manifest and applies bulk sanitisation using existing helper scripts (lucy_text_extractor.py, lucy_bulk_sanitize.py)
-- [ ] **SANT-04**: Sanitise skill verifies completeness by re-extracting text and confirming no identifiers remain
-
-### Validation Gate
-
-- [ ] **VALD-01**: End-to-end integration test: orchestrator spawns CASE agent, agent writes progress, orchestrator reads and monitors
-- [ ] **VALD-02**: Loop detection test: force known failure patterns, verify detection and intervention
-- [ ] **VALD-03**: Diagnostic delegation test: repeated failures trigger specialist, report generated
-- [ ] **VALD-04**: Ibuprofen CASE passes via `/lucy-ng:case` (reproduces Phase 26-05 success through orchestration)
-- [ ] **VALD-05**: All simple sub-commands work (`/lucy-ng:dereplicate`, `/lucy-ng:predict`, `/lucy-ng:status`)
-
-### Cleanup
-
-- [x] **CLNP-01**: Delete `.claude/agents/supervisor.md` (logic dissolved into case.md orchestrator)
-- [x] **CLNP-02**: Update CLAUDE.md with sub-command reference section
-- [x] **CLNP-03**: Update PROJECT.md decisions table with v2.1 architecture choices
-
-## Deferred Requirements
-
-Tracked but not in v2.1 scope.
-
-### Constraint Explorer Specialist
+### Constraint Explorer Specialist (future)
 
 - **CEXP-01**: Specialist agent generates multiple LSD input variants for ambiguous cases
 - **CEXP-02**: Runs LSD on all variants in parallel and reports which succeeded
-- **CEXP-03**: Supports close carbon assignment (try both) and heteroatom placement variants
 
-### Solution Explainer Specialist
+### Solution Explainer Specialist (future)
 
 - **SEXP-01**: Specialist explains WHY a solution ranks #1 vs alternatives
-- **SEXP-02**: Generates comparative report showing constraint satisfaction and shift prediction quality per solution
-
-### Advanced Multi-Agent
-
-- **AMAG-01**: Agent Teams integration (experimental Claude Code feature)
-- **AMAG-02**: Parallel hypothesis exploration via background subagents
+- **SEXP-02**: Comparative report showing constraint satisfaction and shift prediction quality
 
 ## Out of Scope
 
-Explicitly excluded. Documented to prevent scope creep.
-
 | Feature | Reason |
 |---------|--------|
+| Automatic threshold tuning | Sherlock's fixed thresholds work for 82% of cases; override flags sufficient |
 | COSY correlation support | Notoriously difficult to analyze, deferred indefinitely |
+| Real-time statistics computation | Pre-computed during DB build; no runtime queries against raw HOSE data |
+| GUI for detection results | CLI-only architecture; AI agent consumes JSON output |
+| Custom HOSE radius for detection | Default radius sufficient; configurable radius adds complexity without clear benefit |
 | Stereochemistry handling (E/Z, R/S) | Requires different NMR experiments, out of scope |
-| Interactive CASE with user feedback loop | v2.1 focuses on unattended elucidation |
-| Automatic HMBC conflict resolution (Python) | Anti-feature: AI should reason about conflicts, not code |
-| Automatic symmetry constraint generation | Anti-feature: AI reasons better from raw intensity data |
-| Automatic threshold tuning | Anti-feature: hides decisions from AI, context-dependent |
-| One-shot LSD generation with all correlations | Anti-feature: incremental strategy is more robust |
-| New Python dependencies for orchestration | Claude Code Task tool provides all primitives natively |
-| GUI or web visualization | Purely programmatic interface |
-| Non-Bruker vendor formats | Bruker only |
-| CLI command for sanitisation | Anti-feature: requires AI reasoning, CLI gives false security |
-| Dereplication in CASE orchestrator | Anti-feature: absolute separation, user invokes separately |
-| Directive supervision (HOW not WHAT) | Anti-feature: removes agent autonomy |
-| Global intervention counter | Anti-feature: different patterns need different tracking |
+| CLI command for sanitisation | Anti-feature: requires AI reasoning |
+| Dereplication in CASE orchestrator | Anti-feature: absolute separation |
 
 ## Traceability
 
 Which phases cover which requirements. Updated during roadmap creation.
 
-### v2.0 (Complete)
+### v3.0 (Active)
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUDT-01..04 | Phase 20 | Complete |
-| SKIL-01..04 | Phase 21 | Complete |
-| HMBC-01..04 | Phase 22 | Complete |
-| QUAL-01..03 | Phase 22 | Complete |
-| ETOL-01..04 | Phase 23 | Complete |
-| CONF-01..03 | Phase 23 | Complete |
-| SUPV-01..07 | Phase 24 | Complete |
-| DIAG-01..05 | Phase 25 | Complete |
-| TOOL-01..04 | Phase 26 | Complete |
-
-### v2.1 (Active)
-
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| SCMD-01 | Phase 27 | Complete |
-| SCMD-04 | Phase 27 | Complete |
-| SCMD-05 | Phase 27 | Complete |
-| SCMD-06 | Phase 27 | Complete |
-| SCMD-07 | Phase 27 | Complete |
-| CASE-01 | Phase 28 | Complete |
-| CASE-02 | Phase 28 | Complete |
-| CASE-03 | Phase 28 | Complete |
-| CASE-04 | Phase 28 | Complete |
-| CASE-05 | Phase 28 | Complete |
-| SCMD-02 | Phase 29 | Complete |
-| ORCH-01 | Phase 29 | Complete |
-| ORCH-02 | Phase 29 | Complete |
-| ORCH-03 | Phase 29 | Complete |
-| ORCH-04 | Phase 29 | Complete |
-| ORCH-05 | Phase 29 | Complete |
-| ORCH-06 | Phase 29 | Complete |
-| ORCH-07 | Phase 29 | Complete |
-| ORCH-08 | Phase 29 | Complete |
-| DIAG-06 | Phase 30 | Complete |
-| DIAG-07 | Phase 30 | Complete |
-| DIAG-08 | Phase 30 | Complete |
-| SCMD-03 | Phase 31 | Complete |
-| SANT-01 | Phase 31 | Complete |
-| SANT-02 | Phase 31 | Complete |
-| SANT-03 | Phase 31 | Complete |
-| SANT-04 | Phase 31 | Complete |
-| VALD-01 | Phase 32 | Complete |
-| VALD-02 | Phase 32 | Complete |
-| VALD-03 | Phase 32 | Complete |
-| VALD-04 | Phase 32 | Complete |
-| VALD-05 | Phase 32 | Complete |
-| CLNP-01 | Phase 33 | Complete |
-| CLNP-02 | Phase 33 | Complete |
-| CLNP-03 | Phase 33 | Complete |
+| DETECT-01 | — | Pending |
+| DETECT-02 | — | Pending |
+| DETECT-03 | — | Pending |
+| DETECT-04 | — | Pending |
+| DETECT-05 | — | Pending |
+| DETECT-06 | — | Pending |
+| DETECT-07 | — | Pending |
+| RANK-01 | — | Pending |
+| RANK-02 | — | Pending |
+| RANK-03 | — | Pending |
+| RANK-04 | — | Pending |
+| AGENT-01 | — | Pending |
+| AGENT-02 | — | Pending |
+| AGENT-03 | — | Pending |
+| AGENT-04 | — | Pending |
+| AGENT-05 | — | Pending |
+| AGENT-06 | — | Pending |
 
 **Coverage:**
-- v2.0 requirements: 38 total (all complete)
-- v2.1 requirements: 30 total
-- Mapped to phases: 30/30 (100% coverage)
-- Unmapped: 0
+- v3.0 requirements: 17 total
+- Mapped to phases: 0
+- Unmapped: 17 (pending roadmap creation)
+
+### v2.0/v2.1 (Complete)
+
+All 68 requirements (38 v2.0 + 30 v2.1) mapped and complete. See git history for full traceability tables.
 
 ---
-*Requirements defined: 2026-02-06 (v2.0), 2026-02-08 (v2.1)*
-*Last updated: 2026-02-08 after Phase 30 complete*
+*Requirements defined: 2026-02-10*
+*Last updated: 2026-02-10 after initial definition*
