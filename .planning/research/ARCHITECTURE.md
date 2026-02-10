@@ -1,1085 +1,823 @@
-# Architecture Patterns: Multi-Agent CASE Orchestration
+# Architecture Integration: Statistical Detection Features
 
-**Domain:** Multi-agent NMR structure elucidation system
-**Researched:** 2026-02-08
-**Focus:** Sub-command skill integration with existing lucy-ng architecture
+**Domain:** NMR structure elucidation with statistical detection
+**Researched:** 2026-02-10
+**Overall confidence:** HIGH
 
 ## Executive Summary
 
-The v2.1 architecture integrates GSD-pattern sub-command skills with the existing lucy-ng CLI system, replacing the monolithic `/lucy-ng` skill and paper-only agent definitions with working multi-agent orchestration. This is an **integration milestone**, not a rewrite — we're adding orchestration to a complete, working system (v2.0: thin CLI validated in Phase 26).
+Statistical detection features integrate cleanly into the existing lucy-ng architecture through three layers:
 
-**Key architectural shift:** Supervisor logic dissolves from a separate agent (supervisor.md) into an orchestrator skill (case.md). Sub-command skills become the entry points, spawning worker agents with inlined skill content.
+1. **Database layer**: Extend existing HOSE statistics schema with hybridisation and bond partner columns
+2. **Statistics generation**: Extend existing `stats_generator.py` to compute additional aggregates during HOSE processing
+3. **CLI layer**: Add new `detect` command group following existing Click pattern
+4. **Agent integration**: CASE agent calls `lucy detect` CLI commands via Bash (same pattern as existing `lucy lsd rank`)
 
-**Integration challenge:** Context management. skill/SKILL.md (1,079 lines) + skill/CASE/SKILL.md (~300 lines) must be accessible to spawned agents. Solution: hybrid inlining (critical workflow inlined in Task() instructions, detailed reference via file paths).
+The architecture is additive, not invasive. Existing HOSE prediction infrastructure provides the foundation - statistical detection reuses the same database, the same HOSE code generator, and the same query patterns.
 
-**Build order:** Sub-command skills → agent definitions → orchestration logic → diagnostic integration → validation.
+## 1. CLI Command Structure
 
----
+### Current Pattern
 
-## Recommended Architecture
-
-### System Structure (v2.1)
-
-```
-~/.claude/commands/lucy-ng/          Sub-command skills (orchestrators)
-    ├── case.md                       CASE orchestrator (spawns agents, monitors, intervenes)
-    ├── sanitise.md                   AI-driven dataset sanitization
-    ├── dereplicate.md                Thin wrapper for CLI dereplication
-    ├── predict.md                    Thin wrapper for CLI prediction
-    └── status.md                     System status checks
-
-~/.claude/agents/                    Agent definitions (workers)
-    ├── lucy-case-agent.md            Autonomous CASE worker
-    └── lucy-diagnostic.md            LSD failure diagnosis specialist
-
-/project/skill/                      Domain knowledge (referenced by agents)
-    ├── SKILL.md                      Core NMR/CASE domain knowledge (1,079 lines)
-    ├── CASE/SKILL.md                 CASE workflow procedures
-    ├── supervisor/SKILL.md           Loop detection, intervention patterns (827 lines)
-    ├── diagnostic/SKILL.md           LSD manual, diagnostic procedures (1,874 lines)
-    ├── dereplicate/SKILL.md          Dereplication scoring rules
-    └── sanitize/SKILL.md             Dataset sanitization patterns
-
-/project/src/lucy_ng/cli/           Thin CLI commands (data access only)
-    ├── read.py                       Read NMR spectra
-    ├── pick.py                       Raw peak picking (no intelligence)
-    ├── analyze.py                    Raw symmetry data
-    ├── dereplicate.py                Database matching
-    ├── predict.py                    13C shift prediction
-    └── lsd.py                        LSD runner, solution ranking
-
-/project/CLAUDE.md                   Project-level CLI reference only (305 lines)
-```
-
-### Architectural Principles
-
-1. **Sub-command skills are orchestrators** — route requests, spawn agents, monitor progress, handle failures
-2. **Agents are autonomous workers** — receive inlined skill content + compound data, execute workflows, write progress files
-3. **Skill documents are referenced, not duplicated** — agents receive file paths to read OR critical sections inlined
-4. **CLI commands are thin data pipes** — all intelligence lives in skills/agents, not Python (validated in v2.0 Phase 26)
-5. **Progress files are the IPC mechanism** — CASE-PROGRESS.md and DIAGNOSTIC-REPORT.md enable orchestrator monitoring
-
----
-
-## Component Boundaries
-
-### Sub-Command Skills (Orchestrators)
-
-| Skill | Responsibility | Spawns Agents | Writes Files |
-|-------|---------------|---------------|--------------|
-| `case.md` | CASE orchestration, progress monitoring, loop detection, intervention | lucy-case-agent, lucy-diagnostic | None (reads CASE-PROGRESS.md, DIAGNOSTIC-REPORT.md) |
-| `sanitise.md` | AI-driven dataset sanitization (identify compound identifiers, remove/redact) | None (direct execution) | SANITIZATION-REPORT.md |
-| `dereplicate.md` | Thin wrapper: `lucy dereplicate c13 <path> <formula>` | None (direct CLI) | None |
-| `predict.md` | Thin wrapper: `lucy predict c13 <smiles>` | None (direct CLI) | None |
-| `status.md` | System checks: lucy version, LSD availability, database presence | None (direct CLI) | None |
-
-### Agent Definitions (Workers)
-
-| Agent | Responsibility | Reads | Writes | Spawned By |
-|-------|---------------|-------|--------|------------|
-| `lucy-case-agent.md` | Autonomous CASE: peak picking → LSD writing → solving → ranking | skill/SKILL.md, skill/CASE/SKILL.md (via inlined content + file paths), compound spectra | CASE-PROGRESS.md (after each iteration), LSD files | case.md orchestrator |
-| `lucy-diagnostic.md` | LSD failure diagnosis: systematic checks, root cause analysis, fix recommendations | skill/diagnostic/SKILL.md (via file path), CASE-PROGRESS.md, LSD files | DIAGNOSTIC-REPORT.md | case.md orchestrator |
-
-### Skill Documents (Domain Knowledge)
-
-| File | Lines | Purpose | Primary Consumer |
-|------|-------|---------|------------------|
-| skill/SKILL.md | 1,079 | Core NMR/CASE domain knowledge, peak picking, symmetry, LSD basics, HMBC strategy, ranking, confidence | lucy-case-agent (inlined excerpts + file path reference) |
-| skill/CASE/SKILL.md | ~300 | CASE workflow step-by-step, CASE-PROGRESS.md format | lucy-case-agent (inlined in Task() instructions) |
-| skill/supervisor/SKILL.md | 827 | Loop detection patterns, diagnostic procedures, intervention templates, convergence criteria | case.md orchestrator (read directly, not inlined) |
-| skill/diagnostic/SKILL.md | 1,874 | LSD command reference, systematic diagnostic procedures, report template | lucy-diagnostic agent (file path reference) |
-| skill/dereplicate/SKILL.md | ~100 | Dereplication scoring interpretation | dereplicate.md skill (read directly) |
-| skill/sanitize/SKILL.md | ~200 | Dataset sanitization patterns (compound name/SMILES removal) | sanitise.md skill (read directly) |
-
-**Note:** skill/ hierarchy is complete from v2.0. NO restructuring needed for v2.1.
-
-### Existing Python CLI (Thin Tools)
-
-**Status:** Complete from v2.0 Phase 26. All CLI commands are thin data-access wrappers with no embedded intelligence.
-
-| CLI Group | Intelligence Level | Changes for v2.1 |
-|-----------|-------------------|------------------|
-| `lucy read 1d/2d` | None (pure data access) | No change |
-| `lucy pick 1d/2d/hsqc/hmbc` | None (raw peaks above threshold) | No change |
-| `lucy analyze symmetry` | None (raw carbon counts, intensity data) | No change |
-| `lucy dereplicate c13` | Minimal (formula-indexed DB query, score calculation) | No change |
-| `lucy predict c13` | Minimal (HOSE lookup, statistics) | No change |
-| `lucy lsd run/rank` | None (LSD runner, 13C prediction for ranking) | No change |
-| `lucy visualize correlations` | None (diagram generation) | No change |
-| `lucy database info/download` | None (SQLite metadata, Figshare fetch) | No change |
-| `lucy fetch nmrxiv` | None (API wrapper) | No change |
-
-**Validation:** Phase 26-05 (Ibuprofen CASE) already validated that thin CLI + skill knowledge produces correct results.
-
----
-
-## Data Flow Patterns
-
-### Flow 1: Simple Sub-Commands (dereplicate, predict, status)
-
-```
-User invokes: /lucy-ng:dereplicate <path> C13H18O2
-
-┌─────────────────────────────────────┐
-│ ~/.claude/commands/lucy-ng/         │
-│ dereplicate.md                       │
-│ (orchestrator skill)                 │
-└──────────────┬──────────────────────┘
-               │
-               │ Bash: lucy dereplicate c13 <path> <formula> --format json
-               ▼
-┌─────────────────────────────────────┐
-│ src/lucy_ng/cli/dereplicate.py      │
-│ (thin CLI wrapper)                   │
-└──────────────┬──────────────────────┘
-               │
-               │ Query SQLite DB
-               ▼
-┌─────────────────────────────────────┐
-│ data/reference/lucy-ng-derep.db     │
-└──────────────┬──────────────────────┘
-               │
-               │ Return JSON: {is_match, top_matches, ...}
-               ▼
-┌─────────────────────────────────────┐
-│ dereplicate.md interprets results    │
-│ Uses skill/dereplicate/SKILL.md     │
-│ Reports to user                      │
-└─────────────────────────────────────┘
-```
-
-### Flow 2: CASE Orchestration (Multi-Agent)
-
-```
-User invokes: /lucy-ng:case <compound_path> C13H18O2
-
-┌──────────────────────────────────────────────────────────────────┐
-│ ~/.claude/commands/lucy-ng/case.md                                │
-│ (orchestrator skill)                                               │
-│ - Reads skill/supervisor/SKILL.md for loop detection patterns     │
-│ - Prepares inlined content:                                        │
-│   • NMR background (skill/SKILL.md Section 1)                     │
-│   • CASE workflow (skill/CASE/SKILL.md)                           │
-│   • LSD command syntax (skill/diagnostic/SKILL.md Section 1)      │
-│   • CASE-PROGRESS.md format (skill/supervisor/SKILL.md Section 7) │
-│ - Prepares file path references for detailed domain knowledge     │
-│ - Provides compound context (path, formula, experiments)          │
-└──────────────┬───────────────────────────────────────────────────┘
-               │
-               │ Task(instructions=<inlined content + file paths + compound context>)
-               ▼
-┌──────────────────────────────────────────────────────────────────┐
-│ ~/.claude/agents/lucy-case-agent.md                               │
-│ (autonomous CASE worker)                                           │
-│ - Receives inlined skill content in Task() instructions           │
-│ - Reads detailed reference via file paths (skill/SKILL.md full)   │
-│ - Reads compound spectra via: lucy read 1d/2d, lucy pick ...      │
-│ - Applies domain intelligence from skill content                  │
-│ - Writes LSD files directly using LSD command knowledge           │
-│ - Runs LSD: lucy lsd run <file>.lsd --format json                 │
-│ - Ranks solutions: lucy lsd rank <solutions>.smi --spectrum ...   │
-│ - Writes CASE-PROGRESS.md after each LSD iteration                │
-└──────────────┬───────────────────────────────────────────────────┘
-               │
-               │ CASE-PROGRESS.md written (append-only)
-               │ Contains: iteration N, solution count, constraints added/removed,
-               │ effectiveness, confidence, sp2/H budget checks
-               │
-               ▼
-┌──────────────────────────────────────────────────────────────────┐
-│ case.md reads CASE-PROGRESS.md                                    │
-│ Parses iterations to detect loop patterns:                        │
-│ - ELIM thrashing (ELIM added 2+ times without diagnosis)          │
-│ - Zero-solution loop (3+ consecutive 0 solutions)                 │
-│ - Solution explosion (3+ iterations >100 solutions, <10% reduction)│
-│ - Constraint churning (5+ iterations high add/remove, no converge)│
-└──────────────┬───────────────────────────────────────────────────┘
-               │
-               ├─ NO LOOP DETECTED → Allow CASE agent to continue
-               │
-               └─ LOOP DETECTED → Diagnose root cause
-                                   │
-                                   ├─ Basic diagnosis sufficient?
-                                   │  YES → Formulate advisory constraints
-                                   │        Re-spawn CASE agent with advice
-                                   │        Increment intervention_counts[pattern]
-                                   │        If counts[pattern] >= 10: escalate to user
-                                   │
-                                   └─ Need deep LSD analysis?
-                                      (After 2+ failed interventions with same pattern)
-                                      │
-                                      ▼
-                  ┌───────────────────────────────────────────────────────┐
-                  │ Task(agent_type="lucy-diagnostic")                     │
-                  │ - Pass: compound path, LSD file, failure type          │
-                  │ - Provide file path: skill/diagnostic/SKILL.md         │
-                  │ - Diagnostic runs systematic checks:                   │
-                  │   • sp2 count (must be even)                           │
-                  │   • H budget (must match formula)                      │
-                  │   • 1J artifacts (HMBC vs HSQC position check)         │
-                  │   • Correlation order (HSQC before HMBC)               │
-                  │   • Close carbon ambiguity (digital resolution)        │
-                  │ - Identifies root cause with quantitative evidence     │
-                  │ - Writes DIAGNOSTIC-REPORT.md                          │
-                  └───────────────┬───────────────────────────────────────┘
-                                  │
-                                  │ DIAGNOSTIC-REPORT.md written
-                                  │ Contains: findings, root cause, recommended fixes
-                                  │ (with LSD command examples), confidence ratings
-                                  │
-                                  ▼
-                  ┌───────────────────────────────────────────────────────┐
-                  │ case.md reads DIAGNOSTIC-REPORT.md                     │
-                  │ Extracts:                                              │
-                  │ - Root cause (primary + contributing factors)          │
-                  │ - Primary fix (specific LSD commands + verification)   │
-                  │ Formulates diagnostic-informed advisory:               │
-                  │ - Reference report for full analysis                   │
-                  │ - Include specific fix action with commands            │
-                  │ - Include verification steps                           │
-                  │ Re-spawns CASE agent with diagnostic-informed advice   │
-                  └───────────────────────────────────────────────────────┘
-```
-
-### Flow 3: AI-Driven Sanitization
-
-```
-User invokes: /lucy-ng:sanitise <dataset_path>
-
-┌──────────────────────────────────────────────────────────────────┐
-│ ~/.claude/commands/lucy-ng/sanitise.md                            │
-│ (AI-driven skill, no CLI equivalent)                              │
-│ - Reads skill/sanitize/SKILL.md for patterns                      │
-│ - Reads dataset metadata files (nmr_parameters.json, etc.)        │
-│ - Applies pattern matching:                                       │
-│   • Compound names (e.g., "Ibuprofen", "Caffeine")               │
-│   • SMILES strings (alphanumeric with brackets, @ signs)          │
-│   • InChI strings ("InChI=...")                                   │
-│   • Database IDs ("COCONUT_123456")                               │
-│ - Redacts/removes identified content                              │
-│ - Writes SANITIZATION-REPORT.md (redaction summary)               │
-│ - Reports to user                                                  │
-└──────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Integration Points with Existing Components
-
-### 1. Skill Documents (skill/*)
-
-**Current state (v2.0):**
-- skill/SKILL.md (1,079 lines) — core NMR/CASE knowledge
-- skill/supervisor/SKILL.md (827 lines) — loop detection, intervention
-- skill/diagnostic/SKILL.md (1,874 lines) — LSD manual, diagnostics
-- skill/CASE/SKILL.md (~300 lines) — CASE workflow
-- skill/dereplicate/SKILL.md, skill/sanitize/SKILL.md — specialized
-
-**Integration approach for v2.1:**
-- **NO restructuring needed** — existing hierarchy already supports sub-command pattern
-- Sub-command skills REFERENCE these documents (file paths or inlined content)
-- Agent definitions receive critical sections inlined in Task() instructions
-
-**Inlining strategy (for case.md → lucy-case-agent):**
+lucy-ng uses Click multi-level command groups. Main entry point at `src/lucy_ng/cli/main.py`:
 
 ```python
-# Conceptual structure (case.md orchestrator)
+@click.group()
+def cli() -> None:
+    """lucy-ng: AI-powered Computer-Assisted Structure Elucidation."""
+    pass
 
-inlined_content = f"""
-=== NMR Background (skill/SKILL.md Section 1) ===
-{read_section('skill/SKILL.md', section=1, subsections=['Experiment Types', '13C Shift Regions', 'Common Pitfalls'])}
+# Command groups registered
+cli.add_command(read)
+cli.add_command(pick)
+cli.add_command(analyze)
+cli.add_command(dereplicate)
+cli.add_command(predict)
+cli.add_command(lsd)
+cli.add_command(visualize)
+cli.add_command(fetch)
+cli.add_command(database)
+```
 
-=== CASE Workflow (skill/CASE/SKILL.md) ===
-{read_file('skill/CASE/SKILL.md')}  # ~300 lines, full inline
+Each command group is a separate module in `src/lucy_ng/cli/`:
+- `read.py` - Read NMR spectra
+- `pick.py` - Peak picking
+- `analyze.py` - Analysis tools (symmetry detection)
+- `dereplicate.py` - Database matching
+- `predict.py` - 13C shift prediction
+- `lsd.py` - LSD structure elucidation
+- `visualize.py` - Correlation diagrams
+- `fetch.py` - Fetch external data
+- `database.py` - Database management
 
-=== LSD Command Syntax (skill/diagnostic/SKILL.md Section 1 excerpt) ===
-{read_section('skill/diagnostic/SKILL.md', section=1, commands=['MULT', 'HSQC', 'HMBC', 'BOND', 'LIST'])}
+### Integration Point: New `detect.py` Module
 
-=== CASE-PROGRESS.md Format (skill/supervisor/SKILL.md Section 7) ===
-{read_section('skill/supervisor/SKILL.md', section=7)}
-"""
+**File:** `src/lucy_ng/cli/detect.py`
 
-file_path_references = f"""
-For detailed domain knowledge, read:
-- {project_path}/skill/SKILL.md (Sections 2-11: peak picking, symmetry, HMBC strategy, ranking, confidence)
-- {project_path}/skill/diagnostic/SKILL.md (full LSD manual with all commands)
-"""
+**Commands:**
+```bash
+lucy detect hybridisation <db_path> <shift>
+lucy detect quaternary <db_path> <shift>
+lucy detect bond-partners <db_path> <shift> <hose_code>
+```
 
-compound_context = f"""
-Compound path: {compound_path}
-Formula: {formula}
-Available experiments: {auto_detected_experiments}
-"""
+**Pattern to follow:**
 
-Task(
-  instructions=f"{inlined_content}\n\n{file_path_references}\n\n{compound_context}\n\nPerform CASE workflow. Write CASE-PROGRESS.md after EVERY LSD iteration."
-)
+```python
+import click
+from lucy_ng.detection import StatisticalDetector
+
+@click.group()
+def detect() -> None:
+    """Statistical detection from HOSE database."""
+    pass
+
+@detect.command("hybridisation")
+@click.argument("db_path", type=click.Path(exists=True))
+@click.argument("shift", type=float)
+@click.option("--format", type=click.Choice(["text", "json"]), default="text")
+def detect_hybridisation(db_path: str, shift: float, format: str) -> None:
+    """Detect hybridisation state from chemical shift statistics."""
+    detector = StatisticalDetector.from_database(db_path)
+    result = detector.detect_hybridisation(shift)
+
+    if format == "json":
+        click.echo(result.to_json())
+    else:
+        click.echo(result.summary())
+```
+
+**Registration:** Add to `main.py`:
+```python
+from lucy_ng.cli.detect import detect
+cli.add_command(detect)
+```
+
+**Confidence:** HIGH - pattern is well-established, straightforward to replicate.
+
+## 2. Database Layer Integration
+
+### Current Schema
+
+Database schema defined in `src/lucy_ng/database/schema.py`:
+
+```sql
+-- Existing compounds table (928K compounds)
+CREATE TABLE compounds (
+    id INTEGER PRIMARY KEY,
+    name TEXT, smiles TEXT, formula TEXT,
+    inchi TEXT, inchi_key TEXT,
+    carbon_count INTEGER, source TEXT
+);
+
+-- Existing shifts table (13C NMR data)
+CREATE TABLE shifts (
+    id INTEGER PRIMARY KEY,
+    compound_id INTEGER,
+    atom_index INTEGER,
+    shift_ppm REAL,
+    hydrogen_count INTEGER
+);
+
+-- Existing HOSE statistics table (7.9M entries)
+CREATE TABLE hose_stats (
+    hose_code TEXT NOT NULL,
+    radius INTEGER NOT NULL,
+    mean REAL NOT NULL,
+    std REAL NOT NULL,
+    count INTEGER NOT NULL,
+    m2 REAL NOT NULL,  -- For Welford's algorithm
+    PRIMARY KEY (hose_code, radius)
+);
+```
+
+### Extended Schema for Statistical Detection
+
+**Option A: Extend hose_stats table (RECOMMENDED)**
+
+Add columns to existing `hose_stats` table:
+
+```sql
+ALTER TABLE hose_stats ADD COLUMN sp2_fraction REAL DEFAULT NULL;
+ALTER TABLE hose_stats ADD COLUMN sp3_fraction REAL DEFAULT NULL;
+ALTER TABLE hose_stats ADD COLUMN quat_fraction REAL DEFAULT NULL;
+ALTER TABLE hose_stats ADD COLUMN common_partners TEXT DEFAULT NULL;
 ```
 
 **Rationale:**
-- Critical workflow content (~500-700 lines) inlined for immediate access
-- Detailed reference material (peak picking strategies, full LSD manual) via file paths
-- Agent can Read tool to access full documents when needed
-- Balances context window limits with completeness
+- Statistics are HOSE-code specific, not compound-specific
+- Computed during same pass as mean/std/count
+- Same query pattern (lookup by hose_code + radius)
+- No schema version bump needed (columns have defaults)
 
-### 2. Agent Definitions (.claude/agents/)
+**Option B: Separate detection_stats table**
 
-**Current state (v2.0):**
-- supervisor.md (484 lines) — monolithic supervisor, spawns CASE agent generically
-- diagnostic-specialist.md (455 lines) — LSD diagnostics
-
-**Changes needed for v2.1:**
-
-| File | Action | Rationale |
-|------|--------|-----------|
-| supervisor.md | **DELETE** | Supervisor logic dissolves into case.md orchestrator skill |
-| diagnostic-specialist.md | **RENAME** to lucy-diagnostic.md, **UPDATE** frontmatter | Keep logic, update to be spawned by case.md (change agent_type reference) |
-| lucy-case-agent.md | **CREATE** | New autonomous CASE worker definition |
-
-**New agent frontmatter:**
-
-```yaml
-# ~/.claude/agents/lucy-case-agent.md
----
-name: lucy-case-agent
-description: >
-  Autonomous CASE worker. Performs complete structure elucidation workflow:
-  peak picking, symmetry analysis, LSD file writing, solving, ranking.
-  Writes CASE-PROGRESS.md after each LSD iteration for orchestrator monitoring.
-tools:
-  - Read
-  - Write
-  - Bash
-  - Glob
-  - Grep
-model: sonnet
----
+```sql
+CREATE TABLE detection_stats (
+    hose_code TEXT NOT NULL,
+    radius INTEGER NOT NULL,
+    sp2_fraction REAL NOT NULL,
+    sp3_fraction REAL NOT NULL,
+    quat_fraction REAL NOT NULL,
+    common_partners TEXT,  -- JSON array
+    PRIMARY KEY (hose_code, radius),
+    FOREIGN KEY (hose_code, radius) REFERENCES hose_stats(hose_code, radius)
+);
 ```
 
-```yaml
-# ~/.claude/agents/lucy-diagnostic.md (updated from diagnostic-specialist.md)
----
-name: lucy-diagnostic
-description: >
-  LSD failure diagnostic specialist. Systematic root cause analysis for
-  zero-solution and solution-explosion failures. Produces structured
-  diagnostic reports with findings, root cause, and recommended fixes.
-tools:
-  - Read
-  - Bash
-model: sonnet
----
-```
+**Tradeoff:**
+- Pro: Cleaner separation, easier to add/remove
+- Con: Requires JOIN for queries, more complex schema management
 
-**Key difference from v2.0:**
-- v2.0: supervisor.md was a separate agent that spawned CASE agent
-- v2.1: case.md skill IS the orchestrator (reads supervisor/SKILL.md for rules), spawns lucy-case-agent
-- Supervisor logic is now in the skill, not a separate agent definition
+**Recommendation:** Option A (extend hose_stats). The data is conceptually part of HOSE statistics, computed at the same time, queried together. Extending the table is simpler.
 
-### 3. CLAUDE.md (Project Instructions)
+**Confidence:** HIGH - schema extension is straightforward, pattern exists (m2 column was added in schema v3).
 
-**Current state (v2.0):**
-- 305 lines, CLI-only reference
-- No MCP content (removed in Phase 26)
-- Thin CLI command syntax and output formats
-- References skill/SKILL.md for domain knowledge
+### Database Manager Methods
 
-**Changes needed for v2.1:**
-- **Add section:** "Sub-Command Skills" with table of `/lucy-ng:*` commands
-- **Update:** Entry point is now `/lucy-ng:case` for CASE workflows (not direct supervisor invocation)
-- **NO other changes** — CLAUDE.md remains project-level CLI reference
+**File:** `src/lucy_ng/database/manager.py`
 
-**New section to add:**
-
-```markdown
-## Sub-Command Skills
-
-lucy-ng provides specialized sub-commands for different workflows:
-
-| Command | Purpose | Agent Spawning |
-|---------|---------|----------------|
-| /lucy-ng:case | Full CASE orchestration | Spawns lucy-case-agent, monitors progress, spawns lucy-diagnostic if needed |
-| /lucy-ng:sanitise | AI-driven dataset sanitization | Direct execution (no agent spawning) |
-| /lucy-ng:dereplicate | Database matching only | Direct CLI execution |
-| /lucy-ng:predict | 13C shift prediction only | Direct CLI execution |
-| /lucy-ng:status | System status checks | Direct CLI execution |
-
-For CASE workflow: Use `/lucy-ng:case <compound_path> <formula>`. The orchestrator handles agent spawning, progress monitoring, loop detection, and intervention automatically.
-```
-
-### 4. CLI Commands (src/lucy_ng/cli/)
-
-**Current state (v2.0 Phase 26):**
-- 9 command groups, 22 commands
-- All commands are thin data-access wrappers
-- No embedded intelligence (DEPT-guided picking removed, HMBC cross-validation removed, LSD generator removed)
-- Validated on Ibuprofen CASE (Phase 26-05)
-
-**Changes needed for v2.1:**
-- **NONE** — CLI is complete and thin as required
-- v2.1 focuses on orchestration layer (skills + agents), not tool layer
-
-**Architecture validation:**
-- Phase 26-05 proved thin CLI + skill knowledge works (Ibuprofen correctly identified top-3)
-- v2.1 builds on this validated foundation
-
-### 5. Codebase Structure
-
-**Current state (v2.0):**
-```
-src/lucy_ng/
-├── models/          # Pydantic v2 data models (Spectrum1D, Spectrum2D, Peak1D, etc.)
-├── readers/         # NMR file readers (BrukerReader)
-├── processing/      # Peak picking, signal processing (thin, no DEPT guidance)
-├── dereplication/   # Database matching (SpectrumMatcher, formula-indexed)
-├── prediction/      # HOSE-based 13C prediction (C13Predictor)
-├── solvers/         # LSD runner, solution parsing
-├── database/        # SQLite schema, query API, DatabaseFinder
-└── cli/             # Click CLI (thin wrappers, 9 groups, 22 commands)
-```
-
-**Changes needed for v2.1:**
-- **NONE** — Code structure is stable post-Phase 26
-
-**Integration stability:**
-- Python codebase is mature (17,500 lines, 642 tests)
-- All tests pass (verified in Phase 26)
-- v2.1 is purely additive (orchestration layer on top)
-
----
-
-## New Components Needed
-
-### 1. Sub-Command Skills (5 files)
-
-| File | Lines (Est.) | Content | Dependencies |
-|------|--------------|---------|--------------|
-| ~/.claude/commands/lucy-ng/case.md | ~400 | CASE orchestration: agent spawning with inlined content, progress monitoring (read CASE-PROGRESS.md), loop detection (4 patterns), basic diagnosis, intervention logic, diagnostic specialist spawning (after 2 failed interventions), escalation (after 10 cycles per pattern) | skill/SKILL.md, skill/CASE/SKILL.md, skill/supervisor/SKILL.md, skill/diagnostic/SKILL.md |
-| ~/.claude/commands/lucy-ng/sanitise.md | ~200 | AI-driven sanitization: pattern matching for compound identifiers (names, SMILES, InChI, IDs), redaction logic, SANITIZATION-REPORT.md writing | skill/sanitize/SKILL.md |
-| ~/.claude/commands/lucy-ng/dereplicate.md | ~100 | Thin wrapper: CLI execution (`lucy dereplicate c13 <path> <formula>`), JSON parsing, score interpretation (>= 0.95 match, 0.85-0.95 possible, < 0.65 no match), user reporting | skill/dereplicate/SKILL.md |
-| ~/.claude/commands/lucy-ng/predict.md | ~80 | Thin wrapper: CLI execution (`lucy predict c13 <smiles>`), JSON parsing, result interpretation (MAE, prediction quality), user reporting | skill/SKILL.md Section 8 (ranking/prediction) |
-| ~/.claude/commands/lucy-ng/status.md | ~60 | System checks: `lucy --version`, `lucy lsd check`, `lucy database info`, report availability, suggest setup steps if missing | CLAUDE.md (setup instructions) |
-
-**Total:** ~840 lines of new orchestration logic
-
-**Critical file:** case.md (~400 lines) is the most complex, containing loop detection, diagnostic delegation, and intervention tracking.
-
-### 2. Agent Definition (1 new file)
-
-| File | Lines (Est.) | Content | Dependencies |
-|------|--------------|---------|--------------|
-| ~/.claude/agents/lucy-case-agent.md | ~600 | Autonomous CASE worker: frontmatter (name, description, tools, model), instructions (receive inlined skill content in Task(), read reference files, perform CASE workflow, write CASE-PROGRESS.md checkpoints), workflow guidance (peak picking → symmetry → LSD writing → solving → ranking), error handling, convergence criteria | Inlined from skill/SKILL.md + skill/CASE/SKILL.md in Task() instructions |
-
-**Note:** lucy-diagnostic.md already exists as diagnostic-specialist.md (455 lines). Rename and update frontmatter (~50 line change, primarily changing `agent_type` reference and description).
-
-### 3. Progress File Formats (Already Specified in v2.0)
-
-| File | Written By | Read By | Format Spec Location |
-|------|-----------|---------|---------------------|
-| CASE-PROGRESS.md | lucy-case-agent | case.md orchestrator | skill/supervisor/SKILL.md Section 7 |
-| DIAGNOSTIC-REPORT.md | lucy-diagnostic | case.md orchestrator | skill/diagnostic/SKILL.md Section 3 |
-| SANITIZATION-REPORT.md | sanitise.md skill | User (documentation) | skill/sanitize/SKILL.md (to be created in v2.1) |
-
-**No new format design needed** — CASE-PROGRESS.md and DIAGNOSTIC-REPORT.md formats already fully specified in v2.0 Phases 24-25.
-
----
-
-## Context Management Strategy
-
-### Problem: Skill Content Size
-
-| Document | Lines | Full Inline Feasible? |
-|----------|-------|-----------------------|
-| skill/SKILL.md | 1,079 | NO — too large |
-| skill/CASE/SKILL.md | ~300 | YES — workflow is critical |
-| skill/supervisor/SKILL.md | 827 | NO — but case.md reads it directly (not passed to agent) |
-| skill/diagnostic/SKILL.md | 1,874 | NO — but diagnostic agent reads via file path |
-
-### Solution: Hybrid Inlining Strategy
-
-**For CASE agent spawning (case.md → lucy-case-agent):**
-
-**Inline (~500-700 lines):**
-1. **NMR background** (skill/SKILL.md Section 1): Experiment types, 13C shift regions, common pitfalls (~150 lines)
-2. **CASE workflow** (skill/CASE/SKILL.md): Full step-by-step procedure (~300 lines)
-3. **LSD command syntax** (skill/diagnostic/SKILL.md Section 1 excerpt): MULT, HSQC, HMBC, BOND, LIST syntax (~100 lines)
-4. **CASE-PROGRESS.md format** (skill/supervisor/SKILL.md Section 7): Template with required fields, example (~50 lines)
-
-**Provide file paths for reference:**
-- {project_path}/skill/SKILL.md — for detailed domain knowledge (Sections 2-11: peak picking, symmetry, HMBC strategy, ranking, confidence)
-- {project_path}/skill/diagnostic/SKILL.md — for full LSD manual if needed during LSD writing
-
-**Provide compound context:**
-- Compound path: {compound_path}
-- Formula: {formula}
-- Available experiments: [auto-detected list from `lucy read`]
-
-**For diagnostic agent spawning (case.md → lucy-diagnostic):**
-
-**Inline (~100 lines):**
-1. **Failure context**: Failure type (0 solutions, 1000+ solutions), latest iteration summary from CASE-PROGRESS.md
-2. **Diagnostic task**: Instructions for systematic checks, report writing
-
-**Provide file paths:**
-- {compound_path}/CASE-PROGRESS.md — iteration history
-- {compound_path}/{lsd_file} — LSD file to diagnose
-- {project_path}/skill/diagnostic/SKILL.md — full LSD manual and diagnostic procedures
-
-**Rationale:**
-- Task() instructions have practical size limits (~2000 lines max for readability)
-- Critical workflow content must be inlined (agent can't assume project context loaded)
-- Detailed reference material can be read by agent via Read tool (agents have Read in their tool list)
-- Absolute file paths resolve context ambiguity
-
-### Agent Context Loading Pattern (Pseudocode)
+Current pattern for HOSE stats queries:
 
 ```python
-# In case.md orchestrator skill
-
-def spawn_case_agent(compound_path, formula):
-    # 1. Prepare inlined content (critical workflow)
-    inlined_content = (
-        "=== NMR Background ===\n"
-        + read_section('skill/SKILL.md', section=1)
-        + "\n\n=== CASE Workflow ===\n"
-        + read_file('skill/CASE/SKILL.md')
-        + "\n\n=== LSD Command Syntax ===\n"
-        + read_section('skill/diagnostic/SKILL.md', section=1, excerpt=True)
-        + "\n\n=== CASE-PROGRESS.md Format ===\n"
-        + read_section('skill/supervisor/SKILL.md', section=7)
+def get_hose_stats(self, hose_code: str, radius: int) -> HOSEStatsRecord | None:
+    """Get statistics for a specific HOSE code at a given radius."""
+    cursor.execute(
+        """
+        SELECT hose_code, radius, mean, std, count
+        FROM hose_stats WHERE hose_code = ? AND radius = ?
+        """,
+        (hose_code, radius),
     )
+    # Returns HOSEStatsRecord
+```
 
-    # 2. Prepare reference paths
-    project_path = os.getcwd()
-    references = f"""
-For detailed domain knowledge, read:
-- {project_path}/skill/SKILL.md (Sections 2-11)
-- {project_path}/skill/diagnostic/SKILL.md (full LSD manual)
-"""
+**Extended query for detection:**
 
-    # 3. Prepare compound context
-    experiments = auto_detect_experiments(compound_path)
-    compound_context = f"""
-Compound path: {compound_path}
-Formula: {formula}
-Available experiments: {experiments}
-"""
+```python
+def get_detection_stats(self, hose_code: str, radius: int) -> DetectionStatsRecord | None:
+    """Get detection statistics for a HOSE code at a given radius."""
+    cursor.execute(
+        """
+        SELECT hose_code, radius, mean, std, count,
+               sp2_fraction, sp3_fraction, quat_fraction, common_partners
+        FROM hose_stats WHERE hose_code = ? AND radius = ?
+        """,
+        (hose_code, radius),
+    )
+    # Returns DetectionStatsRecord with full detection info
+```
 
-    # 4. Spawn agent
-    Task(
-        instructions=(
-            f"{inlined_content}\n\n"
-            f"{references}\n\n"
-            f"{compound_context}\n\n"
-            "Perform CASE workflow. Write CASE-PROGRESS.md after EVERY LSD iteration. Stop when solution count <= 10 or after ~20 iterations."
-        )
+**Confidence:** HIGH - follows existing pattern exactly.
+
+## 3. HOSE Statistics Generation Pipeline
+
+### Current Pipeline
+
+**File:** `src/lucy_ng/prediction/stats_generator.py`
+
+Three generator classes:
+1. **HOSEStatsGenerator** - In-memory batch processing (original)
+2. **ResumableHOSEStatsGenerator** - Checkpointed chunked processing (production)
+3. **SDFHOSEStatsGenerator** - Direct SDF processing (COCONUT import)
+
+**Core algorithm (simplified):**
+
+```python
+for compound_id, smiles, shifts in db.iter_compounds_with_shifts():
+    mol = Chem.MolFromSmiles(smiles)
+
+    for atom_idx, shift_ppm in shifts:
+        for radius in range(1, max_radius + 1):
+            hose_code = hose_gen.generate_for_atom(mol, atom_idx, radius)
+
+            # Accumulate shift for statistics
+            aggregates[(hose_code, radius)].append(shift_ppm)
+
+# Compute statistics
+for (hose_code, radius), shifts in aggregates.items():
+    mean = statistics.mean(shifts)
+    std = statistics.stdev(shifts)
+    count = len(shifts)
+
+    db.insert_hose_stats(hose_code, radius, mean, std, count)
+```
+
+**Uses Welford's online algorithm** for memory efficiency in `ResumableHOSEStatsGenerator`:
+- O(1) memory per HOSE code
+- Incremental updates (chunk by chunk)
+- Parallel merge support
+
+### Extended Pipeline for Detection Statistics
+
+**Integration point:** Extend the accumulation phase to track hybridisation and bond partners.
+
+**Proposed structure:**
+
+```python
+from collections import defaultdict
+from lucy_ng.prediction.hose import HOSECodeGenerator
+
+class DetectionStatsAccumulator:
+    """Track hybridisation and bond partner statistics for a HOSE code."""
+
+    def __init__(self):
+        self.shifts = []
+        self.sp2_count = 0
+        self.sp3_count = 0
+        self.quat_count = 0
+        self.partner_symbols = defaultdict(int)  # {'C': 15, 'O': 3, 'N': 1}
+
+    def update(self, shift_ppm, atom, mol):
+        self.shifts.append(shift_ppm)
+
+        # Determine hybridisation
+        if atom.GetHybridization() == Chem.HybridizationType.SP2:
+            self.sp2_count += 1
+        elif atom.GetHybridization() == Chem.HybridizationType.SP3:
+            self.sp3_count += 1
+
+        # Quaternary check
+        if atom.GetTotalNumHs() == 0:
+            self.quat_count += 1
+
+        # Bond partners
+        for neighbor in atom.GetNeighbors():
+            self.partner_symbols[neighbor.GetSymbol()] += 1
+
+    def compute_stats(self):
+        total = len(self.shifts)
+        return {
+            'sp2_fraction': self.sp2_count / total if total > 0 else 0.0,
+            'sp3_fraction': self.sp3_count / total if total > 0 else 0.0,
+            'quat_fraction': self.quat_count / total if total > 0 else 0.0,
+            'common_partners': dict(self.partner_symbols)
+        }
+```
+
+**Modified generation loop:**
+
+```python
+accumulators = defaultdict(DetectionStatsAccumulator)
+
+for compound_id, smiles, shifts in db.iter_compounds_with_shifts():
+    mol = Chem.MolFromSmiles(smiles)
+
+    for atom_idx, shift_ppm in shifts:
+        atom = mol.GetAtomWithIdx(atom_idx)
+
+        for radius in range(1, max_radius + 1):
+            hose_code = hose_gen.generate_for_atom(mol, atom_idx, radius)
+
+            # Accumulate with detection info
+            accumulators[(hose_code, radius)].update(shift_ppm, atom, mol)
+
+# Compute statistics
+for (hose_code, radius), acc in accumulators.items():
+    stats = acc.compute_stats()
+    mean = statistics.mean(acc.shifts)
+    std = statistics.stdev(acc.shifts)
+
+    db.insert_hose_stats(
+        hose_code, radius, mean, std, len(acc.shifts),
+        sp2_fraction=stats['sp2_fraction'],
+        sp3_fraction=stats['sp3_fraction'],
+        quat_fraction=stats['quat_fraction'],
+        common_partners=json.dumps(stats['common_partners'])
     )
 ```
 
----
+**For ResumableHOSEStatsGenerator:** Modify `WelfordAccumulator` dataclass to include detection counters:
 
-## Inter-Agent Communication
-
-### CASE-PROGRESS.md (CASE Agent → Orchestrator)
-
-**Purpose:** Enable orchestrator to monitor progress and detect loop patterns
-
-**Format:** Append-only markdown with structured sections (human-readable, AI-parseable)
-
-**Location:** {compound_path}/CASE-PROGRESS.md
-
-**Written by:** lucy-case-agent after EVERY LSD iteration
-
-**Read by:** case.md orchestrator
-
-**Required fields per iteration:**
-- Iteration N: brief description
-- Time: timestamp
-- LSD file: filename
-- Solution count: number
-- Constraints added: list with reasoning
-- Constraints removed: list with reasoning (or "None")
-- Why: natural language explanation of strategy
-- Constraint effectiveness: % reduction or "baseline" or "over-constrained"
-- Confidence: qualitative assessment (too many solutions / converging / stuck)
-- HMBC correlations used: X/Y (running total)
-- Notes: sp2 count (even/odd), H budget (matches/mismatch), observations
-
-**Format specification:** skill/supervisor/SKILL.md Section 7 (complete with 3-iteration example)
-
-**Example iteration:**
-```markdown
-## Iteration 3: Add quaternary carbon HMBC batch
-
-**Time:** 2026-02-08 10:45:23
-**LSD file:** ibuprofen-03.lsd
-**Solution count:** 47
-
-**Constraints added:**
-- HMBC 1 8 (C172.4 to H7.2, quaternary carboxyl)
-- HMBC 5 4 (C138.8 to H1.2, quaternary aromatic)
-- HMBC 9 3 (C155.2 to H2.1, quaternary aromatic)
-
-**Constraints removed:** None
-
-**Why:** Target quaternary carbons to reduce solution space. Selected high-confidence correlations with unique proton assignments and strong intensities.
-
-**Constraint effectiveness:** 96% reduction (1234 → 47 solutions)
-**Confidence:** Converging, expect single-digit solutions after next batch
-**HMBC correlations used:** 12/47
-
-**Notes:**
-- sp2 count: 8 (even) ✓
-- H budget: 18 matches formula ✓
-- All quaternary carbons now have at least 1 HMBC
-```
-
-### DIAGNOSTIC-REPORT.md (Diagnostic Agent → Orchestrator)
-
-**Purpose:** Provide deep LSD failure analysis with root cause and fixes
-
-**Format:** Structured markdown with sections (findings, root cause, fixes)
-
-**Location:** {compound_path}/DIAGNOSTIC-REPORT.md
-
-**Written by:** lucy-diagnostic agent when spawned for complex failures
-
-**Read by:** case.md orchestrator (extracts root cause and primary fix)
-
-**Required sections:**
-1. **Summary** (executive overview, root cause one-liner, confidence)
-2. **Findings** (2-5 findings with evidence, impact, confidence)
-3. **Root Cause** (primary + contributing factors, mechanism explanation)
-4. **Recommended Fixes** (1-3 fixes with LSD command examples, verification, priority, confidence)
-5. **Supporting Data** (LSD file stats, iteration history, spectral quality)
-6. **Next Steps** (immediate action, verification, follow-up)
-7. **Diagnostic Methodology** (all systematic checks with PASS/FAIL)
-8. **Metadata** (confidence breakdown)
-
-**Format specification:** skill/diagnostic/SKILL.md Section 3 (complete template with examples)
-
-**Orchestrator extraction pattern:**
 ```python
-# In case.md orchestrator
-
-def extract_diagnostic_guidance(report_path):
-    report = read_file(report_path)
-
-    # Extract root cause section
-    root_cause = extract_section(report, "## Root Cause")
-
-    # Extract primary fix
-    fixes_section = extract_section(report, "## Recommended Fixes")
-    primary_fix = [f for f in parse_fixes(fixes_section) if "PRIMARY" in f][0]
-
-    # Format advisory for CASE agent
-    advisory = f"""
-DIAGNOSTIC GUIDANCE:
-
-{root_cause}
-
-{primary_fix}
-
-See {report_path} for full analysis.
-"""
-
-    return advisory
+@dataclass
+class WelfordAccumulator:
+    count: int = 0
+    mean: float = 0.0
+    m2: float = 0.0
+    # NEW: detection statistics
+    sp2_count: int = 0
+    sp3_count: int = 0
+    quat_count: int = 0
+    partner_counts: dict = field(default_factory=dict)  # {'C': 15, 'O': 3}
 ```
 
-### SANITIZATION-REPORT.md (Sanitize Skill → User)
+**Confidence:** MEDIUM - Extension is conceptually straightforward but requires:
+- RDKit atom API familiarity (GetHybridization, GetTotalNumHs, GetNeighbors)
+- Testing with actual COCONUT data to verify hybridisation detection accuracy
+- Merge algorithm for Welford parallel processing (straightforward for counters)
 
-**Purpose:** Document all redactions for dataset sanitization
+## 4. Agent Integration Pattern
 
-**Format:** Structured markdown with redaction summary
+### Current Agent Architecture
 
-**Location:** {dataset_path}/SANITIZATION-REPORT.md
+**CASE agent:** `~/.claude/agents/lucy-case-agent.md` (666 lines)
 
-**Written by:** sanitise.md skill
+**Agent spawning:** Claude Code Task tool with working directory set to compound directory
 
-**Read by:** User (for documentation and validation)
+**CLI usage pattern:** Agent calls `lucy` commands via Bash tool:
 
-**Required sections:**
-1. **Summary** (files processed, identifiers removed, changes made)
-2. **Redactions** (list of all redacted content with file:line references)
-3. **Verification** (steps to confirm sanitization complete)
+```bash
+# Symmetry analysis
+lucy analyze symmetry C13H18O2 data/compound/2
 
-**Format specification:** skill/sanitize/SKILL.md (to be created in v2.1)
+# Peak picking
+lucy pick 1d data/compound/2 --format json
+lucy pick hsqc data/compound/6 --format json
 
----
+# LSD workflow
+cd analysis/iteration_01 && lucy lsd run compound.lsd
+outlsd 5 < compound.sol > solutions.smi
+lucy lsd rank solutions.smi --shifts "155.08,151.58,..."
+```
 
-## Patterns to Follow
+**Key pattern:** Agent uses thin CLI commands, all domain knowledge is encoded in agent definition (inlined NMR/LSD knowledge).
 
-### Pattern 1: Orchestrator Skill with Agent Spawning (CASE)
+### Statistical Detection Integration
 
-**When:** Complex multi-iteration workflows requiring monitoring and intervention
+**Agent workflow addition:**
 
-**Structure:**
-1. Validate inputs (compound path, formula)
-2. Inline critical skill content (NMR background, CASE workflow, LSD basics, CASE-PROGRESS.md format)
-3. Spawn CASE agent via Task() with inlined content + file path references + compound context
-4. Monitor progress by reading CASE-PROGRESS.md after agent returns
-5. Detect loop patterns using criteria from skill/supervisor/SKILL.md Section 4:
-   - ELIM thrashing: ELIM added 2+ times without diagnosis
-   - Zero-solution loop: 3+ consecutive iterations with 0 solutions
-   - Solution explosion: 3+ iterations >100 solutions, <10% reduction each
-   - Constraint churning: 5+ iterations high add/remove, no convergence
-6. Diagnose root cause using pattern-specific procedure
-7. If basic diagnosis insufficient (2+ failed interventions with same pattern):
-   - Spawn diagnostic specialist via Task(agent_type="lucy-diagnostic")
-   - Read DIAGNOSTIC-REPORT.md
-   - Extract root cause and primary fix
-8. Re-spawn CASE agent with advisory constraints (WHAT to fix, not HOW)
-9. Track intervention_counts[pattern] separately for each pattern
-10. Escalate to user after 10 failed interventions with same pattern
+```bash
+# Step 1: Detect hybridisation for each carbon
+lucy detect hybridisation data/reference/lucy-ng-derep.db 139.94 --format json
+# Output: {"shift": 139.94, "prediction": "sp2", "confidence": 0.92, "sp2_fraction": 0.91}
 
-**Example:**
+# Step 2: Use detection to inform MULT command
+# If sp2_fraction > 0.7 → MULT N C 2 H
+# If sp3_fraction > 0.7 → MULT N C 3 H
+
+# Step 3: Detect quaternary
+lucy detect quaternary data/reference/lucy-ng-derep.db 155.08 --format json
+# Output: {"shift": 155.08, "is_quaternary": true, "confidence": 0.88, "quat_fraction": 0.85}
+
+# Step 4: Detect bond partners for heteroatom inference
+lucy detect bond-partners data/reference/lucy-ng-derep.db 180.5 "C-4;C(//" --format json
+# Output: {"common_partners": {"O": 0.95, "C": 0.82}, "interpretation": "Likely C=O"}
+```
+
+**Agent instruction addition (to `lucy-case-agent.md`):**
+
 ```markdown
-# ~/.claude/commands/lucy-ng/case.md
+## Statistical Detection Commands (Optional Enhancement)
 
-## Orchestration Logic
+Before writing MULT commands, optionally consult statistical detection:
 
-When loop detected:
-1. Read CASE-PROGRESS.md
-2. Identify pattern (ELIM thrashing, zero-solution, explosion, churning)
-3. Run basic diagnosis:
-   - Check sp2 count (must be even)
-   - Check H budget (must match formula)
-   - Check for obvious issues (1J artifacts, close carbons)
-4. If intervention_counts[pattern] >= 2:
-   - Spawn diagnostic specialist
-   - Wait for DIAGNOSTIC-REPORT.md
-   - Extract root cause and fix
-5. Formulate advisory:
-   - WHAT is wrong (sp2 count odd, 1J artifact detected, etc.)
-   - WHAT to check/fix (verify sp2, remove correlation, etc.)
-   - NOT HOW to edit files (CASE agent decides)
-6. Re-spawn CASE agent with advisory in instructions
-7. Increment intervention_counts[pattern]
-8. If intervention_counts[pattern] >= 10: escalate to user
+**Hybridisation detection:**
+```bash
+lucy detect hybridisation <db_path> <shift> --format json
+```
+Returns sp2/sp3 prediction with confidence. Use when chemical shift region is ambiguous.
+
+**Quaternary detection:**
+```bash
+lucy detect quaternary <db_path> <shift> --format json
+```
+Returns quaternary probability. Use for carbons appearing in 13C but absent from DEPT/HSQC.
+
+**Bond partner detection:**
+```bash
+lucy detect bond-partners <db_path> <shift> <hose_code> --format json
+```
+Returns common heteroatom partners. Use for inferring O/N attachment from chemical shift.
+
+**Integration example:**
+1. Pick 13C peaks: 180.5, 139.0, 75.0, 30.0 ppm
+2. Run detection for each: `lucy detect hybridisation db 180.5`
+3. 180.5 → sp2 (0.95) → carbonyl carbon → MULT 1 C 2 0
+4. 139.0 → sp2 (0.88) → aromatic CH → MULT 2 C 2 1
+5. 75.0 → sp3 (0.92) → C-O CH → MULT 3 C 3 1
+6. 30.0 → sp3 (0.98) → aliphatic CH2 → MULT 4 C 3 2
 ```
 
-### Pattern 2: Thin Wrapper Skill (Dereplicate, Predict)
+**Confidence:** HIGH - Follows exact same pattern as existing `lucy lsd rank`. Agent already uses JSON output parsing.
 
-**When:** Simple single-step operations with CLI tools
+## 5. Ranking Integration: Two-Tier Approach
 
-**Structure:**
-1. Validate inputs
-2. Execute CLI command: `lucy <command> <args> --format json`
-3. Parse JSON result
-4. Interpret using skill knowledge (score thresholds, result quality)
-5. Report to user
+### Current Ranking Architecture
 
-**Example:**
-```markdown
-# ~/.claude/commands/lucy-ng/dereplicate.md
+**File:** `src/lucy_ng/ranking/ranker.py`
 
-1. Validate: compound_path exists, formula is valid
-2. Execute: `lucy dereplicate c13 {compound_path} {formula} --format json`
-3. Parse JSON: {is_match, top_matches: [{name, smiles, score}, ...]}
-4. Interpret (from skill/dereplicate/SKILL.md):
-   - score >= 0.95: Match (report top hit, DONE)
-   - score 0.85-0.95: Possible match (report, ask user)
-   - score 0.65-0.85: Weak match (report, recommend CASE)
-   - score < 0.65: No match (recommend CASE)
-5. Report results to user
-```
+**Algorithm:**
+1. For each LSD solution (SMILES)
+2. Predict 13C shifts using HOSE database
+3. Match predicted to experimental shifts
+4. Compute MAE (Mean Absolute Error)
+5. Sort by MAE (lower is better)
 
-### Pattern 3: AI-Driven Skill (Sanitize)
+**Output:** `RankedSolution` objects with MAE, quality label, deviations.
 
-**When:** Tasks requiring AI pattern recognition, no CLI tool exists
+### Two-Tier Ranking Integration
 
-**Structure:**
-1. Validate input (dataset path)
-2. Read dataset files (metadata, NMR parameters, README, etc.)
-3. Apply patterns from skill document (compound names, SMILES, InChI, IDs)
-4. Identify all instances of compound identifiers
-5. Redact/remove identified content
-6. Write SANITIZATION-REPORT.md with summary
-7. Report to user
+**Tier 1: Hybridisation pre-filter**
 
-**Example:**
-```markdown
-# ~/.claude/commands/lucy-ng/sanitise.md
+Before HOSE-based ranking, check if solution's hybridisation matches statistical expectations:
 
-1. Read skill/sanitize/SKILL.md for patterns
-2. Scan dataset for files: *.json, *.md, *.txt
-3. For each file, detect:
-   - Compound names (capitalized chemistry terms, matched against known list)
-   - SMILES (pattern: alphanumeric with brackets, parentheses, @, =, #)
-   - InChI (pattern: "InChI=...")
-   - Database IDs (pattern: "COCONUT_", "NPC", "CNP", followed by numbers)
-4. For each detected identifier:
-   - Record in redaction list (file, line, original text)
-   - Replace/remove (compound name → "Unknown Compound", SMILES/InChI → delete field)
-5. Write SANITIZATION-REPORT.md
-6. Report summary to user
-```
-
-### Pattern 4: Progress File Monitoring (Loop Detection)
-
-**When:** Orchestrator needs to detect patterns in agent behavior
-
-**Implementation:**
 ```python
-# In case.md orchestrator
+class HybridisationFilter:
+    """Pre-filter solutions by hybridisation consistency."""
 
-def detect_loops(progress_file):
-    iterations = parse_iterations(progress_file)
+    def filter_solutions(
+        self,
+        solutions: list[LSDSolution],
+        experimental_shifts: list[float],
+        detector: StatisticalDetector,
+    ) -> list[LSDSolution]:
+        """Remove solutions with inconsistent hybridisation."""
+        filtered = []
 
-    # ELIM thrashing: ELIM added 2+ times
-    if count_constraint_additions(iterations, "ELIM") >= 2:
-        return "elim_thrashing"
+        for solution in solutions:
+            mol = Chem.MolFromSmiles(solution.smiles)
+            consistent = True
 
-    # Zero-solution loop: 3+ consecutive 0 solutions
-    if all(i.solution_count == 0 for i in iterations[-3:]):
-        return "zero_solution_loop"
+            for exp_shift in experimental_shifts:
+                # Get expected hybridisation from statistics
+                detection = detector.detect_hybridisation(exp_shift)
 
-    # Solution explosion: 3+ iterations >100, <10% reduction
-    if len(iterations) >= 3:
-        recent = iterations[-3:]
-        if all(i.solution_count > 100 for i in recent):
-            reductions = [
-                (recent[j-1].solution_count - recent[j].solution_count) / recent[j-1].solution_count
-                for j in range(1, 3)
-            ]
-            if all(r < 0.10 for r in reductions):
-                return "solution_explosion"
+                # Find carbon in solution at similar shift
+                carbon = self._find_carbon_at_shift(mol, exp_shift, tolerance=5.0)
+                if carbon is None:
+                    continue
 
-    # Constraint churning: 5+ iterations, high add/remove, no convergence
-    if len(iterations) >= 5:
-        recent = iterations[-5:]
-        if all(len(i.constraints_added) > 10 and len(i.constraints_removed) > 5 for i in recent):
-            if recent[0].solution_count - recent[-1].solution_count < 10:
-                return "constraint_churning"
+                # Check consistency
+                actual_hyb = carbon.GetHybridization()
+                expected_hyb = detection.predicted_hybridisation
 
-    return None  # No loop detected
+                if actual_hyb != expected_hyb and detection.confidence > 0.8:
+                    consistent = False
+                    break
+
+            if consistent:
+                filtered.append(solution)
+
+        return filtered
 ```
 
-**Full detection criteria:** skill/supervisor/SKILL.md Section 4
+**Tier 2: HOSE-based MAE ranking**
 
----
+Unchanged - existing `SolutionRanker` class.
 
-## Anti-Patterns to Avoid
+**Modified workflow:**
 
-### Anti-Pattern 1: Duplicating Skill Content
+```python
+# Current workflow
+result = ranker.rank(solutions, experimental_shifts, top_n=10)
 
-**Wrong:** Copy entire skill documents into agent definitions
-
-**Right:** Agent definitions reference skill documents; orchestrator inlines critical sections in Task() instructions
-
-**Why:** Single source of truth prevents sync issues
-
-### Anti-Pattern 2: Embedding Intelligence in CLI
-
-**Wrong:** Add domain logic to Python CLI commands
-
-**Right:** CLI returns raw data, agents apply intelligence from skills
-
-**Why:** v2.0 Phase 26 established thin CLI architecture, don't regress
-
-### Anti-Pattern 3: Global Intervention Counters
-
-**Wrong:** Track total interventions across all patterns
-
-**Right:** Track interventions per pattern separately
-
-**Why:** Different patterns have different root causes, need targeted tracking
-
-### Anti-Pattern 4: Directive Interventions
-
-**Wrong:** Tell CASE agent exactly which file line to edit
-
-**Right:** Tell CASE agent WHAT problem exists and WHAT needs checking
-
-**Why:** CASE agent retains autonomy, supervisor provides constraints not commands
-
-### Anti-Pattern 5: Spawning Diagnostic Specialist Too Early
-
-**Wrong:** Spawn specialist on first loop detection
-
-**Right:** Basic diagnosis first (1-2 interventions), specialist only if that fails
-
-**Why:** Basic diagnosis often sufficient, specialist is for complex failures
-
----
-
-## Build Order and Dependencies
-
-### Phase Structure Recommendation
-
-**v2.1 Milestone: Working Multi-Agent CASE**
-
-**Phase 27: Sub-Command Skills Foundation** (3-4 hours)
-- Create ~/.claude/commands/lucy-ng/ directory
-- Implement simple skills: status.md, predict.md, dereplicate.md
-- Test each skill executes CLI and reports correctly
-- **Dependencies:** None (uses existing v2.0 CLI)
-- **Validation:** `status.md` reports system state, `dereplicate.md` on test compound returns results
-
-**Phase 28: CASE Agent Definition** (4-5 hours)
-- Create ~/.claude/agents/lucy-case-agent.md
-- Define frontmatter (name, description, tools, model)
-- Write agent instructions (workflow overview, checkpoint writing)
-- Test agent can be spawned with Task() and receives instructions
-- **Dependencies:** Phase 27 (directory structure exists)
-- **Validation:** Spawn agent with test instructions, verify it executes and writes CASE-PROGRESS.md
-
-**Phase 29: CASE Orchestrator Skill** (6-8 hours)
-- Create ~/.claude/commands/lucy-ng/case.md
-- Implement agent spawning with inlined skill content (NMR background, CASE workflow, LSD basics, CASE-PROGRESS.md format)
-- Implement progress monitoring (read CASE-PROGRESS.md after agent returns)
-- Implement loop detection (4 patterns from skill/supervisor/SKILL.md Section 4)
-- Implement basic diagnosis and advisory intervention
-- Test spawn → monitor → detect loop → intervene workflow
-- **Dependencies:** Phase 27 (directory), Phase 28 (agent exists)
-- **Validation:** Run on test compound, verify loop detection triggers, advisory sent to agent
-
-**Phase 30: Diagnostic Specialist Integration** (3-4 hours)
-- Rename .claude/agents/diagnostic-specialist.md → lucy-diagnostic.md
-- Update frontmatter (name, agent_type reference)
-- Integrate diagnostic spawning in case.md (after 2 failed interventions with same pattern)
-- Implement DIAGNOSTIC-REPORT.md reading and primary fix extraction
-- Test loop → basic diagnosis fails → spawn specialist → read report → re-advise CASE agent
-- **Dependencies:** Phase 29 (orchestrator exists)
-- **Validation:** Force repeated failures with same pattern, verify specialist spawned, report generated
-
-**Phase 31: Sanitization Skill** (2-3 hours)
-- Create ~/.claude/commands/lucy-ng/sanitise.md
-- Create skill/sanitize/SKILL.md (pattern definitions)
-- Implement AI-driven pattern matching (compound names, SMILES, InChI, IDs)
-- Implement redaction logic
-- Write SANITIZATION-REPORT.md
-- Test on dataset with known identifiers (e.g., Virgiline)
-- **Dependencies:** Phase 27 (directory structure)
-- **Validation:** Sanitize test dataset, verify compound name removed, report lists redactions
-
-**Phase 32: End-to-End Validation** (2-3 hours)
-- Test `/lucy-ng:case` on Ibuprofen de novo CASE (known working from Phase 26-05)
-- Test `/lucy-ng:case` on Virgiline (known failure — should trigger diagnostics)
-- Test `/lucy-ng:sanitise` on public dataset
-- Test `/lucy-ng:dereplicate`, `/lucy-ng:predict`, `/lucy-ng:status`
-- Update CLAUDE.md with sub-command reference section
-- **Dependencies:** Phases 27-31 (all skills implemented)
-- **Validation:** Ibuprofen top-3 ranked, Virgiline triggers diagnostic specialist, all simple skills work
-
-**Phase 33: Documentation and Cleanup** (1-2 hours)
-- Delete .claude/agents/supervisor.md (logic now in case.md)
-- Update PROJECT.md decisions table (v2.1 architecture choices)
-- Update STATE.md with v2.1 milestone completion
-- Write v2.1 release notes
-- **Dependencies:** Phase 32 (validation complete)
-- **Validation:** Old supervisor.md deleted, documentation updated, no loose ends
-
-### Dependency Graph
-
-```
-Phase 27 (Skills Foundation)
-    ↓
-    ├─→ Phase 28 (CASE Agent)
-    │       ↓
-    │   Phase 29 (CASE Orchestrator)
-    │       ↓
-    │   Phase 30 (Diagnostic Integration)
-    │
-    └─→ Phase 31 (Sanitization)
-
-Phase 29, 30, 31 → Phase 32 (Validation) → Phase 33 (Cleanup)
+# Two-tier workflow
+filtered_solutions = hyb_filter.filter_solutions(solutions, experimental_shifts, detector)
+result = ranker.rank(filtered_solutions, experimental_shifts, top_n=10)
 ```
 
-### Critical Path
+**CLI integration:**
 
-**Phases 27 → 28 → 29 → 30 → 32 → 33** (16-20 hours total)
+```bash
+# Option 1: Automatic (detect database presence)
+lucy lsd rank solutions.smi --shifts "..." --use-detection
 
-Core CASE orchestration with diagnostics is the critical functionality.
+# Option 2: Explicit
+lucy lsd rank solutions.smi --shifts "..." --filter-hybridisation --db data/reference/lucy-ng-derep.db
+```
 
-**Phase 31 (Sanitization) can be parallelized** if multiple people are working on v2.1.
+**Confidence:** MEDIUM - Concept is sound, but requires:
+- Robust shift-to-carbon matching algorithm
+- Tuning of confidence thresholds
+- Validation with known structures to measure false positive rate
 
-### Risk Mitigation
+## 6. Build Order and Dependencies
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| Task() context size limits | Medium | High | Hybrid inlining: ~500-700 lines inlined, rest via file paths |
-| Agent doesn't write CASE-PROGRESS.md | Medium | High | Explicit instructions in inlined content, format template included, verification in Phase 32 |
-| Loop detection too sensitive (false positives) | Low | Medium | Conservative thresholds (3+ iterations for zero-solution, 5+ for churning) |
-| Loop detection too lenient (misses loops) | Low | Medium | Test on known failure cases (Virgiline) in Phase 32 |
-| Diagnostic specialist spawning loops | Low | High | Track specialist spawning separately, escalate if called 3+ times without progress |
-| Virgiline still fails after v2.1 | Medium | Low | Expected on first attempt — refine diagnostic procedures iteratively |
-| Intervention count tracking bugs | Medium | Medium | Per-pattern tracking, clear increment/escalation logic, test in Phase 30 |
+### Phase 1: Database Schema Extension
 
----
+**Dependencies:** None (extends existing schema)
 
-## Success Criteria
+**Files:**
+- `src/lucy_ng/database/schema.py` - Add columns to hose_stats table
+- `src/lucy_ng/database/models.py` - Add DetectionStatsRecord Pydantic model
+- `src/lucy_ng/database/manager.py` - Add get_detection_stats() method
 
-v2.1 Working Multi-Agent CASE is complete when:
+**Validation:** Schema migration, test queries
 
-**Infrastructure:**
-- [ ] All 5 sub-command skills exist in ~/.claude/commands/lucy-ng/
-- [ ] lucy-case-agent.md exists in ~/.claude/agents/
-- [ ] lucy-diagnostic.md exists (renamed from diagnostic-specialist.md) in ~/.claude/agents/
-- [ ] supervisor.md deleted (logic dissolved into case.md)
+### Phase 2: Statistics Generation
 
-**Functionality:**
-- [ ] `/lucy-ng:case` on Ibuprofen produces correct top-3 ranked solution (reproduces Phase 26-05 success)
-- [ ] `/lucy-ng:case` on a failing compound triggers loop detection (verify on constructed test case)
-- [ ] Loop detection correctly identifies all 4 patterns (ELIM thrashing, zero-solution, explosion, churning)
-- [ ] After 2 failed interventions with same pattern, diagnostic specialist spawned
-- [ ] CASE-PROGRESS.md written by CASE agent after each iteration with all required fields
-- [ ] DIAGNOSTIC-REPORT.md written by diagnostic specialist with findings, root cause, fixes
-- [ ] Orchestrator reads progress files and extracts information correctly
-- [ ] Intervention tracking is per-pattern (not global), escalates after 10 cycles per pattern
-- [ ] `/lucy-ng:sanitise` removes compound identifiers from test dataset
-- [ ] `/lucy-ng:dereplicate`, `/lucy-ng:predict`, `/lucy-ng:status` execute CLI and report correctly
+**Dependencies:** Phase 1 (schema must exist)
 
-**Documentation:**
-- [ ] CLAUDE.md updated with sub-command reference section
-- [ ] PROJECT.md decisions table updated with v2.1 architecture
-- [ ] STATE.md shows v2.1 milestone complete
+**Files:**
+- `src/lucy_ng/prediction/stats_generator.py` - Extend accumulators
+- `src/lucy_ng/detection/accumulator.py` - NEW: DetectionStatsAccumulator class
 
-**Regression:**
-- [ ] All existing tests pass (no regression from v2.0)
-- [ ] CLI commands still work standalone (backward compatibility)
+**Validation:** Generate statistics from small test dataset, verify fractions
 
----
+### Phase 3: Detection Module
 
-## Integration Points Summary
+**Dependencies:** Phase 2 (statistics must be generated)
 
-| Component | Status | Changes Needed |
-|-----------|--------|----------------|
-| skill/*.md documents | Complete (v2.0) | None — reference as-is |
-| src/lucy_ng/cli/*.py | Complete (v2.0 Phase 26) | None — thin CLI validated |
-| CLAUDE.md | Needs minor update | Add sub-command section (~20 lines) |
-| .claude/agents/supervisor.md | Delete | Logic moves to case.md orchestrator |
-| .claude/agents/diagnostic-specialist.md | Rename/rework | → lucy-diagnostic.md (~50 line change) |
-| .claude/agents/lucy-case-agent.md | Create new | Autonomous CASE worker (~600 lines) |
-| ~/.claude/commands/lucy-ng/*.md | Create 5 new | Orchestrator skills (~840 lines total) |
+**Files:**
+- `src/lucy_ng/detection/__init__.py` - NEW module
+- `src/lucy_ng/detection/detector.py` - StatisticalDetector class
+- `src/lucy_ng/detection/models.py` - DetectionResult Pydantic models
 
-**Total new code:** ~1,440 lines (skills + agent)
-**Total modifications:** ~70 lines (CLAUDE.md update, diagnostic frontmatter)
-**Total deletions:** ~484 lines (supervisor.md)
-**Net addition:** ~1,000 lines of orchestration logic
+**Validation:** Unit tests with known HOSE codes, verify predictions
 
----
+### Phase 4: CLI Commands
 
-## Sources
+**Dependencies:** Phase 3 (detector must exist)
 
-**Existing Architecture (v2.0):**
-- .claude/agents/supervisor.md (484 lines) — Current supervisor approach
-- .claude/agents/diagnostic-specialist.md (455 lines) — Diagnostic logic
-- skill/SKILL.md (1,079 lines) — Core domain knowledge
-- skill/supervisor/SKILL.md (827 lines) — Loop detection patterns
-- skill/diagnostic/SKILL.md (1,874 lines) — LSD manual
-- Phase 26 validation: .planning/phases/26-thin-tools/26-05-PLAN.md (Ibuprofen CASE success)
+**Files:**
+- `src/lucy_ng/cli/detect.py` - NEW: detect command group
+- `src/lucy_ng/cli/main.py` - Register detect command group
 
-**GSD Pattern:**
-- ~/.claude/commands/gsd/new-project.md — Sub-command structure reference
+**Validation:** CLI smoke tests, JSON output validation
 
-**Project Context:**
-- .planning/PROJECT.md — v2.1 architecture decisions
-- .planning/STATE.md — Current milestone status
-- .planning/phases/26-thin-tools/26-CONTEXT.md — Thin CLI architecture rationale
+### Phase 5: Agent Integration
 
-**Confidence:** HIGH
-- v2.0 provides complete foundation (thin CLI validated, skill documents complete)
-- GSD pattern well-understood (existing /gsd:* commands as reference)
-- Integration points clearly defined (no ambiguous dependencies)
-- Build order considers existing dependencies (Phase 27 → 28 → 29 → 30 → 32)
+**Dependencies:** Phase 4 (CLI must work)
+
+**Files:**
+- `~/.claude/agents/lucy-case-agent.md` - Add detection command documentation
+- Test with live CASE workflow
+
+**Validation:** Run CASE on test compound with detection enabled
+
+### Phase 6: Ranking Enhancement (Optional)
+
+**Dependencies:** Phase 3 (detector must exist)
+
+**Files:**
+- `src/lucy_ng/ranking/filters.py` - NEW: HybridisationFilter class
+- `src/lucy_ng/ranking/ranker.py` - Add two-tier ranking option
+- `src/lucy_ng/cli/lsd.py` - Add --use-detection flag to rank command
+
+**Validation:** Compare ranking with/without detection on known structures
+
+### Dependency Chain Rationale
+
+1. **Database first**: Schema must exist before any generation code can write to it
+2. **Generation second**: Statistics must be computed before they can be queried
+3. **Detection third**: Query interface must work before CLI can call it
+4. **CLI fourth**: Commands must be stable before agent uses them
+5. **Agent fifth**: Agent integration tests actual workflow end-to-end
+6. **Ranking last**: Optional enhancement, doesn't block core detection features
+
+## 7. Data Flow Summary
+
+### Hybridisation Detection Flow
+
+```
+User: lucy detect hybridisation db.sqlite 139.94
+  ↓
+CLI: detect.py parses args, calls detector
+  ↓
+Detector: StatisticalDetector.detect_hybridisation(139.94)
+  ↓
+Detector: Generate HOSE codes at each radius for shift estimation
+  ↓
+Database: DatabaseManager.get_detection_stats(hose_code, radius)
+  ↓
+Database: SELECT sp2_fraction, sp3_fraction FROM hose_stats WHERE ...
+  ↓
+Detector: Compare sp2_fraction vs sp3_fraction
+  ↓
+Detector: Return DetectionResult(prediction="sp2", confidence=0.91)
+  ↓
+CLI: Format as JSON/text, print to stdout
+  ↓
+Agent: Parse JSON, use in MULT command generation
+```
+
+### Statistics Generation Flow
+
+```
+Admin: lucy database generate-detection-stats
+  ↓
+CLI: database.py calls ResumableHOSEStatsGenerator
+  ↓
+Generator: Iterate compounds from database
+  ↓
+For each compound:
+  Generator: Parse SMILES → RDKit Mol
+  Generator: For each carbon with shift:
+    Generator: Generate HOSE code
+    Generator: Get atom.GetHybridization()
+    Generator: Get atom.GetTotalNumHs()
+    Generator: Get atom.GetNeighbors()
+    Generator: Accumulate in DetectionStatsAccumulator
+  ↓
+Generator: Compute fractions (sp2_count / total, etc.)
+  ↓
+Database: INSERT INTO hose_stats (sp2_fraction, ...) VALUES (...)
+  ↓
+Generator: Save checkpoint every 10K compounds
+```
+
+### Agent CASE Workflow with Detection
+
+```
+Agent: lucy detect hybridisation db 180.5
+  ↓ (sp2, 0.95)
+Agent: lucy detect quaternary db 180.5
+  ↓ (true, 0.88)
+Agent: Write LSD file
+  MULT 1 C 2 0  ; sp2, quaternary → carbonyl
+  ↓
+Agent: lucy lsd run compound.lsd
+  ↓ (10 solutions)
+Agent: outlsd 5 < compound.sol > solutions.smi
+  ↓
+Agent: lucy lsd rank solutions.smi --shifts "..." --use-detection
+  ↓ (Tier 1: filter by hybridisation)
+  ↓ (Tier 2: rank by MAE)
+Agent: Examine top solution
+```
+
+## 8. Integration Risks and Mitigations
+
+### Risk 1: Hybridisation Detection Accuracy
+
+**Issue:** RDKit's `GetHybridization()` may not always match NMR chemical shift expectations.
+
+**Example:** Aromatic carbons are sp2, but some edge cases (e.g., pyrrole N-adjacent C) may have unexpected shifts.
+
+**Mitigation:**
+- Validate against known structures before deployment
+- Report confidence scores, not absolute predictions
+- Allow manual override in agent workflow
+
+**Impact:** MEDIUM - Affects feature usefulness but not system stability
+
+### Risk 2: Database Size Growth
+
+**Issue:** Adding 4 columns to 7.9M row table increases storage.
+
+**Estimate:**
+- sp2_fraction: 4 bytes (REAL)
+- sp3_fraction: 4 bytes (REAL)
+- quat_fraction: 4 bytes (REAL)
+- common_partners: ~50 bytes average (TEXT JSON)
+- Total: ~62 bytes × 7.9M = ~490 MB additional storage
+
+**Current database:** ~2.8 GB
+**With detection:** ~3.3 GB (+18%)
+
+**Mitigation:**
+- Acceptable growth (modern systems have TB storage)
+- Could compress common_partners JSON if needed
+- Could make detection stats optional (separate table)
+
+**Impact:** LOW - Storage is cheap, growth is reasonable
+
+### Risk 3: Statistics Generation Time
+
+**Issue:** Extending HOSE generation to compute detection stats may increase runtime.
+
+**Analysis:**
+- Current bottleneck: HOSE code generation (RDKit mol graph traversal)
+- Detection stats: Additional atom property lookups (GetHybridization, GetNeighbors)
+- Estimated overhead: +10-20% runtime (same mol object, just extra queries)
+
+**Current generation time:** ~8-12 hours for 928K compounds (from project experience)
+**With detection:** Estimated ~10-14 hours
+
+**Mitigation:**
+- Checkpointing already handles long runs
+- Can run overnight or as background job
+- Parallel processing possible (database upsert is atomic)
+
+**Impact:** LOW - Runtime increase is acceptable for one-time generation
+
+### Risk 4: Agent Complexity Creep
+
+**Issue:** Adding detection commands to agent may make decision logic more complex.
+
+**Mitigation:**
+- Make detection OPTIONAL in agent workflow (not required)
+- Provide clear heuristics (e.g., "use detection when shift is 50-90 ppm and DEPT is unclear")
+- Fall back to existing DEPT-based multiplicity if detection unavailable
+
+**Impact:** LOW - Agent already handles complex decision trees, detection is additive
+
+## 9. Alternative Architectures Considered
+
+### Alternative 1: Real-time Computation (No Database Extension)
+
+**Idea:** Compute detection statistics on-the-fly by querying raw shifts table.
+
+**Rejected because:**
+- Query would scan millions of rows per lookup (too slow)
+- Would require re-implementing HOSE aggregation logic
+- No benefit over pre-computed statistics
+
+### Alternative 2: Separate Detection Service
+
+**Idea:** Build detection as microservice with its own database.
+
+**Rejected because:**
+- Over-engineering for single-user CLI tool
+- lucy-ng is not a service architecture (no MCP server after v2.0)
+- Adds deployment complexity
+
+### Alternative 3: Machine Learning Model
+
+**Idea:** Train ML model to predict hybridisation from shift + HOSE code.
+
+**Rejected because:**
+- Requires training data labeling (expensive)
+- Requires model deployment (scikit-learn/TensorFlow dependency)
+- Rule-based statistics are interpretable and sufficient
+
+## 10. Open Questions for Implementation
+
+1. **Hybridisation edge cases:** How to handle atoms with unusual hybridisation (e.g., carbocations, radicals)?
+   - **Recommendation:** Filter to stable closed-shell molecules during database import
+
+2. **Bond partner encoding:** JSON array vs delimited string for common_partners?
+   - **Recommendation:** JSON for flexibility, SQLite has native JSON functions
+
+3. **Confidence threshold tuning:** What sp2/sp3 fraction difference constitutes "high confidence"?
+   - **Recommendation:** Start with 0.7 threshold, tune based on validation set
+
+4. **Quaternary detection threshold:** What quat_fraction indicates "definitely quaternary"?
+   - **Recommendation:** 0.8+ = very likely, 0.5-0.8 = uncertain, <0.5 = unlikely
+
+5. **Agent decision logic:** When should agent prefer detection over DEPT?
+   - **Recommendation:** Use DEPT as ground truth when available, detection for ambiguous cases or missing DEPT
+
+## 11. Success Metrics
+
+**Database generation:**
+- Statistics computed for >95% of HOSE codes
+- sp2_fraction + sp3_fraction approximately 1.0 (accounting for other hybridisations)
+
+**Detection accuracy:**
+- >90% agreement with DEPT-based multiplicity on test set
+- Confidence scores correlate with accuracy (high confidence = high accuracy)
+
+**Agent integration:**
+- Agent successfully uses detection in at least 3 ambiguous cases per compound
+- Detection-informed MULT commands reduce LSD solution count by 20-50%
+
+**User impact:**
+- Faster time to correct structure (fewer manual iterations)
+- Higher confidence in LSD input file correctness
+- Reduced reliance on trial-and-error for multiplicity assignment
+
+## Conclusion
+
+Statistical detection integrates cleanly into lucy-ng's existing architecture:
+
+- **Database layer:** Extend hose_stats table with 4 columns (+18% storage)
+- **Generation layer:** Extend existing stats_generator.py (+10-20% runtime)
+- **CLI layer:** New detect.py module following established Click pattern
+- **Agent layer:** Use via Bash tool, same as existing lucy lsd rank
+
+**Critical success factors:**
+1. RDKit hybridisation detection must be validated against real NMR data
+2. Database schema migration must be tested on existing 2.8GB database
+3. Agent decision logic must be clear and fall back gracefully
+
+**Recommended build order:**
+1. Schema extension (1 day)
+2. Statistics generation (2-3 days)
+3. Detection module (3-4 days)
+4. CLI commands (2 days)
+5. Agent integration (2-3 days)
+6. Two-tier ranking (optional, 3-4 days)
+
+Total: ~2-3 weeks for core features, +1 week for ranking enhancement.

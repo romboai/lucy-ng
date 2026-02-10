@@ -1,1512 +1,705 @@
-# Domain Pitfalls: Adding Multi-Agent Orchestration to Existing AI Systems
+# Domain Pitfalls: Statistical Detection for CASE
 
-**Domain:** Adding multi-agent orchestration to lucy-ng (subsequent milestone)
-**Researched:** 2026-02-08
-**Context:** v2.0 created paper-only multi-agent architecture that didn't work. v2.1 adds working orchestration.
-
----
-
-## Overview
-
-This document addresses pitfalls specific to **adding multi-agent orchestration to an existing AI-agent system**. These are integration pitfalls, not general multi-agent patterns.
-
-**Critical context:** lucy-ng v2.0 defined elaborate agent definitions (supervisor.md, diagnostic-specialist.md) and extensive skill documents (827 lines supervisor skill, 1,874 lines diagnostic skill) but **never wired up actual agent spawning**. The result was a paper-only architecture that failed when tested.
-
-v2.1's goal: Make multi-agent orchestration actually work by learning from v2.0's mistakes.
+**Domain:** Adding statistical detection to existing HOSE-based CASE system
+**Researched:** 2026-02-10
+**Confidence:** HIGH (informed by Sherlock analysis, RDKit documentation, lucy-ng architecture)
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites or major issues when adding multi-agent to existing systems.
+Mistakes that cause prediction failures, data inconsistencies, or system rewrites.
 
-### Pitfall 1: Paper Architecture Without Validation (The v2.0 Failure)
+### Pitfall 1: HOSE Code Hydrogen Consistency Violation
 
-**What goes wrong:** Defining elaborate agent architectures, skill documents, and coordination protocols without ever testing if agents can actually be spawned, communicate, or complete workflows.
+**What goes wrong:** Extracting hybridisation or bond partner statistics from molecules WITH explicit hydrogens, while the existing HOSE prediction pipeline uses molecules WITHOUT explicit hydrogens. This creates a fundamental mismatch where statistical queries return data based on H-included environments but predictions use H-excluded environments.
 
 **Why it happens:**
-- **Documentation feels like progress** — writing 827-line supervisor skill gives illusion of completion
-- **Testing deferred** — "We'll test the full flow once everything is defined"
-- **Architectural purity over working code** — focus on design elegance, not functional validation
-- **Missing the integration gap** — assuming Task tool works as imagined without trying it
+- RDKit's `GetHybridization()` and `GetNeighbors()` are straightforward to use after `AddHs()`
+- Natural to think "I need complete molecular graph to analyze bonding"
+- The critical architecture decision in CLAUDE.md is easy to overlook during feature development
+- HOSE codes from `mol` vs `AddHs(mol)` are structurally different for the same atom
 
 **Consequences:**
-- Months of work produces zero working orchestration
-- Agent definitions don't match Claude Code's actual Task tool patterns
-- Skills reference capabilities that don't exist (file-watching patterns, advanced messaging)
-- Discovery of architectural problems delayed until attempted use
-- User loses trust ("v2.0 says multi-agent but it doesn't work")
+- **100% prediction failure rate** - statistics won't match HOSE lookup keys
+- Example: Ethanol carbon-0 with implicit H generates `"C-4;C(//)"`; with explicit H generates `"C-4;HHHC(//)"`
+- Database queries for hybridisation/neighbours return zero results or wrong environments
+- Silent failure - code runs, just produces wrong constraints
+- Very difficult to debug without understanding HOSE internals
 
 **Prevention:**
 
-1. **Validation-first development:**
-   ```markdown
-   Phase 1: Prove agent spawning works
-   - Write minimal supervisor.md (50 lines)
-   - Write minimal case.md skill (100 lines)
-   - Test: Spawn CASE agent via Task(), confirm it runs
-   - Criterion: Agent completes one LSD iteration end-to-end
-
-   Phase 2: Prove monitoring works
-   - Add CASE-PROGRESS.md writing to CASE agent
-   - Supervisor reads file after agent completes
-   - Criterion: Supervisor can parse iteration data
-
-   Phase 3: Prove iteration works
-   - Spawn agent twice (initial + retry after advisory)
-   - Criterion: Second spawn receives constraints from first
-
-   THEN expand skills with full domain knowledge
-   ```
-
-2. **Minimum viable orchestration test:**
-   ```bash
-   # Test harness: tests/integration/test_orchestration.py
-   def test_supervisor_spawns_case_agent():
-       """Phase 1 validation: Can supervisor spawn CASE agent?"""
-       # Simulate user request
-       # Verify Task() call succeeds
-       # Verify CASE agent receives instructions
-
-   def test_case_agent_writes_progress():
-       """Phase 2 validation: Does CASE agent write progress file?"""
-       # Run CASE agent on test compound
-       # Verify CASE-PROGRESS.md exists
-       # Verify required fields present
-
-   def test_supervisor_detects_loop():
-       """Phase 3 validation: Can supervisor detect loop from progress?"""
-       # Provide progress.md with loop pattern
-       # Verify supervisor identifies pattern
-       # Verify advisory constraint generated
-   ```
-
-3. **Incremental skill expansion:**
-   ```markdown
-   v2.1 milestone structure:
-
-   Phase 1: Minimal working orchestration (100 lines total skill)
-   - Supervisor spawns CASE agent
-   - CASE agent runs one iteration
-   - Progress written
-   - VALIDATION: End-to-end test passes
-
-   Phase 2: Add monitoring (add 200 lines skill)
-   - Loop detection patterns
-   - Progress parsing
-   - VALIDATION: Supervisor detects ELIM thrashing
-
-   Phase 3: Add intervention (add 300 lines skill)
-   - Advisory constraint generation
-   - Agent re-spawning with constraints
-   - VALIDATION: Loop breaks after intervention
-
-   Phase 4: Add domain knowledge (add 800 lines skill)
-   - Full NMR reasoning
-   - Diagnostic delegation
-   - VALIDATION: Handles complex failure cases
-   ```
-
-4. **Red flags that you're building paper architecture:**
-   - Writing agent skills before testing Task() spawning
-   - Documenting coordination protocols without implementing them
-   - Skill documents reference features not yet tested (file watching, advanced messaging)
-   - No integration tests in test suite
-   - "We'll test when it's complete" mentality
-
-**Detection (early warning signs):**
-- [ ] Agent definition files exist but no test that spawns them
-- [ ] Skill documents >500 lines without working orchestration proof
-- [ ] No integration test suite for multi-agent flows
-- [ ] Task() call never appears in codebase or tests
-- [ ] Coordination patterns documented but not validated
-- [ ] "Almost ready to test" for multiple weeks
-
-**Example from lucy-ng v2.0:**
-```markdown
-v2.0 deliverables (2026-02-08):
-✓ supervisor.md (484 lines) — agent definition written
-✓ diagnostic-specialist.md (455 lines) — agent definition written
-✓ skill/supervisor/SKILL.md (827 lines) — coordination logic documented
-✓ skill/diagnostic/SKILL.md (1,874 lines) — diagnostic procedures documented
-✗ Test that supervisor spawns CASE agent — MISSING
-✗ Test that CASE agent writes progress — MISSING
-✗ Test that supervisor detects loops — MISSING
-✗ Test that diagnostic specialist runs — MISSING
-
-Result: 3,640 lines of multi-agent architecture that doesn't work.
-```
-
-**v2.1 approach:**
-```markdown
-Phase 1 deliverable:
-✓ Minimal supervisor skill (50 lines)
-✓ Minimal CASE skill (100 lines)
-✓ Integration test: test_spawn_case_agent() — PASSES
-✓ Integration test: test_case_writes_progress() — PASSES
-✓ Validation: One end-to-end CASE run via supervisor — SUCCESS
-
-THEN expand skills to full domain knowledge.
-```
-
-**References:**
-- [Claude Code Tasks: Complete Guide to AI Agent Workflow](https://www.dplooy.com/blog/claude-code-tasks-complete-guide-to-ai-agent-workflow) — Task survival pattern requires disk persistence
-- [Claude Code Todos to Tasks](https://medium.com/@richardhightower/claude-code-todos-to-tasks-5a1b0e351a1c) — Tasks saved to files survive session crashes
-- [How Claude Code works](https://code.claude.com/docs/en/how-claude-code-works) — Understanding actual Task tool behavior
-
----
-
-### Pitfall 2: Context Window Overflow in Agent Handoffs
-
-**What goes wrong:** Passing 1,000+ lines of skill content to subagents via Task() instructions causes context overflow, degraded responses, or agent failures.
-
-**Why it happens:**
-- **System prompt overhead:** Each spawned agent carries system prompt + skill content + task instructions
-- **Inlining temptation:** "Just include the entire skill in the spawn instruction"
-- **Not understanding Task tool limits:** Assuming infinite context for subagent instructions
-- **Skill bloat:** Domain knowledge documents grow to 1,000+ lines without structure
-
-**Consequences:**
-- Agent spawn fails with context limit error
-- Agent receives truncated instructions (missing critical sections)
-- Agent performance degrades (reasoning space squeezed by large prompt)
-- Coordination overhead exceeds benefit (more tokens spent on spawning than execution)
-
-**Context limits (2026):**
-| Model | Total Context | Usable for Agent Instructions |
-|-------|---------------|------------------------------|
-| Sonnet 3.5 | 200K tokens | ~150K after system prompt (~100K words) |
-| Opus 4.6 | 200K tokens | ~150K after system prompt (~100K words) |
-
-**Rule of thumb:** If spawn instructions + referenced skill content > 50K tokens (~35K words), you're at risk.
-
-**Prevention:**
-
-1. **Skill reference pattern, not inlining:**
-   ```python
-   # WRONG - inlines entire skill
-   Task(
-       agent_type="general",
-       instructions=f"""
-       Perform CASE workflow.
-
-       Here's the complete domain knowledge:
-       {read_file('skill/SKILL.md')}  # 1,079 lines
-
-       Here's the supervisor knowledge:
-       {read_file('skill/supervisor/SKILL.md')}  # 827 lines
-
-       Here's the diagnostic knowledge:
-       {read_file('skill/diagnostic/SKILL.md')}  # 1,874 lines
-
-       Now process compound X...
-       """
-   )
-   # Total: ~3,780 lines in spawn instruction = OVERFLOW
-
-   # RIGHT - references skills
-   Task(
-       agent_type="general",
-       instructions="""
-       Perform CASE workflow for compound at data/compound/X with formula C14H16.
-
-       Follow workflow in skill/CASE/SKILL.md.
-       Write CASE-PROGRESS.md after each LSD iteration.
-       Include: iteration number, solution count, constraints added/removed, effectiveness.
-       """
-   )
-   # Agent has access to skill files via Read tool, pulls on-demand
-   ```
-
-2. **Structured skill hierarchy:**
-   ```
-   skill/
-   ├── SKILL.md              # Core domain knowledge (1,079 lines)
-   │                         # Read on-demand by all agents
-   ├── CASE/
-   │   └── SKILL.md          # CASE workflow (200 lines)
-   │                         # Referenced by CASE agent spawn
-   ├── supervisor/
-   │   └── SKILL.md          # Loop detection, intervention (827 lines)
-   │                         # Used by orchestrator, NOT passed to CASE agent
-   └── diagnostic/
-       └── SKILL.md          # LSD diagnostics (1,874 lines)
-                             # Only loaded when diagnostic specialist spawned
-   ```
-
-3. **Progressive skill loading pattern:**
-   ```markdown
-   In CASE agent spawn instructions:
-
-   "Perform CASE workflow for compound X.
-
-   Core workflow: skill/CASE/SKILL.md
-   Domain knowledge: skill/SKILL.md (read sections as needed)
-
-   Key sections you'll need:
-   - Section 2 (NMR Interpretation)
-   - Section 5 (HMBC Strategy)
-   - Section 8 (LSD File Generation)
-   - Section 10 (Ranking Solutions)
-
-   Read other sections if you encounter issues not covered above."
-   ```
-
-4. **Skill content audit:**
-   ```markdown
-   For each skill file:
-
-   [ ] Core concepts (keep) — what agent MUST know
-   [ ] Reference tables (keep) — chemical shift ranges, multiplicities
-   [ ] Workflow steps (keep) — what to do, in what order
-   [ ] Examples (keep if <50 lines) — illustrate patterns
-   [ ] Examples (move to separate file) — if >50 lines
-   [ ] Redundant explanations (consolidate) — say it once clearly
-   [ ] Edge case handling (move to appendix) — load on-demand
-
-   Target: Core skill <500 lines, appendices referenced as needed
-   ```
-
-**Detection:**
-- Task() spawn instruction >500 lines
-- Agent spawn fails with "context limit" error
-- Agent response quality degrades compared to main session
-- Multiple skill files inlined in spawn instructions
-- Skill files growing without structure (append-only)
-
-**lucy-ng specific risks:**
-```markdown
-Current skill sizes:
-- skill/SKILL.md: 1,079 lines
-- skill/supervisor/SKILL.md: 827 lines
-- skill/diagnostic/SKILL.md: 1,874 lines
-
-If v2.1 tries to inline all three in diagnostic spawn:
-1,079 + 827 + 1,874 = 3,780 lines (~15K tokens)
-
-Plus spawn instruction (~500 lines = ~2K tokens)
-Plus progress.md context (~200 lines = ~800 tokens)
-Total spawn overhead: ~18K tokens
-
-Risk level: MEDIUM (within limits but uses significant reasoning budget)
-
-Mitigation: Reference pattern, not inline.
-```
-
-**References:**
-- [Context Window Overflow in 2026: Fix LLM Errors Fast](https://redis.io/blog/context-window-overflow/) — System prompt overhead and tool output accumulation
-- [Multi-agent orchestration for Claude Code in 2026](https://shipyard.build/blog/claude-code-multi-agent/) — Running subagents depletes context faster
-- [Claude Code Multi-Agent Orchestration System](https://gist.github.com/kieranklaassen/d2b35569be2c7f1412c64861a219d51f) — Context management strategies
-
----
-
-### Pitfall 3: Iterative Supervision Loops Without Termination Guarantees
-
-**What goes wrong:** Supervisor spawns CASE agent → detects failure → spawns again → detects failure → infinite loop. No guaranteed termination.
-
-**Why it happens:**
-- **False positive detection** — supervisor sees legitimate iteration as "loop"
-- **Ineffective interventions** — advisory constraints don't change agent behavior
-- **No termination counter** — system never gives up
-- **Ambiguous loop signals** — hard to distinguish productive iteration from unproductive thrashing
-
-**Consequences:**
-- System runs for hours without progress
-- User cancels manually (supervisor never escalates)
-- Cost explosion (hundreds of failed agent spawns)
-- Trust erosion ("Multi-agent doesn't work")
-
-**CASE-specific loop patterns:**
-
-| Loop Type | Signal | False Positive Risk |
-|-----------|--------|-------------------|
-| ELIM thrashing | ELIM parameter changed 3+ times | LOW — clear signal |
-| Zero-solution loop | 5+ consecutive iterations with 0 solutions | MEDIUM — may need exploration |
-| Solution explosion | 3+ consecutive iterations with >10,000 solutions | LOW — clear signal |
-| Constraint churning | Same HMBC added/removed 2+ times | MEDIUM — may be intentional hypothesis testing |
-| sp2 parity oscillation | sp2 count corrected 3+ times without convergence | LOW — clear signal |
-
-**Prevention:**
-
-1. **Termination guarantees in orchestration logic:**
-   ```python
-   class CASEOrchestrator:
-       MAX_SPAWN_CYCLES = 10  # Absolute limit
-       MAX_PATTERN_RETRIES = 3  # Per loop pattern type
-
-       def run_case(self, compound_path, formula):
-           spawn_count = 0
-           pattern_counters = {
-               'elim_thrashing': 0,
-               'zero_solution': 0,
-               'solution_explosion': 0,
-               'constraint_churning': 0,
-               'sp2_oscillation': 0
-           }
-
-           while spawn_count < self.MAX_SPAWN_CYCLES:
-               spawn_count += 1
-
-               # Spawn CASE agent
-               result = self.spawn_case_agent(compound_path, formula)
-
-               if result.success:
-                   return result  # SUCCESS PATH
-
-               # Read progress, detect loop
-               loop_pattern = self.detect_loop_pattern(progress_file)
-
-               if loop_pattern:
-                   pattern_counters[loop_pattern] += 1
-
-                   if pattern_counters[loop_pattern] >= self.MAX_PATTERN_RETRIES:
-                       # Pattern-specific termination
-                       return self.escalate_to_user(
-                           reason=f"Loop pattern '{loop_pattern}' persisted after {self.MAX_PATTERN_RETRIES} interventions",
-                           progress=progress_file,
-                           diagnostic_report=self.get_diagnostic_report()
-                       )
-
-                   # Intervene with advisory
-                   advisory = self.generate_advisory(loop_pattern, progress_file)
-                   # Retry with advisory
-               else:
-                   # No loop detected, legitimate failure
-                   return result
-
-           # Absolute termination after MAX_SPAWN_CYCLES
-           return self.escalate_to_user(
-               reason=f"CASE did not converge after {self.MAX_SPAWN_CYCLES} spawn cycles",
-               progress=progress_file
-           )
-   ```
-
-2. **False positive mitigation with multi-signal detection:**
-   ```markdown
-   Loop detection requires BOTH:
-   1. Pattern signal (e.g., 3+ ELIM changes)
-   2. Lack of progress signal (e.g., solution count unchanged OR all at extremes)
-
-   Example:
-   - 3 ELIM changes + solution counts (0, 0, 0) = LOOP
-   - 3 ELIM changes + solution counts (0, 147, 3) = NOT LOOP (productive exploration)
-
-   Suppression mechanism:
-   CASE agent can write in progress.md:
-   "SUPPRESSION: Exploring alternative sp2 assignments (need 2 more iterations)"
-
-   Supervisor honors suppression for N iterations, then checks again.
-   ```
-
-3. **Intervention effectiveness tracking:**
-   ```python
-   class Advisory:
-       pattern: str  # 'elim_thrashing', 'zero_solution', etc.
-       constraint: str  # Specific guidance
-       issued_at: int  # Iteration number
-
-   def track_intervention_effectiveness(progress_file, advisories):
-       """Did the advisory change behavior?"""
-       for advisory in advisories:
-           iterations_after = get_iterations_after(progress_file, advisory.issued_at)
-
-           # Check if behavior changed
-           pattern_repeated = any(
-               detect_pattern(iteration) == advisory.pattern
-               for iteration in iterations_after
-           )
-
-           if pattern_repeated:
-               # Advisory ineffective
-               return EffectivenessResult(
-                   effective=False,
-                   reason=f"Pattern '{advisory.pattern}' repeated after intervention"
-               )
-
-       return EffectivenessResult(effective=True)
-   ```
-
-4. **Escalation with diagnostic context:**
-   ```markdown
-   When escalating to user, provide:
-
-   1. Loop pattern detected
-   2. Number of intervention attempts
-   3. Progress file showing iteration history
-   4. Last advisory issued
-   5. Diagnostic report (if specialist was called)
-   6. Recommended next steps (manual intervention points)
-
-   Example escalation:
-
-   "CASE orchestration terminated after 10 spawn cycles without convergence.
-
-   Loop pattern: ELIM thrashing
-   Interventions attempted: 3
-   Last advisory: 'Remove ELIM, verify sp2 count is even'
-
-   Progress summary:
-   - Iterations 1-3: 0 solutions, ELIM adjusted (1, 2, 3)
-   - Iteration 4-6: Advisory issued, ELIM removed, still 0 solutions
-   - Iterations 7-9: sp2 count corrected 3 times, oscillating even/odd
-
-   Diagnostic report: data/compound/X/diagnostic-report.md
-
-   Root cause hypothesis: Ambiguous hybridization for C5, C8.
-   Chemical shifts (75.3, 88.1 ppm) are borderline sp2/sp3.
-
-   Recommended action: Manual review of HSQC/HMBC for C5, C8.
-   Consider chemical structure knowledge (does formula allow conjugation?)."
-   ```
-
-**Detection:**
-- Supervisor spawns >5 agents without success or escalation
-- Same loop pattern detected 3+ times consecutively
-- Advisory issued but CASE agent behavior unchanged
-- No termination condition in orchestrator code
-- User has to cancel manually
-
-**References:**
-- [Our Agent Had A 4 Minute Loop. Here's How We Fixed It.](https://medium.com/data-science-collective/our-agent-had-a-4-minute-loop-heres-how-we-fixed-it-40a8142ef1a9) — Multi-signal detection prevents false positives
-- [Ralph Wiggum AI Agents: The Coding Loop of 2026](https://www.leanware.co/insights/ralph-wiggum-ai-coding) — Termination guarantees in agentic systems
-- [Agent Loop Definition: How AI Agents Use Iterative Processes](https://www.glean.com/ai-glossary/agent-loop) — Iterative refinement patterns with feedback
-
----
-
-### Pitfall 4: File-Based Inter-Agent Communication Race Conditions
-
-**What goes wrong:** Supervisor reads CASE-PROGRESS.md while CASE agent is writing it, getting partial/corrupted data. Coordination breaks down.
-
-**Why it happens:**
-- **Concurrent access** — both agents access same file simultaneously
-- **No file locking** — standard Write tool doesn't prevent concurrent access
-- **Timing assumptions** — "Agent will finish writing before I read"
-- **Partial writes** — large progress files written non-atomically
-
-**Consequences:**
-- Supervisor parses incomplete progress.md, misses loop signals
-- Agent sees old advisory constraints (stale read)
-- Diagnostic specialist reads progress mid-update, gets inconsistent state
-- Coordination failures appear non-deterministically (Heisenbug)
-
-**File-based communication patterns in lucy-ng:**
-
-| File | Writer | Reader | Race Condition Risk |
-|------|--------|--------|-------------------|
-| CASE-PROGRESS.md | CASE agent | Supervisor | HIGH — written after every iteration |
-| advisory-constraints.md | Supervisor | CASE agent (re-spawn) | MEDIUM — written once per intervention |
-| diagnostic-report.md | Diagnostic specialist | Supervisor | LOW — written once at end |
-| compound.lsd | CASE agent | LSD solver (external) | NONE — agent waits for solver completion |
-
-**Prevention:**
-
-1. **Atomic write pattern:**
-   ```python
-   # WRONG - non-atomic write
-   def write_progress(progress_data):
-       with open('CASE-PROGRESS.md', 'w') as f:
-           f.write(progress_data)  # Partial write visible to readers
-
-   # RIGHT - atomic write via temp file
-   import os
-   import tempfile
-
-   def write_progress_atomic(progress_data):
-       # Write to temporary file first
-       temp_fd, temp_path = tempfile.mkstemp(
-           dir=os.path.dirname('CASE-PROGRESS.md'),
-           prefix='.progress-',
-           suffix='.tmp'
-       )
-
-       with os.fdopen(temp_fd, 'w') as f:
-           f.write(progress_data)  # Write complete content
-           f.flush()
-           os.fsync(f.fileno())  # Force to disk
-
-       # Atomic rename (replaces old file instantaneously)
-       os.replace(temp_path, 'CASE-PROGRESS.md')
-   ```
-
-2. **Read-only coordination pattern:**
-   ```markdown
-   Coordination model:
-
-   1. CASE agent writes CASE-PROGRESS.md
-   2. CASE agent COMPLETES (Task returns)
-   3. Supervisor reads CASE-PROGRESS.md (no concurrent access)
-   4. Supervisor writes advisory-constraints.md
-   5. Supervisor spawns NEW CASE agent with constraints
-
-   Key: Agents never run concurrently.
-   Supervisor acts as coordinator, agents are sequential workers.
-
-   NO file locking needed — agents are serialized by Task() blocking.
-   ```
-
-3. **Skill instruction pattern:**
-   ```markdown
-   In CASE agent spawn instruction:
-
-   "After completing ALL work for this iteration:
-   1. Write complete CASE-PROGRESS.md with all fields
-   2. Verify file is complete (all required sections present)
-   3. Return control to supervisor
-
-   DO NOT write partial progress during iteration.
-   DO NOT update progress.md multiple times per iteration.
-   Write once, write completely, at end of iteration."
-   ```
-
-4. **Format stability for parsing:**
-   ```markdown
-   CASE-PROGRESS.md format (MUST be stable for parsing):
-
-   ## Iteration N: [Brief Description]
-
-   **Timestamp:** YYYY-MM-DD HH:MM:SS
-   **LSD File:** compound-iterN.lsd
-   **Solution Count:** [number]
-
-   **Constraints Added:**
-   - [constraint 1]: [reasoning]
-   - [constraint 2]: [reasoning]
-
-   **Constraints Removed:**
-   - [constraint]: [reasoning]
-
-   **WHY:** [strategy explanation]
-
-   **Effectiveness:** [percentage reduction / "baseline" / "over-constrained"]
-
-   **HMBC Used:** X/Y correlations
-
-   **Notes:**
-   - sp2 count: [even/odd]
-   - H budget: [matches/mismatch]
-   - [other observations]
-
-   ---
-
-   Parser can rely on:
-   - Each iteration starts with "## Iteration N:"
-   - Fields use **FieldName:** format
-   - Iterations separated by ---
-   ```
-
-**Detection:**
-- Supervisor misses loop signals (progress file incomplete during read)
-- Parsing errors ("Expected '## Iteration' but found partial line")
-- Non-deterministic coordination failures (works sometimes, fails others)
-- Agent receives stale advisory constraints from previous iteration
-- Progress file looks correct when inspected manually (timing-dependent bug)
-
-**lucy-ng orchestration model (no concurrent access):**
-
-```markdown
-Supervisor orchestration flow:
-
-1. Spawn CASE agent via Task() → BLOCKS until agent completes
-2. Agent writes CASE-PROGRESS.md at end
-3. Agent returns
-4. Supervisor reads CASE-PROGRESS.md (safe, agent finished)
-5. Supervisor analyzes progress
-6. If loop detected:
-   - Write advisory-constraints.md
-   - Spawn NEW CASE agent (includes constraints in instruction)
-7. Return to step 1
-
-Key insight: Task() is synchronous (blocking).
-No concurrent file access because agents run sequentially.
-
-Race condition risk: NONE (with blocking Task pattern)
-```
-
-**References:**
-- [Feature Request: Enable Agent-to-Agent Communication for Collaborative Workflows · Issue #4993 · anthropics/claude-code](https://github.com/anthropics/claude-code/issues/4993) — File-based mailboxes are clunky and subject to race conditions
-- [Race Conditions and Secure File Operations](https://developer.apple.com/library/archive/documentation/Security/Conceptual/SecureCodingGuide/Articles/RaceConditions.html) — Atomic file operations
-
----
-
-### Pitfall 5: Skill File Authoring Errors Causing Silent Failures
-
-**What goes wrong:** Agent definition YAML frontmatter has syntax errors, agent doesn't load, orchestration fails silently with "agent not found" or defaults to wrong agent type.
-
-**Why it happens:**
-- **Bad YAML = skill won't load** — small syntax errors break parsing
-- **Tabs instead of spaces** — YAML rejects tabs
-- **Unquoted strings with special characters** — YAML parser fails
-- **Missing opening/closing `---`** — frontmatter not recognized
-- **Tool permissions not declared** — agent can't use required tools
-- **Agent spawning syntax errors** — Task() call malformed
-
-**Consequences:**
-- Agent definition ignored (file not loaded)
-- Orchestrator spawns generic agent without domain knowledge
-- Agent can't use tools (permission denied)
-- Coordination logic doesn't execute (skill not active)
-- Difficult to debug (no error message, just wrong behavior)
-
-**Common YAML errors in agent definitions:**
-
-| Error | Symptom | Fix |
-|-------|---------|-----|
-| Missing `---` markers | Frontmatter treated as markdown | Add `---` at start and end |
-| Tabs instead of spaces | Parse error | Use spaces only (2 or 4 space indent) |
-| Unquoted colon in description | Parse error | Quote entire description string |
-| Tool name typo | Permission denied | Check exact tool name (case-sensitive) |
-| Missing `tools:` array | Agent can't use any tools | Add `tools: [Tool1, Tool2]` |
-| Wrong agent type in Task() | Spawns wrong agent | Check exact name from frontmatter |
-
-**Prevention:**
-
-1. **YAML validation checklist:**
-   ```markdown
-   Before committing agent definition:
-
-   [ ] Frontmatter has opening `---` on line 1
-   [ ] Frontmatter has closing `---` after YAML content
-   [ ] No tabs (use spaces only)
-   [ ] Description in quotes if contains : or special chars
-   [ ] All required tools listed in `tools:` array
-   [ ] Agent name matches Task() spawn calls
-   [ ] YAML parses correctly (test with yamllint or parser)
-   ```
-
-2. **Minimal agent definition template:**
-   ```yaml
-   ---
-   name: agent-name
-   description: "Single-line description of agent role and when to use it"
-   tools:
-     - Task
-     - Read
-     - Write
-     - Bash
-   model: sonnet
-   ---
-
-   # Agent Name
-
-   [Agent instructions and domain knowledge]
-   ```
-
-3. **Tool permission patterns for lucy-ng:**
-   ```yaml
-   # Orchestrator agent (supervisor):
-   tools:
-     - Task      # Spawn subagents
-     - Read      # Read progress files
-     - Write     # Write advisory constraints
-     - Bash      # Run lucy CLI commands
-     - Glob      # Find compound files
-
-   # CASE agent (worker):
-   tools:
-     - Read      # Read spectra, progress
-     - Write     # Write LSD files, progress
-     - Bash      # Run lucy CLI, LSD solver
-     - Glob      # Find experiment directories
-     # NOT Task — CASE agent doesn't spawn subagents
-
-   # Diagnostic specialist:
-   tools:
-     - Read      # Read LSD files, progress
-     - Write     # Write diagnostic report
-     - Bash      # Run lucy lsd analyze
-     - Grep      # Search for patterns
-     # NOT Task — diagnostic doesn't spawn subagents
-   ```
-
-4. **Agent spawning syntax validation:**
-   ```python
-   # WRONG - various syntax errors
-
-   # 1. Wrong agent name (doesn't match definition)
-   Task(
-       agent_type="case-worker"  # Actual name: "case-agent"
-   )
-
-   # 2. Missing instructions
-   Task(
-       agent_type="case-agent"
-       # No instructions field
-   )
-
-   # 3. Trying to pass complex data structures
-   Task(
-       agent_type="case-agent",
-       instructions=instructions_dict  # Must be string
-   )
-
-   # RIGHT - correct syntax
-   Task(
-       agent_type="general",  # Or use custom agent name from .claude/agents/
-       instructions="""
-       Perform CASE workflow for compound at data/compound/X with formula C14H16.
-
-       Follow workflow in skill/CASE/SKILL.md.
-       Write CASE-PROGRESS.md after each LSD iteration.
-       """
-   )
-   ```
-
-5. **Agent hot-reload testing (Claude Code 2.1+):**
-   ```markdown
-   Development workflow:
-
-   1. Edit .claude/agents/supervisor.md
-   2. Save file (auto hot-reloads in Claude Code 2.1+)
-   3. Test spawn immediately: "Spawn case agent for test compound"
-   4. Observe behavior
-   5. Iterate
-
-   No need to restart session — changes take effect immediately.
-   ```
-
-**Detection:**
-- Task() spawn fails with "agent type not found"
-- Agent spawns but doesn't have domain knowledge (uses wrong skill)
-- Permission denied errors when agent tries to use tools
-- Agent behavior doesn't match definition (wrong agent loaded)
-- YAML syntax error in file but no visible error message
-
-**v2.1 validation plan:**
-```markdown
-Phase 1 validation includes YAML correctness:
-
-[ ] Parse supervisor.md frontmatter with YAML library
-[ ] Parse case-agent.md frontmatter with YAML library
-[ ] Parse diagnostic-specialist.md frontmatter with YAML library
-[ ] All parse successfully without errors
-[ ] Tool names match available tools (Task, Read, Write, Bash, Glob, Grep)
-[ ] Agent names match Task() spawn calls in supervisor
-```
-
-**References:**
-- [Agent Skills - Claude Code Docs](https://code.claude.com/docs/en/skills) — Official skill file format
-- [Build Agent Skills Faster with Claude Code 2.1 Release](https://medium.com/@richardhightower/build-agent-skills-faster-with-claude-code-2-1-release-6d821d5b8179) — Hot-reload and YAML syntax
-- [Fix Common Claude Code Sub-Agent Setup Problems](https://www.arsturn.com/blog/fixing-common-claude-code-sub-agent-problems) — Common YAML errors
-
----
-
-### Pitfall 6: Agent Handoff State Loss
-
-**What goes wrong:** When spawning a fresh CASE agent for retry after intervention, the new agent doesn't remember context from previous attempt (spectra, peaks, constraints already tried).
-
-**Why it happens:**
-- **Fresh agent = blank slate** — new Task() spawn has no memory of previous agents
-- **Implicit context assumption** — developer assumes "agent will remember"
-- **Progress file incomplete** — doesn't capture all necessary state
-- **No handoff protocol** — orchestrator doesn't explicitly pass state
-
-**Consequences:**
-- Agent repeats work already done (re-picks peaks, re-analyzes symmetry)
-- Agent tries constraints already known to fail
-- Efficiency loss (5x slowdown due to repeated work)
-- Agent makes same mistakes (no learning across spawns)
-
-**State categories for CASE handoff:**
-
-| State Type | Where It Lives | Handoff Method |
-|------------|----------------|----------------|
-| Compound metadata | User input (path, formula) | Pass in spawn instruction |
-| Spectra | Bruker files on disk | Reference path in instruction |
-| Picked peaks | JSON files (hsqc_peaks.json, etc.) | Reference files OR re-pick |
-| Symmetry analysis | progress.md | Parse from file |
-| Constraints already tried | progress.md (iteration history) | Parse from file |
-| Advisory constraints | advisory-constraints.md | Include in spawn instruction |
-| Solution candidates | solutions.smi files | Reference files |
-
-**Prevention:**
-
-1. **Explicit handoff pattern in spawn instruction:**
-   ```markdown
-   Spawn instruction for retry after intervention:
-
-   "Perform CASE workflow for compound at data/compound/X with formula C14H16.
-
-   This is RETRY after intervention. Previous context:
-
-   Iteration history: See CASE-PROGRESS.md (iterations 1-3)
-   - Iteration 1: Baseline LSD, 0 solutions
-   - Iteration 2: Added ELIM 1 0, still 0 solutions
-   - Iteration 3: Added ELIM 2 0, still 0 solutions
-
-   Loop detected: ELIM thrashing
-
-   Advisory constraint: Remove ELIM. Verify sp2 count is even before retrying.
-
-   DO NOT re-pick peaks (already done):
-   - HSQC peaks: analysis/hsqc_peaks.json (89 peaks)
-   - HMBC peaks: analysis/hmbc_peaks.json (247 peaks)
-
-   DO NOT repeat symmetry analysis (already done):
-   - Expected: 14 carbons
-   - Observed: 14 peaks (no symmetry)
-   - See CASE-PROGRESS.md iteration 1 for details
-
-   Start from LSD generation with corrected constraints."
-   ```
-
-2. **Progress file as state repository:**
-   ```markdown
-   CASE-PROGRESS.md structure for handoff:
-
-   ## Metadata
-
-   **Compound:** data/compound/X
-   **Formula:** C14H16
-   **Started:** 2026-02-08 10:30:00
-
-   ## Peak Picking (COMPLETED)
-
-   **HSQC:** 89 peaks (analysis/hsqc_peaks.json)
-   **HMBC:** 247 peaks → 89 validated (analysis/hmbc_peaks.json)
-   **COSY:** Skipped (optional)
-
-   ## Symmetry Analysis (COMPLETED)
-
-   **Expected carbons:** 14
-   **Observed peaks:** 14
-   **Conclusion:** No molecular symmetry
-   **Hydrogen budget:** 16 H assigned, matches formula
-
-   ## LSD Iterations
-
-   [Iteration history...]
-
-   Key benefit: New agent can read progress.md to understand what's already done.
-   ```
-
-3. **Incremental work pattern (avoid re-work):**
-   ```python
-   class CASEOrchestrator:
-       def spawn_case_agent(self, compound_path, formula, retry_context=None):
-           if retry_context is None:
-               # First spawn — full workflow
-               instructions = f"""
-               Perform complete CASE workflow for {compound_path} with formula {formula}.
-
-               Steps:
-               1. Peak picking (HSQC, HMBC)
-               2. Symmetry analysis
-               3. LSD generation and execution
-               4. Solution ranking
-
-               Write CASE-PROGRESS.md after each LSD iteration.
-               """
-           else:
-               # Retry spawn — skip completed work
-               instructions = f"""
-               Continue CASE workflow for {compound_path} with formula {formula}.
-
-               Previous context: See CASE-PROGRESS.md (iterations 1-{retry_context.last_iteration})
-
-               Loop detected: {retry_context.loop_pattern}
-               Advisory: {retry_context.advisory}
-
-               Skip completed steps:
-               - Peak picking: DONE (see progress.md)
-               - Symmetry analysis: DONE (see progress.md)
-
-               Start from: LSD generation with advisory constraints
-
-               Constraints to avoid (already tried):
-               {retry_context.failed_constraints}
-               """
-
-           return Task(
-               agent_type="general",
-               instructions=instructions
-           )
-   ```
-
-4. **File-based state handoff:**
-   ```markdown
-   Handoff file structure:
-
-   data/compound/X/
-   ├── analysis/
-   │   ├── hsqc_peaks.json          # Persistent state
-   │   ├── hmbc_peaks.json          # Persistent state
-   │   └── symmetry_analysis.json   # Persistent state
-   ├── CASE-PROGRESS.md             # Iteration history
-   ├── advisory-constraints.md      # From supervisor
-   └── compound.lsd                 # Current LSD file
-
-   New agent reads these files to reconstruct state.
-   No implicit memory needed.
-   ```
-
-**Detection:**
-- Agent re-picks peaks on retry (work already done)
-- Agent re-analyzes symmetry on retry (work already done)
-- Agent tries same constraint twice (no memory of failure)
-- Iteration count restarts at 1 on retry (should continue from previous)
-- Retry takes as long as initial attempt (no incremental benefit)
-
-**References:**
-- [The 4-Step Protocol That Fixes Claude Code Agent's Context Amnesia](https://medium.com/@ilyas.ibrahim/the-4-step-protocol-that-fixes-claude-codes-context-amnesia-c3937385561c) — Handoff artifact pattern
-- [Claude Code Context: Never Lose Project State](https://claudefa.st/blog/guide/performance/context-preservation) — State preservation strategies
-- [Continuous-Claude-v3: Context management for Claude Code](https://github.com/parcadei/Continuous-Claude-v3) — Ledger-based state tracking
-
----
-
-### Pitfall 7: No End-to-End Test for Multi-Agent Orchestration
-
-**What goes wrong:** Individual components tested in isolation, full orchestration never validated end-to-end, integration failures discovered in production.
-
-**Why it happens:**
-- **Unit tests feel sufficient** — "We tested each part"
-- **Integration tests seen as optional** — "Too complex to set up"
-- **Manual testing deferred** — "We'll test when users try it"
-- **Orchestration logic not testable** — hard to mock Task() calls
-
-**Consequences:**
-- First user discovers orchestration doesn't work
-- Bug reports are vague ("multi-agent failed") with no specifics
-- Debugging requires full manual reproduction
-- Confidence lost in multi-agent architecture
-
-**lucy-ng v2.0 lesson:** Zero integration tests for multi-agent. Result: Paper-only architecture that didn't work when tested.
-
-**Prevention:**
-
-1. **Minimum viable integration test:**
-   ```python
-   # tests/integration/test_multi_agent_orchestration.py
-
-   import pytest
-   from pathlib import Path
-
-   @pytest.mark.integration
-   def test_case_orchestration_full_flow():
-       """
-       End-to-end test: Supervisor spawns CASE agent, monitors progress,
-       detects loop, intervenes, retry succeeds.
-
-       This is the MINIMUM test to prove multi-agent orchestration works.
-       """
-       # Setup test compound
-       compound_path = "tests/data/test_compound"
-       formula = "C10H14O"
-
-       # Simulate supervisor orchestration
-       orchestrator = CASEOrchestrator()
-
-       # Run CASE (will spawn agent internally)
-       result = orchestrator.run_case(compound_path, formula)
-
-       # Assertions
-       assert result.success, "CASE should complete successfully"
-       assert Path(compound_path, "CASE-PROGRESS.md").exists(), "Progress file should exist"
-       assert result.solution_count > 0, "Should find at least one solution"
-
-       # Check progress file structure
-       progress = read_progress_file(compound_path)
-       assert "Iteration 1" in progress, "Should have baseline iteration"
-       assert "HSQC peaks" in progress, "Should include peak picking"
-       assert "sp2 count" in progress, "Should include checks"
-
-   @pytest.mark.integration
-   def test_loop_detection_and_intervention():
-       """
-       Test that supervisor detects loops and intervenes correctly.
-       """
-       # Setup compound that will trigger ELIM thrashing
-       compound_path = "tests/data/elim_thrashing_case"
-       formula = "C14H16"
-
-       orchestrator = CASEOrchestrator()
-       result = orchestrator.run_case(compound_path, formula)
-
-       # Check intervention occurred
-       progress = read_progress_file(compound_path)
-       assert "Loop detected" in progress, "Should detect loop"
-       assert "Advisory" in progress, "Should issue advisory"
-       assert result.spawn_count > 1, "Should retry after intervention"
-       assert result.spawn_count <= 10, "Should not exceed retry limit"
-
-   @pytest.mark.integration
-   def test_diagnostic_specialist_invocation():
-       """
-       Test that diagnostic specialist is invoked on complex failures.
-       """
-       compound_path = "tests/data/complex_failure_case"
-       formula = "C12H10O2"
-
-       orchestrator = CASEOrchestrator()
-       result = orchestrator.run_case(compound_path, formula)
-
-       # Check diagnostic report exists
-       diagnostic_report = Path(compound_path, "diagnostic-report.md")
-       assert diagnostic_report.exists(), "Diagnostic specialist should run"
-
-       # Check report structure
-       report_content = diagnostic_report.read_text()
-       assert "Root Cause Analysis" in report_content
-       assert "Recommendations" in report_content
-   ```
-
-2. **Integration test infrastructure:**
-   ```python
-   # tests/integration/orchestration_harness.py
-
-   class OrchestrationTestHarness:
-       """
-       Test harness for multi-agent orchestration.
-       Provides mocking and assertion utilities.
-       """
-
-       def __init__(self, test_data_dir):
-           self.test_data_dir = Path(test_data_dir)
-           self.spawn_log = []  # Track agent spawns
-
-       def mock_task_spawn(self, agent_type, instructions):
-           """Mock Task() call for testing"""
-           self.spawn_log.append({
-               'agent_type': agent_type,
-               'instructions': instructions,
-               'timestamp': datetime.now()
-           })
-
-           # Simulate agent execution
-           return self.simulate_agent_run(agent_type, instructions)
-
-       def assert_spawn_count(self, expected):
-           """Assert number of agent spawns"""
-           actual = len(self.spawn_log)
-           assert actual == expected, f"Expected {expected} spawns, got {actual}"
-
-       def assert_loop_detected(self, pattern):
-           """Assert specific loop pattern was detected"""
-           # Parse progress files, check for pattern detection
-           pass
-
-       def assert_advisory_issued(self, pattern):
-           """Assert advisory constraint was issued"""
-           # Check advisory-constraints.md exists and contains pattern-specific guidance
-           pass
-   ```
-
-3. **Test data fixtures:**
-   ```
-   tests/data/
-   ├── simple_case/           # Baseline case, should succeed in 1 iteration
-   ├── elim_thrashing_case/   # Triggers ELIM thrashing loop
-   ├── zero_solution_case/    # Triggers zero-solution loop
-   ├── complex_failure_case/  # Requires diagnostic specialist
-   └── solution_explosion_case/  # Triggers solution explosion
-
-   Each fixture includes:
-   - Bruker NMR files (realistic test data)
-   - Expected outcomes (solution count, SMILES)
-   - Orchestration expectations (spawn count, interventions)
-   ```
-
-4. **CI/CD integration test gate:**
-   ```yaml
-   # .github/workflows/test.yml
-
-   jobs:
-     unit-tests:
-       # ... unit test job
-
-     integration-tests:
-       needs: unit-tests
-       runs-on: ubuntu-latest
-       steps:
-         - name: Run integration tests
-           run: pytest tests/integration/ -v --tb=short
-
-         - name: Check orchestration coverage
-           run: |
-             # Verify these critical paths are tested:
-             pytest tests/integration/test_multi_agent_orchestration.py::test_case_orchestration_full_flow
-             pytest tests/integration/test_multi_agent_orchestration.py::test_loop_detection_and_intervention
-             pytest tests/integration/test_multi_agent_orchestration.py::test_diagnostic_specialist_invocation
-   ```
-
-**Test coverage criteria for v2.1:**
-
-```markdown
-Integration tests MUST cover:
-
-[ ] Supervisor spawns CASE agent successfully
-[ ] CASE agent writes CASE-PROGRESS.md
-[ ] Supervisor reads and parses progress file
-[ ] Loop detection (ELIM thrashing)
-[ ] Advisory constraint generation
-[ ] Agent re-spawn with constraints
-[ ] Termination after max retries
-[ ] Diagnostic specialist invocation
-[ ] Full end-to-end success path (simple case)
-[ ] Full end-to-end intervention path (complex case)
-
-Minimum 10 integration tests to prove orchestration works.
+```python
+# CORRECT - matches lucy-ng architecture
+mol = Chem.MolFromSmiles("CCO")  # implicit H only
+for atom in mol.GetAtoms():
+    if atom.GetSymbol() == "C":
+        hybridization = atom.GetHybridization()  # works with implicit H
+        neighbors = [n.GetSymbol() for n in atom.GetNeighbors()]  # excludes H
+        # Use GetNumImplicitHs() + GetNumExplicitHs() to count hydrogens
+        h_count = atom.GetNumImplicitHs() + atom.GetNumExplicitHs()
+
+# WRONG - breaks HOSE consistency
+mol_h = Chem.AddHs(Chem.MolFromSmiles("CCO"))
+for atom in mol_h.GetAtoms():
+    neighbors = [n.GetSymbol() for n in atom.GetNeighbors()]  # includes H atoms!
 ```
 
 **Detection:**
-- Test suite has unit tests but no integration tests
-- No test that spawns agents via Task()
-- Manual testing is the only validation
-- First bug report is "orchestration doesn't work"
-- No CI gate for multi-agent flows
+- CLI test: `lucy predict c13 "CCO"` should return predictions with mean/std/count > 0
+- If adding hybridisation detection, test same molecule: should return frequencies that sum to ~100%
+- Unit test: verify HOSE code from stats molecule == HOSE code from prediction molecule
+- Warning sign: "No matching HOSE codes found" for common fragments in statistical queries
 
-**References:**
-- [Evaluating LLM Agents in Multi-Step Workflows (2026 Guide)](https://www.codeant.ai/blogs/evaluate-llm-agentic-workflows) — Tracing and component-level validation
-- [Validating multi-agent AI systems: From modular testing to system-level governance](https://www.pwc.com/us/en/services/audit-assurance/library/validating-multi-agent-ai-systems.html) — Individual validation then end-to-end testing
-- [Multi-Agent Testing Systems: How Cooperative AI Agents Validate Complex Applications](https://www.virtuosoqa.com/post/multi-agent-testing-systems-cooperative-ai-validate-complex-applications) — Incremental testing strategy
+**Phase impact:** Phase 34-01 (hybridisation detection) and 34-02 (neighbour detection) must enforce this constraint in all code that processes molecules for statistical analysis.
 
 ---
 
-### Pitfall 8: Smart Orchestrator, Dumb Agent (Inverted Responsibility)
+### Pitfall 2: Threshold Over-Sensitivity Without User Override
 
-**What goes wrong:** Orchestrator tries to do domain reasoning (CASE decision-making), reducing agent to passive command-executor. Loses benefit of multi-agent (agent autonomy).
+**What goes wrong:** Hardcoded detection thresholds (1% NN, 95% SN, 1% HHB) work for most cases but fail for edge cases, forcing users to abandon the system or manually edit LSD files. Sherlock's 37/45 success with defaults, 5/45 requiring overrides demonstrates this is a real problem.
 
 **Why it happens:**
-- **Control instinct** — orchestrator wants to "stay in charge"
-- **Distrust of agents** — "Agent might make wrong decision"
-- **Skill location confusion** — domain knowledge in orchestrator skill instead of agent skill
-- **Incremental mission creep** — orchestrator "just handles this one edge case"
+- Developer chooses "reasonable" defaults from literature (Sherlock thesis)
+- Works for 80-90% of test cases, seems fine
+- Edge cases emerge only during production use with diverse compound classes
+- No escape hatch for the AI agent to adjust thresholds when patterns fail
 
 **Consequences:**
-- Agent has no autonomy (just executes orchestrator commands)
-- Orchestrator becomes complex CASE reasoner (defeats purpose of delegation)
-- Hard to add new agents (orchestrator must understand their domain too)
-- Coordination overhead high (orchestrator micromanages)
-- System doesn't scale (orchestrator becomes bottleneck)
+- **Agent gets stuck in loops:** Detection says "mandatory", but LSD can't satisfy → 0 solutions → agent retries with same constraints
+- Example from Sherlock: Case required lowering NN threshold to 0.5% for rare heteroatom neighbors
+- Without override mechanism, the only fix is to disable statistical detection entirely
+- Loss of confidence in the system: "It works except when it doesn't, and then there's nothing I can do"
 
-**Responsibility boundary for lucy-ng:**
+**Real failure modes from Sherlock:**
 
-| Responsibility | Orchestrator (Supervisor) | Worker (CASE Agent) |
-|----------------|--------------------------|-------------------|
-| Workflow routing | ✓ (dereplicate vs CASE) | — |
-| Agent spawning | ✓ (Task() calls) | — |
-| Progress monitoring | ✓ (read progress file) | — |
-| Loop detection | ✓ (pattern recognition) | — |
-| Advisory generation | ✓ (what to fix) | — |
-| Escalation | ✓ (to user after retries) | — |
-| **NMR interpretation** | **—** | **✓ (spectra, peaks)** |
-| **Symmetry analysis** | **—** | **✓ (formula vs peaks)** |
-| **HMBC strategy** | **—** | **✓ (which correlations)** |
-| **LSD constraint building** | **—** | **✓ (atom types, bonds)** |
-| **Solution ranking** | **—** | **✓ (shift prediction)** |
-
-**Correct pattern:**
-```
-Orchestrator: "Loop detected (ELIM thrashing). Advisory: Remove ELIM, verify sp2 count is even."
-Agent: *Understands NMR chemistry, applies knowledge to fix sp2 count, builds correct LSD file*
-
-Orchestrator provides: WHAT is wrong (loop pattern, general guidance)
-Agent provides: HOW to fix it (domain expertise, specific constraints)
-```
-
-**Antipattern:**
-```
-Orchestrator: "Change line 15 of compound.lsd from `MULT 5 C 2 1` to `MULT 5 C 3 1`."
-Agent: *Just edits file as instructed, no reasoning applied*
-
-Orchestrator is doing CASE domain reasoning (wrong)
-Agent is reduced to text editor (wrong)
-```
+| Case | Issue | Required Override |
+|------|-------|-------------------|
+| 5/45 cases | Rare heteroatom patterns | NN threshold 1% → 0.5% |
+| 3/45 cases | Unusual hybridisation states | Hybridisation threshold 1% → 0.1% |
+| 2/45 cases | Multiple constraint conflicts | Disable mandatory SN temporarily |
 
 **Prevention:**
 
-1. **Orchestrator skill focuses on coordination, not domain:**
-   ```markdown
-   skill/supervisor/SKILL.md contents:
+1. **CLI design with override flags:**
+```bash
+# Default behavior
+lucy detect hybridisation --shift 180.5 --multiplicity 0
 
-   ✓ Loop detection patterns (ELIM thrashing, etc.)
-   ✓ Advisory constraint generation (high-level guidance)
-   ✓ Intervention thresholds (when to intervene)
-   ✓ Escalation rules (when to give up)
-   ✓ Diagnostic specialist delegation (when to call specialist)
+# Override threshold
+lucy detect hybridisation --shift 180.5 --multiplicity 0 --min-frequency 0.005
 
-   ✗ NMR chemical shift interpretation
-   ✗ Hybridization determination
-   ✗ HMBC correlation validation
-   ✗ LSD file syntax details
-   ✗ Solution ranking criteria
-
-   Domain knowledge lives in skill/SKILL.md (CASE agent reads this).
-   ```
-
-2. **Agent skill contains domain expertise:**
-   ```markdown
-   skill/CASE/SKILL.md contents:
-
-   ✓ NMR spectroscopy background
-   ✓ Peak picking strategies (DEPT-guided, HMBC-guided)
-   ✓ Symmetry analysis procedures
-   ✓ Hybridization determination (shift ranges)
-   ✓ LSD constraint building (atom types, bonds, correlations)
-   ✓ HMBC correlation strategy
-   ✓ Solution ranking with shift prediction
-   ✓ Error tolerance and confidence scoring
-
-   CASE agent is the domain expert.
-   Orchestrator just monitors and intervenes when stuck.
-   ```
-
-3. **Advisory constraints are high-level, not prescriptive:**
-   ```markdown
-   GOOD advisories (WHAT, not HOW):
-
-   "Loop detected: ELIM thrashing.
-   Root cause: Likely constraint error masked by ELIM.
-   Advisory: Remove ELIM. Verify sp2 count is even. Check H budget matches formula."
-
-   "Loop detected: Zero solutions for 5 iterations.
-   Advisory: Question one or more constraints. Consider:
-   - Are all carbons correctly assigned sp2/sp3?
-   - Are HMBC correlations validated against 13C positions?
-   - Does molecular formula allow the proposed structure?"
-
-   BAD advisories (HOW, too prescriptive):
-
-   "Change C5 from sp2 (2) to sp3 (3) in MULT line."
-   "Remove HMBC correlation between H at 7.2 ppm and C at 155 ppm."
-   "Set ELIM parameter to 1 0."
-
-   Agent should autonomously decide HOW to implement the advisory.
-   ```
-
-4. **Orchestrator code review checklist:**
-   ```python
-   # Code review for orchestrator implementation
-
-   # RED FLAGS (orchestrator doing domain reasoning):
-   if 'sp2' in advisory and any(digit in advisory for digit in '0123456789'):
-       # Advisory specifies atom numbers — TOO PRESCRIPTIVE
-       raise ValueError("Advisory should not specify atom numbers")
-
-   if 'MULT' in advisory or 'HSQC' in advisory or 'HMBC' in advisory:
-       # Advisory contains LSD syntax — WRONG LAYER
-       raise ValueError("Advisory should not contain LSD syntax")
-
-   if len(advisory) > 500:
-       # Advisory is too long — probably contains HOW instead of WHAT
-       raise ValueError("Advisory should be concise guidance, not detailed instructions")
-
-   # GREEN FLAGS (orchestrator doing coordination):
-   assert 'Loop detected' in advisory  # Pattern recognition
-   assert 'Advisory:' in advisory      # High-level guidance
-   assert len(advisory) < 300          # Concise
-   ```
-
-**Detection:**
-- Orchestrator skill contains NMR domain knowledge (chemical shifts, hybridization)
-- Advisory constraints include LSD syntax or atom numbers
-- Advisory length >500 characters (too detailed)
-- Agent skill is thin (just workflow steps, no domain knowledge)
-- Agent doesn't exercise judgment (just follows orchestrator commands)
-
-**Example from lucy-ng v2.1 architecture:**
-```markdown
-CORRECT division of responsibility:
-
-Orchestrator (supervisor.md):
-"Spawn CASE agent for compound X with formula C14H16.
-Monitor progress via CASE-PROGRESS.md.
-Detect loops: ELIM thrashing, zero solutions, solution explosion.
-Intervene with advisory constraints when loop detected.
-Escalate after 10 failed intervention cycles."
-
-CASE Agent (spawned via Task):
-Reads skill/SKILL.md (1,079 lines of domain knowledge)
-Reads skill/CASE/SKILL.md (200 lines of workflow)
-Applies NMR expertise to:
-- Pick peaks with DEPT/HMBC guidance
-- Analyze symmetry
-- Determine hybridization from shifts
-- Build LSD constraints
-- Rank solutions with prediction
-
-Orchestrator never sees chemical shifts or LSD syntax.
-Agent never sees loop detection patterns or intervention thresholds.
+# Or use strict/relaxed presets
+lucy detect hybridisation --shift 180.5 --multiplicity 0 --mode relaxed
 ```
 
-**References:**
-- [Why orchestrators become a bottleneck in multi-agent AI](https://dev.to/ablyblog/why-orchestrators-become-a-bottleneck-in-multi-agent-ai-published-4mgf) — Centralized orchestrators that do too much reasoning
-- [Choosing the right orchestration pattern for multi agent systems](https://www.kore.ai/blog/choosing-the-right-orchestration-pattern-for-multi-agent-systems) — Supervisor pattern tradeoffs
-- [AI Agent Orchestration Patterns - Azure Architecture Center](https://learn.microsoft.com/en-us/azure/architecture/ai-ml/guide/ai-agent-design-patterns) — Responsibility boundaries
+2. **Agent intervention protocol:** Orchestrator detects "0 solutions with statistical constraints" pattern → suggests relaxed thresholds in advisory intervention
+
+3. **Document threshold semantics:**
+   - `min_frequency=0.01` → "exclude states seen < 1% of the time"
+   - `mandatory_frequency=0.95` → "require elements seen > 95% of the time"
+   - `relaxed mode` → halve all exclusion thresholds (0.01 → 0.005)
+
+**Detection:**
+- Warning sign: LSD produces 0 solutions when statistical detection is ON, >0 solutions when OFF
+- Log the actual frequency values when excluding/requiring elements
+- Test suite should include known edge cases (e.g., rare heteroatoms, unusual oxidation states)
+
+**Phase impact:** Phase 34-01 through 34-03 must include threshold override parameters. Phase 34-06 (agent integration) must teach intervention protocol.
+
+---
+
+### Pitfall 3: Circular Validation Risk (Same Data for Constraints and Ranking)
+
+**What goes wrong:** Using the HOSE database for BOTH statistical constraint generation (pre-LSD) AND solution ranking (post-LSD) creates a circular reasoning risk. If the database has systematic biases (e.g., over-representation of aromatic carbons), both constraints and ranking will reinforce those biases, potentially excluding valid but under-represented structures.
+
+**Why it happens:**
+- Same database (928K compounds) is the only available training data
+- Convenient to use existing HOSE stats for all statistical operations
+- Not obvious that constraint generation and ranking are logically distinct validation steps
+- No independent validation dataset to catch the circularity
+
+**Consequences:**
+- **Systematic bias toward database-common structures:** Novel natural products with rare structural features get lower confidence
+- Example: If database has 90% aromatic C-O bonds (phenols) and 10% aliphatic C-O bonds (alcohols), constraints will favor aromatic, ranking will favor aromatic → alcohol misidentified
+- **False confidence:** Both steps agree, but only because they share the same biases
+- **Training data leakage:** If test compounds are in the HOSE database, they'll be artificially favored
+
+**Is this actually a problem?**
+
+Sherlock's success (40/45 solved, 38/40 at rank #1) suggests the circular risk is MITIGATED by:
+1. Database size (892K compounds) provides diverse coverage
+2. Constraints are threshold-filtered (only strong patterns, >95% or <1%)
+3. LSD's combinatorial search still explores constraint-satisfying space
+
+However, lucy-ng's ibuprofen failure shows the RISK when constraints are wrong:
+- Statistical detection might have said "sp2 carbons at 44-45 ppm are rare" → exclude
+- But ibuprofen HAS sp3 carbons there → constraint would worsen the problem
+
+**Prevention:**
+
+1. **Acknowledge limitation in documentation:**
+   - "Statistical detection is trained on the same database used for ranking. For novel compound classes not well-represented in COCONUT/NMRShiftDB, constraints may be over-restrictive."
+
+2. **Validation approach:**
+   - Hold out 10% of database compounds during HOSE stats generation
+   - Test constraint quality on held-out set: do constraints exclude correct structure?
+   - Measure: "% of held-out compounds where correct structure satisfies all statistical constraints"
+
+3. **Agent fallback protocol:**
+   - If LSD produces 0 solutions with statistical constraints, agent should try WITHOUT constraints
+   - If solutions appear, flag as "low confidence - statistical constraints may not apply"
+
+4. **Threshold conservatism:**
+   - Use strict thresholds (1% NN, 95% SN) as documented in Sherlock
+   - These minimize false exclusions at cost of allowing more solutions (then ranking filters)
+
+**Detection:**
+- Warning sign: Test compound gives 0 solutions with stats, >0 without stats, and manual inspection shows correct structure violated a statistical constraint
+- Validation metric: "constraint violation rate on held-out test set"
+- Long-term: track cases where agent disabled stats to solve → pattern indicates under-represented compound class
+
+**Phase impact:** Not a blocker, but Phase 34 planning should include validation protocol. Documentation should acknowledge this limitation. Phase 34-06 (agent integration) should include fallback behavior.
+
+---
+
+### Pitfall 4: COCONUT Predicted Data Quality Unknown for Bond Statistics
+
+**What goes wrong:** 96.87% of HOSE data comes from COCONUT (predicted spectra using NMRShiftDB model, not experimental). Hybridisation detection queries chemical shifts (prediction quality known ~2 ppm MAE), but neighbourhood/bond statistics require extracting molecular graph features (hybridisation type, bond partners) from COCONUT structures. If COCONUT structures have errors (wrong stereochemistry, tautomers, protonation states), bond statistics will be systematically wrong.
+
+**Why it happens:**
+- COCONUT aggregates 63+ databases with varying curation quality
+- Structures are "as-deposited" from original sources
+- No systematic validation of bond assignments, hybridisation states, tautomeric forms
+- Easy to assume "structure is structure" without checking quality
+
+**Consequences:**
+- **Systematic errors in neighbourhood statistics:** If COCONUT has wrong bond types (single vs aromatic, ether vs alcohol), neighbour frequencies will be wrong
+- **Tautomer ambiguity:** Enol vs keto, imine vs amine → different hybridisation states for same carbon shift
+- **Protonation state errors:** Neutral vs charged forms → different neighbor counts
+- Example: If 20% of carboxylic acids stored as COO- instead of COOH, oxygen neighbor statistics will be skewed
+
+**Evidence from literature:**
+
+Based on research, COCONUT 2.0 (2024 update) aggregates 63+ open NP resources and underwent "comprehensive overhaul and curation" but specific bond-level validation metrics are not reported in search results. The focus is on compound-level curation (duplicates, InChI standardization), not systematic bond assignment validation.
+
+NMR prediction quality: DFT methods achieve ~2.0 ppm MAE for 13C (acceptable for shift-based queries), but bond topology accuracy is a separate concern not addressed in prediction validation.
+
+**Prevention:**
+
+1. **Direct extraction approach (BETTER):**
+   - Don't trust COCONUT's bond types or hybridisation labels
+   - Extract hybridisation from sanitized RDKit molecule: `atom.GetHybridization()` after `Chem.MolFromSmiles()`
+   - RDKit sanitization corrects many structure errors automatically
+   - Still vulnerable to wrong input SMILES, but better than as-deposited
+
+2. **Validation sampling:**
+   - Manually inspect 100 random COCONUT structures from the database
+   - Check: bond orders, hybridisation states, tautomeric forms
+   - If >5% have errors, consider filtering (e.g., exclude low-confidence sources)
+
+3. **Cross-reference with NMRShiftDB subset:**
+   - NMRShiftDB compounds (3.13% of data) are experimental spectra with curated structures
+   - Compare hybridisation/bond statistics from COCONUT-only vs NMRShiftDB-only
+   - Large divergence (>10%) indicates COCONUT quality issue
+
+4. **Conservative thresholds:**
+   - Use 1% NN threshold as Sherlock does → tolerates some noise
+   - Avoid 99%+ thresholds for mandatory neighbors → too strict for noisy data
+
+**Detection:**
+- Warning sign: Hybridisation frequencies don't match chemistry intuition (e.g., "90% of carbons at 130 ppm are sp3")
+- Validation test: Query known fragment (benzene ring), check if C neighbor frequency ~95% (should be, for aromatic CH)
+- Agent confusion: Statistical constraints produce chemically nonsensical LSD files
+
+**Phase impact:** Phase 34-01/34-02 should include validation sampling step. Document data quality caveat. Not a blocker unless validation reveals >10% error rate.
+
+---
+
+### Pitfall 5: Signal Grouping False Positives (0.24 ppm Truly Different)
+
+**What goes wrong:** Sherlock groups signals within 0.25 ppm tolerance and forces combinatorial HMBC exchange, assuming they're ambiguous assignments. But what if two carbons are 0.24 ppm apart AND confidently assigned to different positions based on HSQC multiplicities or other orthogonal data? Forcing combinatorial exchange creates spurious LSD solutions that waste ranking time.
+
+**Why it happens:**
+- 0.25 ppm is a reasonable tolerance for 13C ambiguity (experimental uncertainty ~0.1 ppm, prediction error ~2 ppm)
+- Sherlock's algorithm is simple: distance < threshold → group them
+- No mechanism to override grouping when user has high confidence in assignment
+- AI agent may have used DEPT or other data to disambiguate, but grouping logic doesn't know this
+
+**Consequences:**
+- **Combinatorial explosion:** If 3 signals are within 0.25 ppm, all HMBC correlations are 3x duplicated → LSD search space grows cubically
+- **Spurious solutions:** Structures that swap the close-shift carbons are generated and must be ranked
+- **Wasted compute time:** Ranking hundreds of near-identical solutions that only differ in swapped assignments
+- Example: C4 at 44.90, C5 at 45.03, C6 at 45.20 → 3! = 6x search space expansion, 5 of those permutations are likely wrong
+
+**When is grouping correct?**
+
+- **Correct case (ibuprofen):** C4/C5 are 0.13 ppm apart, BOTH are CH2 (indistinguishable by DEPT), HMBC pattern is symmetric → truly ambiguous, grouping is essential
+- **False positive case:** C4 at 44.90 (CH2), C5 at 45.03 (CH), C6 at 45.20 (CH3) → multiplicities distinguish them, grouping creates spurious swaps
+
+**Prevention:**
+
+1. **Multiplicity-aware grouping:**
+```python
+def should_group(shift1, mult1, shift2, mult2, tolerance=0.25):
+    """Group only if within tolerance AND same multiplicity."""
+    if abs(shift1 - shift2) > tolerance:
+        return False
+    # Same multiplicity (both CH2) or both ambiguous (CH/CH3) → group
+    if mult1 == mult2 or (mult1 in ["CH", "CH3"] and mult2 in ["CH", "CH3"]):
+        return True
+    return False
+```
+
+2. **Agent override mechanism:**
+   - If agent has high confidence in assignment (e.g., used COSY to confirm), mark signals as "do not group"
+   - CLI flag: `lucy analyze grouping --shifts "44.90,45.03" --no-group-indices 0,1`
+
+3. **Post-ranking filter:**
+   - If top 10 solutions only differ by swapped assignments of close signals, collapse them to single representative
+   - Report: "Solution #1 and #2 differ only in C4/C5 assignment (0.13 ppm apart)"
+
+4. **Tolerance tuning:**
+   - 0.25 ppm is aggressive for cases with DEPT data (multiplicities reduce ambiguity)
+   - Consider 0.15 ppm threshold when DEPT is available, 0.25 ppm when not
+
+**Detection:**
+- Warning sign: LSD produces 100+ solutions, top 10 all have MAE <0.5 ppm and differ only in assignment of close signals
+- Test case: Compound with 3 carbons at 45.0, 45.1, 45.2 ppm with DIFFERENT multiplicities (CH, CH2, CH3) → grouping should NOT force combinatorial exchange
+- Agent log: "Grouping created NNN permutations" where NNN > 100
+
+**Phase impact:** Phase 34-04 (signal grouping) should implement multiplicity-aware logic, not just distance threshold. Phase 34-06 (agent integration) should teach when to override.
+
+---
+
+### Pitfall 6: Database Size Explosion from Per-Shift Statistics
+
+**What goes wrong:** Storing hybridisation and neighbourhood statistics AT THE SHIFT LEVEL (not HOSE code level) creates massive new tables. With 928K compounds × 13C shifts per compound (avg ~20) × hybridisation states (3) × elements (C, O, N, etc.) = potentially 50M+ rows for neighbourhood stats alone.
+
+**Why it happens:**
+- Naive design: "For each shift, store hybridisation frequencies and neighbor frequencies"
+- Seems simpler than HOSE-based lookup
+- Doesn't account for sparsity: most shift/element combinations never occur
+- SQLite can handle it, but queries become slow and database size balloons
+
+**Consequences:**
+- **Database size explosion:** 2.8 GB current → potentially 10+ GB with per-shift statistics
+- **Slow queries:** Finding neighbours for shift=180.5 ppm requires scanning millions of rows
+- **Redundant storage:** Shifts at 180.4, 180.5, 180.6 ppm likely have SAME statistics (all sp2 carbonyl), but stored separately
+- **Download/distribution problem:** Users must download 10 GB database instead of 2.8 GB
+
+**Sherlock's approach (from thesis):**
+
+- Query HOSE database with shift tolerance (±2 ppm)
+- Find all HOSE codes matching shift range
+- Extract structures for those HOSE codes
+- Compute statistics ON THE FLY from matching structures
+
+This avoids pre-computing shift-level statistics. Cost: slower query (but acceptable for interactive use).
+
+**Better approaches:**
+
+**Option A: HOSE-based lookup (Sherlock's approach)**
+```sql
+-- Query: What hybridisations exist at shift 180.5 ppm?
+-- Step 1: Find HOSE codes with mean within tolerance
+SELECT DISTINCT hose_code FROM hose_stats
+WHERE mean BETWEEN 178.5 AND 182.5 AND radius = 6;
+
+-- Step 2: For each HOSE code, extract structure and get hybridisation
+-- (Requires re-parsing structures, but no new tables)
+```
+
+**Option B: Binned statistics (2 ppm bins)**
+```sql
+-- Pre-compute statistics in 2 ppm bins (0-2, 2-4, ..., 218-220)
+CREATE TABLE shift_bins (
+    bin_start REAL,
+    element TEXT,
+    hybridisation TEXT,
+    frequency REAL,
+    PRIMARY KEY (bin_start, element, hybridisation)
+);
+-- Only 110 bins × 10 elements × 3 hybrids = 3,300 rows (tiny!)
+```
+
+**Option C: Compound-level extraction (store structures, compute on query)**
+```sql
+-- Don't store statistics at all
+-- Query compounds with shifts in range, extract hybridisation from SMILES
+-- Slower but zero storage overhead
+```
+
+**Recommendation:**
+
+Use **Option B** (binned statistics) for hybridisation (fast, small). Use **Option A** (HOSE-based) for neighbourhood detection (leverages existing HOSE data). Avoid Option C (too slow for interactive use).
+
+**Prevention:**
+
+1. **Design review before implementation:**
+   - Estimate table sizes BEFORE writing code
+   - Formula: rows = compounds × avg_carbons × dimensions
+   - If >10M rows, reconsider design
+
+2. **Test with full database:**
+   - Generate statistics on full 928K compound database
+   - Measure: storage size, query time, index size
+   - Reject design if query time >1 second or size >5 GB
+
+3. **Use binning for coarse features:**
+   - Hybridisation: 2 ppm bins (110 bins total, tiny table)
+   - Neighbours: HOSE-based (reuse existing data)
+   - Hetero-hetero bonds: global statistic (single value!)
+
+**Detection:**
+- Warning sign during development: `CREATE TABLE` statement estimates >10M rows
+- Benchmark query time on small sample (1K compounds) and extrapolate to 928K
+- Monitor database file size during generation: if growing >100 MB/hour, design is wrong
+
+**Phase impact:** Phase 34-01 (hybridisation) and 34-02 (neighbours) MUST include storage design review. Recommend binning for 34-01, HOSE-lookup for 34-02, global stat for 34-03 (HHB).
+
+---
+
+### Pitfall 7: Agent Workflow Confusion (Stats Contradict NMR Knowledge)
+
+**What goes wrong:** The CASE agent currently writes LSD files using inlined NMR knowledge ("carbons at 120-140 ppm are typically sp2"). Statistical detection may return different results ("87% sp2, 13% sp3 at 125 ppm"). When agent receives contradictory guidance, it may:
+- Ignore statistical detection (defeating the purpose)
+- Over-trust statistics and violate basic chemistry
+- Get stuck in decision paralysis
+- Write malformed LSD files trying to satisfy both
+
+**Why it happens:**
+- Agent has 666 lines of CASE knowledge, including shift range heuristics
+- Statistical detection is new information source without integration guidance
+- No clear hierarchy: "When stats contradict knowledge, which wins?"
+- Agent's prompt doesn't explain HOW to use statistical output
+
+**Consequences:**
+- **Agent ignores stats:** Defeats the purpose of adding statistical detection
+- **Agent over-trusts stats:** Example: "Database says 5% sp1 at 130 ppm" → agent writes `MULT 1 C 1 0` (alkyne) for an aromatic signal → chemically nonsensical
+- **Prompt confusion:** "I detected sp2 from shift range, but lucy detect says sp3. Which should I use?"
+- **Loop risk:** Agent tries stats → fails → tries knowledge → fails → repeats
+
+**Real example from lucy-ng memory:**
+
+Pitfall 6 rewrite (from ibuprofen CASE): "Don't over-constrain heteroatoms. Only BOND C=O. Use LIST/ELEM/PROP for flexible connectivity." This shows the agent already has guidance on constraint conservatism. Statistical detection must fit this philosophy.
+
+**Prevention:**
+
+1. **Agent integration guidance (in lucy-case-agent.md):**
+
+```markdown
+## Statistical Detection Protocol
+
+Use statistical detection to AUGMENT NMR knowledge, not replace it.
+
+**Hierarchy:**
+1. Chemistry first: Never violate basic chemistry (e.g., sp1 carbon at aromatic shift)
+2. Statistics second: Use to narrow among chemically valid options
+3. Knowledge third: Fall back to shift ranges if statistics unavailable
+
+**Example:**
+- Signal at 130 ppm, multiplicity CH
+- NMR knowledge: "120-140 ppm is typically sp2 (aromatic or alkene)"
+- Statistical query: `lucy detect hybridisation --shift 130 --multiplicity 1`
+  → Returns: {sp2: 92%, sp3: 7%, sp1: 1%}
+- Decision: Use sp2 (stats confirm knowledge)
+- LSD: `MULT 1 C 2 1` (sp2, 1H)
+
+**Contradiction example:**
+- Signal at 125 ppm, multiplicity CH
+- Stats return: {sp3: 60%, sp2: 40%}
+- Contradiction detected (aromatic shift with sp3 majority?)
+- Resolution: Trust chemistry → use sp2, flag stats as low-confidence
+```
+
+2. **CLI design to minimize ambiguity:**
+
+```bash
+# Output should include confidence and chemistry check
+lucy detect hybridisation --shift 125 --multiplicity 1
+
+# Output:
+# {
+#   "shift": 125.0,
+#   "hybridisations": {
+#     "sp2": {"frequency": 0.92, "count": 1523},
+#     "sp3": {"frequency": 0.07, "count": 115},
+#     "sp1": {"frequency": 0.01, "count": 18}
+#   },
+#   "recommendation": "sp2",
+#   "confidence": "HIGH",
+#   "chemistry_check": "PASS (aromatic/alkene shift range)"
+# }
+```
+
+3. **Orchestrator intervention when agent ignores stats:**
+   - Pattern: Agent ran statistical detection, received result, wrote LSD without using it
+   - Advisory: "You detected sp2 at 130 ppm but wrote sp3 MULT. Reconsider using statistical result."
+
+4. **Test scenarios in agent training:**
+   - Scenario 1: Stats confirm knowledge (easy case)
+   - Scenario 2: Stats contradict knowledge (chemistry wins)
+   - Scenario 3: Stats provide NO data (fall back to knowledge)
+   - Scenario 4: Stats ambiguous (sp2: 52%, sp3: 48%) → agent decides based on other evidence
+
+**Detection:**
+- Warning sign: Agent writes LSD files identical to v2.1 behavior (not using stats at all)
+- Log analysis: "lucy detect" commands run but MULT lines don't reflect output
+- Test case: Give agent a compound where stats differ from shift-range heuristic → verify correct resolution
+
+**Phase impact:** Phase 34-06 (agent integration) is CRITICAL. Must include extensive testing of stats-vs-knowledge scenarios. Update lucy-case-agent.md with clear hierarchy and examples.
 
 ---
 
 ## Moderate Pitfalls
 
-Mistakes that cause delays or technical debt when adding multi-agent orchestration.
+Mistakes that cause delays, suboptimal results, or require rework but don't break the system.
 
-### Pitfall 9: No Incremental Migration Path
+### Pitfall 8: Two-Tier Ranking Edge Cases (Fewer Matches, Lower MAE)
 
-**What goes wrong:** Attempting to replace entire monolithic skill with multi-agent orchestration in one step, causing extended breakage period.
+**What goes wrong:** Two-tier ranking (match count first, MAE second) correctly handles most cases, but edge case exists: what if the CORRECT structure has 10/13 matching signals (MAE 1.8 ppm) while an INCORRECT structure has 13/13 matches (MAE 2.1 ppm) because all its predictions happened to fall within tolerance by coincidence?
 
-**Prevention:**
-- Add orchestrator as **parallel path** initially
-- Keep existing monolithic skill working
-- Gradual migration: orchestrator calls existing tools first
-- Feature flag for multi-agent vs monolithic mode
-- Cut over once orchestration proven
+**Real case from Sherlock:**
 
-### Pitfall 10: Unclear Orchestrator vs Agent Skill Boundary
+Case 21 (3-hydroxy-drimenol): Correct solution had 10/13 matching signals, incorrect had 13/13 but lower quality matches. Two-tier ranking caught this BECAUSE match count won. But the opposite can occur for novel compounds with many fallback-only HOSE matches.
 
-**What goes wrong:** Domain knowledge duplicated between orchestrator skill and agent skill, causing inconsistencies.
-
-**Prevention:**
-- Orchestrator skill: Coordination patterns only
-- Agent skill: Domain expertise only
-- Shared skill: Common domain knowledge (NMR basics)
-- Use skill inheritance (`skills: [lucy-ng]` in frontmatter)
-
-### Pitfall 11: No Diagnostic Visibility
-
-**What goes wrong:** When orchestration fails, no visibility into why (which agent failed, what was in progress file, what advisory was issued).
+**Why it happens:**
+- HOSE fallback mechanism (radius 6 → 5 → 4 → ... → 1) means rare structures get low-radius matches
+- Low-radius matches have high variance (std ~10 ppm at radius 1)
+- By chance, some low-radius predictions land within 10 ppm tolerance → counted as "match"
+- Wrong structure with MORE common fragments gets more matches
 
 **Prevention:**
-- Orchestrator logs all spawns, reads, advisories to orchestration.log
-- Progress files persisted (not cleaned up after completion)
-- Diagnostic report generated on escalation
-- User can replay orchestration from logs
 
-### Pitfall 12: Tight Coupling Between Orchestrator and Agent Format
+1. **Weighted match counting:**
+```python
+# Don't count all matches equally
+match_score = 0
+for atom in structure:
+    predicted_shift, radius_used = predict_with_radius(atom)
+    if abs(predicted_shift - experimental_shift) < 10:  # within tolerance
+        # Weight by radius used (radius 6 = 1.0, radius 1 = 0.2)
+        match_score += radius_used / 6.0
+```
 
-**What goes wrong:** Orchestrator parses progress file with brittle regex, any format change in agent output breaks coordination.
+2. **Report HOSE radii in ranking output:**
+```
+Rank #1: SMILES, matches=10/13, MAE=1.8 ppm
+  - 7 matches at radius 6 (high confidence)
+  - 2 matches at radius 4 (medium confidence)
+  - 1 match at radius 2 (low confidence)
+
+Rank #2: SMILES, matches=13/13, MAE=2.1 ppm
+  - 3 matches at radius 6
+  - 5 matches at radius 4
+  - 5 matches at radius 1 (suspicious - many fallbacks)
+```
+
+3. **Flag all-fallback solutions:**
+   - If >50% of matches are radius ≤2, mark as "LOW CONFIDENCE - novel structure"
+
+**Detection:**
+- Test case: Novel natural product with unique fragment → verify ranking doesn't favor common-fragment wrong structure
+- Manual inspection of test failures: check if wrong structure at rank #1 has many low-radius matches
+- Agent confusion: "Rank #1 looks wrong but has more matches than rank #2"
+
+**Phase impact:** Phase 34-05 (two-tier ranking) should include radius-weighted scoring or at minimum report radius distribution. Not a blocker but improves ranking quality.
+
+---
+
+### Pitfall 9: No Validation Dataset for Statistical Detection Quality
+
+**What goes wrong:** Adding statistical detection without held-out validation means you can't measure whether constraints are HELPING or HURTING. Did solution count drop because constraints are good, or because they're excluding the correct structure?
+
+**Why it happens:**
+- Eager to ship: "Sherlock's thresholds work, we'll use those"
+- No time budgeted for validation infrastructure
+- Assumes "more constraints = better" without testing
+
+**Consequences:**
+- Can't answer: "What % of test cases have correct structure satisfying all statistical constraints?"
+- Can't detect regression: If database changes (new COCONUT version), constraints might get worse
+- Can't optimize thresholds: Is 1% better than 0.5% for NN threshold? Unknown without data
 
 **Prevention:**
-- Define structured format (YAML or JSON sections in progress.md)
-- Version progress file format (`version: 1.0` in header)
-- Orchestrator gracefully handles missing fields (warns but continues)
-- Schema validation for progress file
+
+1. **Create validation set:**
+   - Use Sherlock's 45 test cases (DOIs in thesis Table 13)
+   - Download from nmrXiv, sanitize, run through lucy-ng pipeline
+   - For each case, check: does correct structure satisfy statistical constraints?
+
+2. **Metrics to track:**
+   - **Constraint accuracy:** % of cases where correct structure satisfies all constraints
+   - **Search space reduction:** Median solution count with vs without constraints
+   - **Rank improvement:** Mean rank of correct structure with vs without constraints
+   - **Threshold sensitivity:** Rerun with 0.5%, 1%, 2% thresholds → which is best?
+
+3. **Regression testing:**
+   - Add validation cases to test suite
+   - CI fails if constraint accuracy drops below 90%
+
+**Detection:**
+- Before Phase 34: No validation dataset exists
+- After Phase 34: Validation dataset exists and metrics reported
+
+**Phase impact:** Phase 34-07 (validation) should be added to roadmap. Not critical for initial implementation, but required before v3.0 release.
+
+---
+
+### Pitfall 10: Badlist Filters Applied Too Broadly
+
+**What goes wrong:** Adding 3/4-membered ring filters as Sherlock does, but applying them to ALL compound classes including those where strained rings are common (alkaloids, terpenoids with cyclopropane).
+
+**Why it happens:**
+- Sherlock's documentation says "apply by default"
+- Natural products literature shows most NPs don't have 3/4-rings
+- Easy to hardcode filter without escape hatch
+
+**Consequences:**
+- **False exclusion:** Compounds with cyclopropane rings eliminated
+- Example: Chrysanthemic acid (pyrethroid precursor) has cyclopropane → badlist excludes correct structure
+- Agent has no way to override: "I see HMBC pattern suggesting cyclopropane, but badlist forbids it"
+
+**Prevention:**
+
+1. **Molecular formula hint:**
+   - If formula indicates high unsaturation (many rings/double bonds), disable 4-ring filter
+   - Cyclopropane compounds often have odd hydrogen counts or low H/C ratio
+
+2. **Agent override:**
+   - CLI flag: `--allow-strained-rings`
+   - Agent decides based on HMBC pattern: "Correlations suggest cyclopropane, enabling strained rings"
+
+3. **Conservative default:**
+   - Apply 3-ring filter (true cyclopropane is rare)
+   - Skip 4-ring filter by default (cyclobutane more common in NPs than expected)
+
+**Detection:**
+- Test case: Known cyclopropane compound → verify not excluded
+- Agent log: "Badlist prevented solutions, retrying with override"
+
+**Phase impact:** Phase 34-05 (badlist) should include override mechanism. Document when strained rings are chemically plausible.
 
 ---
 
 ## Minor Pitfalls
 
-Mistakes that cause annoyance but are fixable.
+Mistakes that cause annoyance, suboptimal UX, or minor inefficiencies but are easily fixed.
 
-### Pitfall 13: Verbose Orchestration Messages
+### Pitfall 11: Statistical Detection Slows CASE Workflow (Too Many CLI Calls)
 
-**What goes wrong:** Orchestrator logs every action to user, cluttering output with coordination details.
-
-**Prevention:**
-- Show user: "Running CASE workflow... (spawning agent)"
-- Hide from user: Task() internals, progress file reads, loop detection logic
-- Show user on intervention: "Loop detected, retrying with guidance"
-- Show user on escalation: Full diagnostic context
-
-### Pitfall 14: No Agent Performance Monitoring
-
-**What goes wrong:** No visibility into agent efficiency (how long each spawn takes, token usage, retry rate).
+**What goes wrong:** Agent must run separate `lucy detect` commands for every carbon (e.g., 13 carbons = 13 × 3 CLI calls for hybridisation/neighbours/HHB). Each call has subprocess overhead (~50ms). Total: 13 × 3 × 50ms = 2 seconds of pure overhead.
 
 **Prevention:**
-- Log spawn time, completion time per agent
-- Track token usage per spawn (if available)
-- Monitor retry rate per loop pattern
-- Report metrics on completion
 
-### Pitfall 15: Hard-Coded Orchestration Constants
-
-**What goes wrong:** MAX_SPAWN_CYCLES = 10 hard-coded in orchestrator, can't adjust without code change.
-
-**Prevention:**
-- Orchestration config file (orchestration-config.yaml)
-- Environment variables for thresholds
-- Documented tuning guide for production deployment
-
----
-
-## Phase-Specific Warnings for v2.1
-
-| Phase | Likely Pitfall | Mitigation |
-|-------|---------------|------------|
-| Sub-command skill creation | Paper architecture (writing skills before testing Task()) | Validation-first: Test spawn before expanding skills |
-| Orchestrator implementation | Context overflow (inlining entire skills) | Reference pattern, not inline |
-| Loop detection | False positives (intervening too early) | Multi-signal detection, suppression mechanism |
-| Agent handoff | State loss across spawns | Explicit handoff, progress file as state repository |
-| Integration | No end-to-end test | Minimum viable integration test suite |
-| Skill authoring | YAML syntax errors | Validation checklist, hot-reload testing |
-| Responsibility division | Smart orchestrator, dumb agent | Advisory constraints (WHAT not HOW) |
-
----
-
-## Integration Pitfalls Summary
-
-**Critical risks when adding multi-agent to lucy-ng v2.1:**
-
-1. **Paper architecture** — Define-test-expand, not define-define-define
-2. **Context overflow** — Reference skills, don't inline
-3. **Infinite loops** — Termination guarantees, multi-signal detection
-4. **Race conditions** — Atomic writes, sequential agents (blocking Task)
-5. **YAML errors** — Validation checklist, hot-reload testing
-6. **State loss** — Explicit handoff, progress as state repository
-7. **No integration tests** — Minimum 10 tests proving orchestration works
-8. **Inverted responsibility** — Orchestrator coordinates, agent reasons
-
-**v2.1 validation gate (prevent v2.0 repeat):**
-
-```markdown
-Before declaring multi-agent orchestration complete:
-
-[ ] Integration test: Supervisor spawns CASE agent
-[ ] Integration test: CASE agent writes progress file
-[ ] Integration test: Supervisor detects loop pattern
-[ ] Integration test: Advisory issued and agent re-spawned
-[ ] Integration test: Termination after max retries
-[ ] Integration test: Full end-to-end success (simple case)
-[ ] Integration test: Full end-to-end intervention (complex case)
-[ ] Manual test: Run on real compound, supervisor coordinates correctly
-[ ] Code review: Orchestrator doesn't contain domain reasoning
-[ ] Documentation: User guide for multi-agent orchestration
-
-ALL must pass before v2.1 ships.
+Batch API:
+```bash
+lucy detect batch --shifts shifts.json --output constraints.json
+# Processes all shifts in one call, returns all constraints
 ```
+
+**Phase impact:** Phase 34-06 (agent integration) should add batch command if profiling shows >5 second overhead.
+
+---
+
+### Pitfall 12: Neighbour Detection Returns Too Many Elements
+
+**What goes wrong:** Neighbourhood detection for a carbonyl carbon at 200 ppm might return: `{C: 65%, O: 30%, N: 3%, S: 1.5%, P: 0.5%}`. With 1% NN threshold, ALL five elements are allowed. LSD search space doesn't shrink much.
+
+**Prevention:**
+
+Report only elements >5% frequency by default:
+```bash
+lucy detect neighbours --shift 200 --min-report 0.05
+# Returns: {C: 65%, O: 30%} (N, S, P below 5%, omitted)
+```
+
+**Phase impact:** Phase 34-02 should include min-report threshold.
+
+---
+
+### Pitfall 13: No Human-Readable Summary of Statistical Constraints
+
+**What goes wrong:** Agent runs detection, gets JSON output, writes LSD file. User can't easily see WHAT constraints were applied without parsing LSD commands.
+
+**Prevention:**
+
+Generate summary file:
+```markdown
+# Statistical Constraints Applied
+
+## Carbon 1 (180.5 ppm, multiplicity 0)
+- Hybridisation: sp2 (99.2% frequency)
+- Forbidden neighbors: N (<1%), S (<1%)
+- Mandatory neighbors: O (96% frequency)
+```
+
+**Phase impact:** Phase 34-06 (agent) should write constraints summary to analysis/ folder.
+
+---
+
+## Phase-Specific Warnings
+
+| Phase Topic | Likely Pitfall | Mitigation |
+|-------------|---------------|------------|
+| 34-01 Hybridisation Detection | Pitfall 1 (H consistency), Pitfall 6 (storage) | Use binned stats (2 ppm bins), enforce no-explicit-H in code review |
+| 34-02 Neighbour Detection | Pitfall 2 (threshold sensitivity), Pitfall 6 (storage) | HOSE-based lookup, include override flags |
+| 34-03 HHB Detection | Pitfall 4 (COCONUT quality) | Global statistic (single query), cross-check with NMRShiftDB subset |
+| 34-04 Signal Grouping | Pitfall 5 (false positives) | Multiplicity-aware grouping, document edge cases |
+| 34-05 Ranking + Badlist | Pitfall 8 (match quality), Pitfall 10 (cyclopropane) | Report HOSE radii, add override for strained rings |
+| 34-06 Agent Integration | Pitfall 7 (workflow confusion), Pitfall 11 (CLI overhead) | Clear hierarchy in prompt, batch API if needed |
+| 34-07 Validation (proposed) | Pitfall 9 (no validation) | Use Sherlock's 45 test cases, track metrics |
+
+---
+
+## Success Criteria for Pitfall Avoidance
+
+Before v3.0 release, verify:
+
+- [ ] **Pitfall 1:** Test case confirms HOSE consistency (ethanol prediction works, hybridisation detection works)
+- [ ] **Pitfall 2:** CLI includes threshold override flags, documented in agent skill
+- [ ] **Pitfall 3:** Documentation acknowledges circular risk, agent has fallback protocol
+- [ ] **Pitfall 4:** Validation sampling completed (100 structures inspected), quality >90%
+- [ ] **Pitfall 5:** Signal grouping uses multiplicity, not just distance
+- [ ] **Pitfall 6:** Database size <5 GB after stats generation, query time <1 sec
+- [ ] **Pitfall 7:** Agent integration tested with stats-vs-knowledge scenarios
+- [ ] **Pitfall 8:** Ranking reports HOSE radii or uses weighted scoring
+- [ ] **Pitfall 9:** Validation dataset created (Sherlock's 45 cases or subset)
+- [ ] **Pitfall 10:** Badlist includes override mechanism, tested with cyclopropane
 
 ---
 
 ## Sources
 
-**Paper Architecture Prevention:**
-- [Claude Code Tasks: Complete Guide to AI Agent Workflow](https://www.dplooy.com/blog/claude-code-tasks-complete-guide-to-ai-agent-workflow)
-- [Claude Code Todos to Tasks](https://medium.com/@richardhightower/claude-code-todos-to-tasks-5a1b0e351a1c)
-- [How Claude Code works](https://code.claude.com/docs/en/how-claude-code-works)
+### RDKit Documentation
+- [RDKit Cookbook](https://www.rdkit.org/docs/Cookbook.html) - GetHybridization and molecular operations
+- [rdkit.Chem.rdchem module](https://www.rdkit.org/docs/source/rdkit.Chem.rdchem.html) - Atom and bond methods
+- [RDKit GitHub Issues #3643](https://github.com/rdkit/rdkit/issues/3643) - Hybridization with hydrogen atoms
+- [Where is my H dude? (in GetNeighbors)](https://rdkit-discuss.narkive.com/XIwGn1BT/where-is-my-h-dude-in-getneighbors) - Implicit vs explicit hydrogen handling
 
-**Context Window Management:**
-- [Context Window Overflow in 2026: Fix LLM Errors Fast](https://redis.io/blog/context-window-overflow/)
-- [Multi-agent orchestration for Claude Code in 2026](https://shipyard.build/blog/claude-code-multi-agent/)
-- [Claude Code Multi-Agent Orchestration System](https://gist.github.com/kieranklaassen/d2b35569be2c7f1412c64861a219d51f)
+### NMR Prediction and HOSE Codes
+- [NMR shift prediction from small data quantities](https://jcheminf.biomedcentral.com/articles/10.1186/s13321-023-00785-x) - HOSE code performance metrics
+- [Stereo-Aware Extension of HOSE Codes](https://pubs.acs.org/doi/10.1021/acsomega.9b00488) - Enhanced HOSE code methods
+- [NMRShiftDB history](https://nmrshiftdb2.sourceforge.io/predictionhistory/history.html) - HOSE code database evolution
 
-**Iterative Supervision:**
-- [Our Agent Had A 4 Minute Loop. Here's How We Fixed It.](https://medium.com/data-science-collective/our-agent-had-a-4-minute-loop-heres-how-we-fixed-it-40a8142ef1a9)
-- [Ralph Wiggum AI Agents: The Coding Loop of 2026](https://www.leanware.co/insights/ralph-wiggum-ai-coding)
-- [Agent Loop Definition: How AI Agents Use Iterative Processes](https://www.glean.com/ai-glossary/agent-loop)
+### COCONUT Database
+- [COCONUT online: Collection of Open Natural Products database](https://jcheminf.biomedcentral.com/articles/10.1186/s13321-020-00478-9) - Original publication
+- [COCONUT 2.0](https://academic.oup.com/nar/article/53/D1/D634/7908792) - 2024 comprehensive overhaul
+- [COCONUT website](https://coconut.naturalproducts.net/) - Database access
 
-**File-Based Communication:**
-- [Feature Request: Enable Agent-to-Agent Communication · Issue #4993](https://github.com/anthropics/claude-code/issues/4993)
-- [Race Conditions and Secure File Operations](https://developer.apple.com/library/archive/documentation/Security/Conceptual/SecureCodingGuide/Articles/RaceConditions.html)
+### Sherlock CASE System
+- [Sherlock—A Free and Open-Source System for CASE](https://www.mdpi.com/1420-3049/28/3/1448) - Wenk et al. 2023 publication
+- [Sherlock PMC version](https://pmc.ncbi.nlm.nih.gov/articles/PMC9920390/) - Full text
+- [Sherlock GitHub](https://github.com/michaelwenk/sherlock) - Source code
 
-**Skill File Authoring:**
-- [Agent Skills - Claude Code Docs](https://code.claude.com/docs/en/skills)
-- [Build Agent Skills Faster with Claude Code 2.1 Release](https://medium.com/@richardhightower/build-agent-skills-faster-with-claude-code-2-1-release-6d821d5b8179)
-- [Fix Common Claude Code Sub-Agent Setup Problems](https://www.arsturn.com/blog/fixing-common-claude-code-sub-agent-problems)
+### NMR Prediction Performance
+- [Accurate Prediction of 1H NMR Chemical Shifts](https://pmc.ncbi.nlm.nih.gov/articles/PMC11123270/) - Machine learning approaches
+- [Transfer Learning from Simulation to Experimental Data](https://pubs.acs.org/doi/10.1021/acs.jpclett.1c00578) - DFT vs HOSE methods
+- [NMRexp: A database of 3.3 million experimental NMR spectra](https://www.nature.com/articles/s41597-025-06245-5) - Experimental vs predicted quality
 
-**Agent Handoff:**
-- [The 4-Step Protocol That Fixes Claude Code Agent's Context Amnesia](https://medium.com/@ilyas.ibrahim/the-4-step-protocol-that-fixes-claude-codes-context-amnesia-c3937385561c)
-- [Claude Code Context: Never Lose Project State](https://claudefa.st/blog/guide/performance/context-preservation)
-- [Continuous-Claude-v3: Context management](https://github.com/parcadei/Continuous-Claude-v3)
+---
 
-**Testing Multi-Agent:**
-- [Evaluating LLM Agents in Multi-Step Workflows (2026 Guide)](https://www.codeant.ai/blogs/evaluate-llm-agentic-workflows)
-- [Validating multi-agent AI systems](https://www.pwc.com/us/en/services/audit-assurance/library/validating-multi-agent-ai-systems.html)
-- [Multi-Agent Testing Systems](https://www.virtuosoqa.com/post/multi-agent-testing-systems-cooperative-ai-validate-complex-applications)
+**Overall Assessment:** The highest-risk pitfalls are #1 (HOSE hydrogen consistency - causes 100% failure), #2 (threshold sensitivity - causes unsolvable edge cases), and #7 (agent workflow confusion - defeats the feature's purpose). Remaining pitfalls are manageable with good design and testing.
 
-**Orchestration Patterns:**
-- [Why orchestrators become a bottleneck in multi-agent AI](https://dev.to/ablyblog/why-orchestrators-become-a-bottleneck-in-multi-agent-ai-published-4mgf)
-- [Choosing the right orchestration pattern](https://www.kore.ai/blog/choosing-the-right-orchestration-pattern-for-multi-agent-systems)
-- [AI Agent Orchestration Patterns - Azure](https://learn.microsoft.com/en-us/azure/architecture/ai-ml/guide/ai-agent-design-patterns)
-
-**Claude Code Agent Patterns:**
-- [Create custom subagents - Claude Code Docs](https://code.claude.com/docs/en/sub-agents)
-- [The Task Tool: Claude Code's Agent Orchestration System](https://dev.to/bhaidar/the-task-tool-claude-codes-agent-orchestration-system-4bf2)
-- [Claude Code Swarm Orchestration Skill](https://gist.github.com/kieranklaassen/4f2aba89594a4aea4ad64d753984b2ea)
+**Confidence Level:** HIGH for pitfalls 1-7 (informed by lucy-ng architecture, Sherlock analysis, RDKit documentation). MEDIUM for pitfalls 8-10 (edge cases, less documentation). LOW for pitfalls 11-13 (UX/performance issues, speculative).

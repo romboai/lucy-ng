@@ -1,348 +1,250 @@
-# Project Research Summary
+# Project Research Summary: v3.0 Statistical Detection
 
-**Project:** lucy-ng v2.1 Working Multi-Agent CASE
-**Domain:** AI-agent powered NMR structure elucidation
-**Researched:** 2026-02-08
+**Project:** lucy-ng v3.0 — Statistical Detection Milestone
+**Domain:** Computer-Assisted Structure Elucidation (CASE) with NMR spectroscopy
+**Researched:** 2026-02-10
 **Confidence:** HIGH
 
 ## Executive Summary
 
-lucy-ng v2.0 created an elaborate paper-only architecture with extensive skill documents (3,780 lines total) and agent definitions that never spawned actual agents. The result was zero working orchestration. v2.1 makes multi-agent CASE work by implementing Claude Code's native orchestration primitives correctly.
+Statistical detection represents a transformative shift from heuristic-based CASE to data-driven structure elucidation. Research shows this approach delivers 5 orders of magnitude search space reduction (Sherlock: Caripyrin 8.5M → 30 structures) and solves 89% of multi-solution cases compared to v2.1's constraint-free approach. The key insight: the existing HOSE database already contains all necessary information — hybridisation is encoded in HOSE prefixes, bond partners are visible in sphere 1 neighbors, and shift distributions reveal what's mandatory vs forbidden.
 
-**Core finding:** Zero new dependencies needed. Claude Code provides all orchestration via Task tool, skill files, and agent definitions. The critical mistake in v2.0 was documentation-first development without validation. v2.1 adopts validation-first: prove agent spawning works before expanding skills.
+The recommended approach requires ZERO new dependencies. Database schema extends with 8 new columns to hose_stats (18% storage increase), statistics generation extends existing stats_generator.py (10-20% runtime overhead), and CLI adds a new detect command group following established Click patterns. Implementation centers on six table-stakes features: hybridisation detection (queries shift → sp2/sp3 distribution), neighbourhood detection (queries shift → bond partner frequencies), HHB detection (queries formula → hetero-hetero bond prevalence), signal grouping (identifies close shifts for combinatorial LSD), two-tier ranking (counts signal matches before MAE), and badlist filters (excludes strained rings).
 
-**Architecture shift:** Supervisor logic dissolves from a separate agent (supervisor.md) into orchestrator sub-command skills (case.md). Skills become entry points that spawn worker agents with inlined domain knowledge. The existing v2.0 Python CLI (validated in Phase 26) remains unchanged—orchestration is purely additive.
-
-**Primary risk:** Repeating v2.0's paper architecture mistake. Mitigation is mandatory validation gates: prove Task() spawning works, prove progress monitoring works, prove loop detection works, THEN expand with full domain knowledge. Minimum 10 integration tests before declaring complete.
+Critical risks center on HOSE hydrogen consistency (using AddHs() breaks 100% of predictions), threshold over-sensitivity (1% NN threshold works for 82% of cases but requires overrides for rare heteroatoms), and agent workflow confusion (statistical output must augment, not replace, chemistry knowledge). These are preventable through architecture enforcement, CLI override flags, and clear agent integration hierarchy.
 
 ## Key Findings
 
 ### Recommended Stack
 
-**No new dependencies.** Claude Code's native primitives (Task tool, skill files, agent definitions) provide all orchestration capabilities. Integration is file-based, not code-based.
+**NO NEW DEPENDENCIES.** All statistical detection features build on the existing lucy-ng stack: Python 3.10+, RDKit (molecular analysis), SQLite (HOSE statistics), and Pydantic v2 (data models). The critical architectural insight from STACK research: HOSE codes already encode hybridisation in their prefix (C-4 = sp3, C-3 = sp2, C-2 = sp), eliminating need for separate hybridisation extraction during lookup.
 
-**Core technologies:**
-- **Claude Code 2.1.12+ Task tool** — Agent spawning with blocking semantics (no async messaging needed)
-- **Skill files (~/.claude/commands/lucy-ng/)** — Sub-command orchestrators that spawn agents and monitor progress
-- **Agent definitions (~/.claude/agents/)** — Worker agent configurations with domain knowledge
-- **File-based IPC (CASE-PROGRESS.md)** — Sequential coordination via markdown progress files
-- **Existing Python CLI** — Thin data-access tools (already validated in v2.0 Phase 26)
+**Core technologies (unchanged):**
+- Python 3.10+ — Language runtime (KEEP, no version bump)
+- RDKit 2025.09.5+ — GetHybridization(), GetNeighbors(), GetRingInfo() APIs verified
+- SQLite 3.x — Extend hose_stats schema with 8 columns (+18% storage to ~3.3 GB)
+- Pydantic v2 — Add DetectionStatsRecord, DetectionResult models
+- hosegen — HOSE code generation (unchanged)
+- Click — New detect.py command group
 
-**Critical bug workaround:** Task tool's model parameter is completely broken (GitHub Issue #18873). Use `model: inherit` in agent definitions, control at session level. Cannot mix models per-task until bug fixed.
+**Database migration strategy:** Extend existing hose_stats table with nullable columns (hybridization TEXT, has_*_neighbor flags, ring_* counts). Backfill via stats_generator.py update or regenerate fresh DB from COCONUT/NMRShiftDB sources for v3.0 release.
 
-**Context management strategy:** Hybrid inlining. Critical workflow content (~500-700 lines) inlined in Task() instructions for immediate access. Detailed reference material (full LSD manual, advanced strategies) provided via file paths for on-demand reading.
+**RDKit APIs for statistical extraction:**
+- `atom.GetHybridization()` → HybridizationType (SP3, SP2, SP)
+- `atom.GetNeighbors()` → sequence of bonded atoms (excludes implicit H)
+- `atom.IsInRing()`, `ring_info.IsAtomInRingOfSize(atom_idx, size)` → ring membership
+- CRITICAL: All operations use molecules WITHOUT explicit hydrogens (consistent with existing HOSE prediction)
 
 ### Expected Features
 
 **Must have (table stakes):**
-- **/lucy-ng:case orchestrator** — Spawn autonomous CASE agent, monitor progress via CASE-PROGRESS.md, detect 4 loop patterns, diagnose root cause, intervene with advisory constraints (WHAT to fix, not HOW)
-- **Autonomous CASE agent** — Full workflow executor that writes CASE-PROGRESS.md after every iteration
-- **Loop detection** — ELIM thrashing, zero-solution loop, solution explosion, constraint churning
-- **Advisory intervention** — Maintain agent autonomy (supervisor constrains WHAT, agent decides HOW)
-- **Per-pattern intervention counters** — Track failures separately for each loop type, escalate after 10 cycles per pattern
-- **Termination guarantees** — Absolute cap at 10 spawn cycles prevents infinite loops
+- Hybridisation detection — Query shift ± 2 ppm → sp2/sp3/sp1 distribution, exclude <1% states. Delivers 5 orders of magnitude search space reduction (Sherlock: Caripyrin case).
+- Neighbourhood detection (forbidden) — Query shift → bond partner frequencies, exclude elements <1% (NN threshold). Prevents chemically unreasonable bonds (O-O in non-peroxides).
+- Neighbourhood detection (mandatory) — Query shift → bond partner frequencies, require elements >95% (SN threshold). Enforces strong chemical evidence (carbonyl C MUST bond to O).
+- Two-tier ranking — Rank by (1) signal match count (within 10 ppm tolerance), then (2) MAE among matches. Prevents v2.1's MAE-only hallucination (ibuprofen cyclohexadiene ranked #1 with MAE 1.93 but wrong structure).
+- Signal grouping — Identify shifts within 0.25 ppm, generate LSD HMBC parenthesized atom lists for combinatorial exchange. CRITICAL for ibuprofen-class cases (C4/C5 at 44.90/45.03 ppm).
+- Badlist filters — DEFF/FEXP NOT commands to exclude 3/4-membered rings (chemically rare in natural products). Hardcoded in agent knowledge, no CLI needed.
 
-**Should have (competitive differentiators):**
-- **Diagnostic specialist delegation** — Deep LSD failure analysis after 2 failed basic interventions
-- **Autonomous workflow** — Agent runs to completion or reports stuck (no manual intervention mid-flight)
-- **Progress transparency** — CASE-PROGRESS.md enables user observation without interrupting
-- **/lucy-ng:sanitise** — AI-driven dataset sanitization for blind evaluation (requires semantic reasoning, cannot be CLI)
+**Should have (competitive differentiators for v3.1+):**
+- Hetero-hetero bond (HHB) allowance — Automatic HETE 0/1 determination based on formula element statistics
+- Fragment library search — 24.5M substructure-subspectrum correlations (SSCs) from Sherlock approach, reduces 27/40 multi-solution cases
+- Solvent-aware prediction — Per-solvent HOSE statistics (CDCl3 vs DMSO), reduces MAE from ~2.5 to ~0.83 ppm
 
-**Defer (v2+):**
-- Interactive CASE mode with user feedback loop
-- Cross-session learning via agent memory
-- Advanced convergence strategies (plateau detection, strategy adaptation)
-
-**Anti-features (explicitly DO NOT build):**
-- Dereplication in CASE orchestrator (violates separation of concerns)
-- CLI command for sanitization (chemical names require semantic understanding)
-- Directive intervention (supervisor tells CASE agent exact edits to make)
-- Global intervention counter (conflates different failure modes)
-- One-shot CASE execution (CASE requires iterative refinement)
+**Defer (explicit anti-features for v3.0):**
+- ELIM command automation — Notoriously finicky, Sherlock disables by default
+- 4-bond HMBC detection — High false positive rate, requires manual marking
+- COSY correlation constraints — Complex multiplets, rarely improve results
+- Stereochemistry (E/Z, R/S) — LSD doesn't handle well, defer to v4.0 with DFT ranking
+- GUI parameter adjustment — Autonomous AI agent is differentiator, don't regress to manual tweaking
 
 ### Architecture Approach
 
-v2.1 integrates GSD-pattern sub-command skills with existing thin CLI, replacing monolithic `/lucy-ng` skill with working multi-agent orchestration. This is integration, not rewrite—Python codebase (17,500 lines, 642 tests) remains stable.
+Statistical detection integrates cleanly as additive layers over existing HOSE infrastructure. No invasive changes to core prediction pipeline. Database layer extends hose_stats schema, statistics generation extends stats_generator.py accumulator logic, CLI adds detect.py command group, and agent calls lucy detect via Bash (same pattern as existing lucy lsd rank).
 
 **Major components:**
+1. Database layer (schema.py, manager.py) — Extend hose_stats with hybridization, bond partner flags, ring counts. Migration via ALTER TABLE or fresh generation.
+2. Statistics generation (stats_generator.py) — Extend WelfordAccumulator to track sp2/sp3 counts, neighbor symbols, ring membership during existing HOSE processing loop.
+3. Detection module (detection/detector.py) — NEW: StatisticalDetector class queries extended hose_stats, returns DetectionResult with confidence scores.
+4. CLI commands (cli/detect.py) — NEW: detect hybridisation/neighbours/hhb commands with JSON output for agent consumption.
+5. Agent integration (lucy-case-agent.md) — Use detection to AUGMENT NMR knowledge, not replace. Chemistry-first hierarchy: never violate basic chemistry, use stats to narrow among valid options.
+6. Two-tier ranking (ranking/ranker.py) — Modify existing SolutionRanker to count signal matches before MAE sorting. Optional HybridisationFilter pre-filter.
 
-1. **Sub-command skills (orchestrators)** — 5 skills in ~/.claude/commands/lucy-ng/ that route requests, spawn agents, monitor progress, handle failures
-2. **Agent definitions (workers)** — 2 agents in ~/.claude/agents/ (lucy-case-agent, lucy-diagnostic) that execute workflows and write structured progress files
-3. **Skill documents (domain knowledge)** — Existing skill/ hierarchy (3,780 lines) referenced by agents via file paths or selective inlining
-4. **Progress files (IPC mechanism)** — CASE-PROGRESS.md and DIAGNOSTIC-REPORT.md enable orchestrator monitoring of sequential agent execution
-5. **Thin CLI commands** — Existing Python tools (validated Phase 26) for data access only, zero intelligence in CLI
+**Data flow:** User calls `lucy detect hybridisation db.sqlite 139.94` → CLI parses args → StatisticalDetector queries hose_stats WHERE mean BETWEEN 137.94 AND 141.94 → Database returns sp2_fraction/sp3_fraction → Detector compares fractions → Returns DetectionResult(prediction="sp2", confidence=0.91) → CLI formats JSON → Agent parses, uses in LSD MULT command.
 
-**Data flow pattern:** User invokes /lucy-ng:case → case.md orchestrator reads skill documents → spawns lucy-case-agent via Task() with inlined critical content + file path references → agent executes CASE workflow → writes CASE-PROGRESS.md → orchestrator reads progress → detects loop → diagnoses → spawns agent again with advisory → repeat until convergence or escalation.
-
-**Integration with v2.0:** skill/ documents unchanged, CLI unchanged, CLAUDE.md needs 20-line sub-command section, supervisor.md deleted (logic moves to case.md), diagnostic-specialist.md renamed to lucy-diagnostic.md (~50 line change).
+**Build order:** (1) Schema extension, (2) Statistics generation, (3) Detection module, (4) CLI commands, (5) Agent integration, (6) Two-tier ranking (optional). Each phase depends on previous, enforced by dependency chain.
 
 ### Critical Pitfalls
 
-1. **Paper architecture without validation (v2.0's failure)** — Writing elaborate skill documents before testing if Task() spawning works creates 3,780 lines of non-working orchestration. Mitigation: Validation-first development with mandatory integration tests before skill expansion.
+1. **HOSE Hydrogen Consistency Violation** — Using AddHs() during statistical extraction while prediction uses implicit H breaks 100% of lookups. HOSE codes from mol vs AddHs(mol) are structurally different. Prevention: Enforce no-explicit-H in all molecule processing, use GetNumImplicitHs() to count hydrogens. Detection: CLI test `lucy predict c13 "CCO"` must return predictions with count > 0.
 
-2. **Context window overflow in agent handoffs** — Inlining 3,780 lines of skill content in Task() instructions causes context overflow or degraded performance. Mitigation: Hybrid inlining (~500-700 lines critical workflow) + file path references for detailed docs.
+2. **Threshold Over-Sensitivity Without Overrides** — Hardcoded 1% NN, 95% SN thresholds work for 82% of Sherlock's cases but fail for rare heteroatoms or unusual hybridisation states. Agent gets stuck in "0 solutions with constraints" loops. Prevention: CLI override flags (--min-frequency 0.005, --mode relaxed), orchestrator intervention protocol when pattern detected, document threshold semantics.
 
-3. **Iterative supervision loops without termination guarantees** — Supervisor spawns agent → detects failure → spawns again → infinite loop with no guaranteed stop. Mitigation: Per-pattern intervention counters with 10-cycle cap, multi-signal loop detection prevents false positives.
+3. **Circular Validation Risk** — Same HOSE database used for constraints (pre-LSD) and ranking (post-LSD) reinforces systematic biases. If database over-represents aromatic C-O, both steps favor aromatic structures. Mitigation: Database size (928K) provides diversity, threshold filtering (1%/95%) only applies strong patterns, agent fallback protocol (retry without constraints if 0 solutions), validation with held-out test set.
 
-4. **Agent handoff state loss** — Fresh agent spawns have blank slate, repeat work already done (re-pick peaks, retry failed constraints). Mitigation: Explicit handoff protocol via progress.md, skip completed steps in retry instructions.
+4. **COCONUT Data Quality Unknown** — 96.87% of HOSE data from COCONUT (predicted spectra), structures are "as-deposited" with varying curation. Bond assignments, tautomers, protonation states may have errors affecting bond partner statistics. Prevention: Extract from sanitized RDKit molecules (corrects many errors), validate sampling (100 random structures), cross-reference with NMRShiftDB subset (3.13% experimental data), conservative thresholds (1% NN tolerates noise).
 
-5. **Skill file authoring errors causing silent failures** — YAML frontmatter syntax errors prevent agent loading, orchestration fails with "agent not found" but no visible error. Mitigation: YAML validation checklist, test spawn immediately after edits.
-
-6. **Smart orchestrator, dumb agent (inverted responsibility)** — Orchestrator does CASE domain reasoning, agent just executes commands, defeats purpose of autonomy. Mitigation: Orchestrator provides advisory constraints (WHAT to fix), agent applies domain expertise (HOW to fix).
-
-7. **No end-to-end test for multi-agent orchestration** — Unit tests feel sufficient, integration failures discovered in production. Mitigation: Minimum 10 integration tests covering spawn → monitor → detect → intervene → retry → escalate.
-
-8. **File-based inter-agent communication race conditions** — Supervisor reads progress.md while agent writes it, gets partial data. Mitigation: Atomic write pattern (write to temp file, atomic rename) + sequential agents (Task() blocks, no concurrent access).
+5. **Signal Grouping False Positives** — Grouping shifts within 0.25 ppm creates combinatorial explosion when carbons are truly different (distinguished by multiplicities). Example: C4 at 44.90 (CH2), C5 at 45.03 (CH), C6 at 45.20 (CH3) → 6x search space, 5 permutations wrong. Prevention: Multiplicity-aware grouping (group only if same mult or both ambiguous CH/CH3), agent override mechanism, post-ranking collapse of identical-assignment solutions.
 
 ## Implications for Roadmap
 
-Based on research, v2.1 requires 7 phases structured for incremental validation.
+Based on research findings and dependency analysis, v3.0 should follow a foundation-first approach: implement core statistical detection before advanced features, validate thoroughly before agent integration, defer fragment library and solvent-awareness to v3.1+.
 
-### Phase 27: Sub-Command Skills Foundation (3-4 hours)
+### Suggested Phase Structure (6 phases)
 
-**Rationale:** Establish directory structure and prove simple skills work before complex orchestration. Thin wrappers for existing CLI validate pattern without multi-agent complexity.
+### Phase 34-01: Hybridisation Detection
+**Rationale:** Highest impact (5 orders magnitude reduction), cleanest implementation (HOSE prefix parsing), no database queries during detection (prefix already encodes state).
+**Delivers:** `lucy detect hybridisation <shift>` CLI command, extended hose_stats schema with hybridization column, statistics generation for sp2/sp3/sp1 fractions.
+**Addresses:** Table stakes feature 1 (hybridisation detection), foundation for all other statistical features.
+**Avoids:** Pitfall 1 (HOSE H consistency via code review), Pitfall 6 (storage explosion via binned stats in 2 ppm windows).
+**Research flags:** Standard pattern (HOSE parsing well-documented), no deeper research needed.
 
-**Delivers:**
-- ~/.claude/commands/lucy-ng/ directory with 3 simple skills
-- status.md (system checks)
-- dereplicate.md (thin wrapper for lucy dereplicate c13)
-- predict.md (thin wrapper for lucy predict c13)
+### Phase 34-02: Neighbourhood Detection
+**Rationale:** Second-highest impact (prevents unreasonable bonds), depends on extended schema from 34-01, requires HOSE sphere 1 parsing.
+**Delivers:** `lucy detect neighbours <shift>` CLI command, bond partner columns in hose_stats (has_carbon/oxygen/nitrogen_neighbor flags), NN/SN threshold filtering.
+**Addresses:** Table stakes features 2-3 (forbidden/mandatory neighbours).
+**Avoids:** Pitfall 2 (threshold sensitivity via override flags), Pitfall 4 (COCONUT quality via RDKit sanitization), Pitfall 12 (too many elements via min-report threshold).
+**Research flags:** Needs HOSE sphere 1 parsing validation (medium complexity).
 
-**Addresses:** None yet (foundation phase)
+### Phase 34-03: HHB and Ring Detection
+**Rationale:** Rounding out core detection features, both are simple queries (global HHB statistic, ring membership from RDKit).
+**Delivers:** `lucy detect hhb <formula>` CLI command, ring statistics columns (in_3ring/4ring/aromatic counts), HETE command generation logic.
+**Addresses:** Should-have feature (HHB allowance), badlist foundation (ring exclusion stats).
+**Avoids:** Pitfall 4 (data quality via simple global statistic, low sensitivity to errors).
+**Research flags:** Standard RDKit APIs (GetRingInfo), no research needed.
 
-**Avoids:** Paper architecture (all 3 skills tested individually before next phase)
+### Phase 34-04: Signal Grouping
+**Rationale:** CRITICAL for ibuprofen-class cases, algorithmic (no database), but complex LSD file generation changes.
+**Delivers:** `lucy analyze grouping <shifts>` CLI command, multiplicity-aware grouping logic, LSD HMBC parenthesized atom list generation.
+**Addresses:** Table stakes feature 5 (signal grouping).
+**Avoids:** Pitfall 5 (false positives via multiplicity awareness).
+**Research flags:** Needs LSD file generation research (medium complexity, parenthesized syntax verification).
 
-**Research flag:** NO (standard CLI wrapper pattern, well-documented)
+### Phase 34-05: Two-Tier Ranking and Badlist
+**Rationale:** Quick wins (ranking is algorithmic, badlist is hardcoded), high impact (prevents MAE hallucinations).
+**Delivers:** Modified `lucy lsd rank` with match-count-first sorting, HOSE radius reporting, badlist DEFF/FEXP patterns in agent knowledge.
+**Addresses:** Table stakes features 4 and 6 (two-tier ranking, badlist filters).
+**Avoids:** Pitfall 8 (match quality via radius-weighted scoring or reporting), Pitfall 10 (cyclopropane exclusion via override mechanism).
+**Research flags:** Standard pattern (modify existing ranker), no research needed.
 
-### Phase 28: CASE Agent Definition (4-5 hours)
+### Phase 34-06: Agent Integration
+**Rationale:** Teaches agent to use new detection commands autonomously, highest risk (workflow confusion), must come after all CLI commands stable.
+**Delivers:** Updated lucy-case-agent.md with detection protocol, chemistry-first hierarchy, threshold override examples, batch API if profiling shows >5s overhead.
+**Addresses:** Makes all statistical features usable autonomously.
+**Avoids:** Pitfall 7 (workflow confusion via clear hierarchy and examples), Pitfall 11 (CLI overhead via batch API if needed), Pitfall 13 (no summary via constraints.md generation).
+**Research flags:** Needs agent prompt engineering research, test scenario validation (high complexity).
 
-**Rationale:** Prove Task() spawning works before writing orchestrator. Agent must be spawn-able and write progress before supervisor tries to coordinate.
-
-**Delivers:**
-- ~/.claude/agents/lucy-case-agent.md with YAML frontmatter
-- Agent instructions with workflow overview
-- CASE-PROGRESS.md checkpoint writing
-- Integration test: spawn agent, verify progress file
-
-**Addresses:** Autonomous CASE agent (table stakes from FEATURES.md)
-
-**Avoids:** Paper architecture (must prove spawn before Phase 29), context overflow (test with minimal inlined content first)
-
-**Research flag:** NO (Task tool well-documented, GSD reference pattern)
-
-### Phase 29: CASE Orchestrator Skill (6-8 hours)
-
-**Rationale:** Core orchestration logic—spawning with inlined content, progress monitoring, loop detection, advisory intervention. This is the critical path.
-
-**Delivers:**
-- ~/.claude/commands/lucy-ng/case.md orchestrator
-- Agent spawning with hybrid inlining (critical workflow + file references)
-- Progress monitoring (read CASE-PROGRESS.md after agent completes)
-- 4 loop pattern detection (ELIM thrashing, zero-solution, explosion, churning)
-- Basic diagnosis and advisory generation
-- Per-pattern intervention counters with 10-cycle escalation
-
-**Addresses:** CASE orchestrator, loop detection, advisory intervention, termination guarantees (all table stakes)
-
-**Avoids:** Context overflow (hybrid inlining), infinite loops (termination guarantees), state loss (explicit handoff), inverted responsibility (advisory not directive)
-
-**Research flag:** NO (patterns proven in GSD execute-phase.md, supervisor/SKILL.md already defines loop patterns)
-
-### Phase 30: Diagnostic Specialist Integration (3-4 hours)
-
-**Rationale:** Deep diagnosis for complex failures. Only spawned after basic interventions fail, so depends on Phase 29 orchestrator working.
-
-**Delivers:**
-- Rename .claude/agents/diagnostic-specialist.md → lucy-diagnostic.md
-- Update frontmatter (agent name, tool permissions)
-- Diagnostic spawning logic in case.md (after 2 failed interventions with same pattern)
-- DIAGNOSTIC-REPORT.md reading and primary fix extraction
-- Integration test: force repeated failure, verify specialist spawned
-
-**Addresses:** Diagnostic specialist delegation (differentiator from FEATURES.md)
-
-**Avoids:** Smart orchestrator (diagnostic agent does analysis, orchestrator just coordinates)
-
-**Research flag:** NO (diagnostic/SKILL.md already defines systematic checks, report format)
-
-### Phase 31: Sanitization Skill (2-3 hours)
-
-**Rationale:** AI-driven dataset preparation for blind evaluation. Parallelizable with Phase 30 (independent functionality).
-
-**Delivers:**
-- ~/.claude/commands/lucy-ng/sanitise.md
-- skill/sanitize/SKILL.md (pattern definitions)
-- AI-driven compound identifier detection (names, SMILES, InChI, IDs)
-- SANITIZATION-REPORT.md generation
-
-**Addresses:** AI-driven sanitization (differentiator from FEATURES.md)
-
-**Avoids:** CLI for sanitization (anti-feature, chemical names require semantic reasoning)
-
-**Research flag:** NO (pattern matching well-understood, helpers already exist in skill/sanitize/)
-
-### Phase 32: End-to-End Validation (2-3 hours)
-
-**Rationale:** Mandatory validation gate. v2.1 ships ONLY after passing all integration tests—no repeat of v2.0's paper architecture.
-
-**Delivers:**
-- Integration tests (minimum 10):
-  - Supervisor spawns CASE agent
-  - CASE agent writes CASE-PROGRESS.md with required fields
-  - Supervisor parses progress and detects loops
-  - Advisory issued and agent re-spawned
-  - Termination after 10 cycles
-  - Diagnostic specialist invoked on complex failure
-  - Full success path (Ibuprofen CASE)
-  - Full intervention path (constructed failure case)
-- Manual validation: /lucy-ng:case on Ibuprofen (reproduces Phase 26-05 success)
-- CLAUDE.md update (sub-command reference section)
-
-**Addresses:** End-to-end orchestration validation (prevents pitfall #7)
-
-**Avoids:** All critical pitfalls (validation gates enforce prevention)
-
-**Research flag:** NO (test patterns well-established)
-
-### Phase 33: Documentation and Cleanup (1-2 hours)
-
-**Rationale:** Remove deprecated components, update project documentation, prepare for milestone completion.
-
-**Delivers:**
-- Delete .claude/agents/supervisor.md (logic now in case.md)
-- Update PROJECT.md decisions table (v2.1 architecture)
-- Update STATE.md (milestone v2.1 complete)
-- v2.1 release notes
-
-**Addresses:** Project maintenance
-
-**Avoids:** Technical debt (clean up deprecated files)
-
-**Research flag:** NO (documentation task)
+### Phase 34-07: Validation (Recommended Addition)
+**Rationale:** Can't ship without knowing if constraints help or hurt, Sherlock's 45 test cases provide validation set.
+**Delivers:** Validation test suite (Sherlock's 45 cases from nmrXiv), metrics (constraint accuracy, search space reduction, rank improvement), regression tests in CI.
+**Addresses:** Pitfall 9 (no validation dataset).
+**Avoids:** Shipping features that degrade performance without detection.
+**Research flags:** Needs nmrXiv dataset download/sanitization (medium complexity).
 
 ### Phase Ordering Rationale
 
-**Critical path:** 27 → 28 → 29 → 30 → 32 → 33 (16-20 hours)
+- Database schema changes FIRST (phases 34-01/02/03 all write to extended schema, must exist before generation runs)
+- Algorithmic features (34-04, 34-05) interleaved to provide variety (reduces fatigue from back-to-back database work)
+- Agent integration LAST (phase 34-06 depends on all CLI commands being stable and tested)
+- Validation AFTER implementation (phase 34-07 measures quality of 34-01 through 34-06)
 
-**Parallelizable:** Phase 31 (sanitization) can run in parallel with Phase 30 (diagnostic integration) if multiple contributors.
-
-**Why this order:**
-- Phase 27 establishes foundation without multi-agent complexity
-- Phase 28 proves Task() spawning before orchestrator depends on it
-- Phase 29 implements core orchestration (critical path)
-- Phase 30 builds on working orchestrator
-- Phase 31 is independent (can parallelize)
-- Phase 32 is mandatory validation gate (nothing ships without passing)
-- Phase 33 is cleanup after validation passes
-
-**Dependency enforcement:**
-- Each phase tested individually before next phase starts
-- Phase 32 validation blocks completion (hard gate)
-- No "almost ready to test" mentality—validation happens incrementally
-
-**Pitfall avoidance structure:**
-- Incremental validation prevents paper architecture (Phases 27-28-29 each validated)
-- Integration tests required before Phase 33 (prevents pitfall #7)
-- Context management tested in Phase 29 (prevents pitfall #2)
-- Termination guarantees implemented in Phase 29 (prevents pitfall #3)
-- Handoff protocol tested in Phase 29-30 (prevents pitfall #4)
-- YAML validation in Phase 28 (prevents pitfall #5)
-- Advisory constraints enforced in Phase 29 (prevents pitfall #6)
+This order follows natural dependencies:
+1. Schema → Generation → Detection module → CLI → Agent
+2. Minimizes rework (schema changes are expensive, do once)
+3. Enables incremental testing (each phase delivers working CLI command)
+4. Defers complexity (agent integration is hardest, comes last when foundation solid)
 
 ### Research Flags
 
-**No deep research needed.** All phases implement patterns already proven in:
-- GSD workflow (40+ skills, 11 agent types, Task tool usage)
-- v2.0 skill documents (loop patterns, diagnostic procedures)
-- v2.0 Phase 26 validation (thin CLI works)
-- Claude Code official docs (Task tool, skill format, agent definitions)
+**Needs deeper research during planning:**
+- Phase 34-02 (Neighbourhood Detection) — HOSE sphere 1 parsing validation, verify neighbor symbol extraction matches expectations
+- Phase 34-04 (Signal Grouping) — LSD parenthesized atom list syntax, verify combinatorial generation works correctly
+- Phase 34-06 (Agent Integration) — Prompt engineering for chemistry-first hierarchy, test scenario design for stats-vs-knowledge conflicts
+- Phase 34-07 (Validation) — nmrXiv dataset API, Sherlock test case sanitization workflow
 
-**Standard patterns for all phases:**
-- Phase 27: CLI wrapper pattern (GSD dereplicate/predict references)
-- Phase 28: Agent definition pattern (GSD gsd-executor reference)
-- Phase 29: Orchestration pattern (GSD execute-phase reference)
-- Phase 30: Diagnostic delegation pattern (existing diagnostic-specialist.md)
-- Phase 31: AI-driven pattern matching (existing sanitize helpers)
-- Phase 32: Integration testing (standard pytest patterns)
-- Phase 33: Documentation updates (standard GSD cleanup)
-
-**If research becomes necessary during execution:**
-- Phase 29 context management: If hybrid inlining proves insufficient, research progressive loading strategies
-- Phase 29 loop detection: If false positives occur, research multi-signal suppression mechanisms
-- Phase 30 diagnostic accuracy: If LOW-confidence findings common, research confidence calibration
+**Standard patterns (skip deeper research):**
+- Phase 34-01 (Hybridisation) — HOSE prefix parsing is well-documented, RDKit GetHybridization() API verified
+- Phase 34-03 (HHB/Ring) — Global statistic query (simple SQL), RDKit GetRingInfo() API verified
+- Phase 34-05 (Ranking/Badlist) — Modify existing ranker (established codebase pattern), hardcoded SMARTS (no research)
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Claude Code official docs + GSD production reference + no new dependencies |
-| Features | HIGH | Table stakes clear from multi-agent orchestration patterns + anti-features identified from v2.0 failure |
-| Architecture | HIGH | Integration approach with stable v2.0 foundation + GSD sub-command pattern + file-based IPC proven |
-| Pitfalls | HIGH | v2.0 provided real-world failure case (paper architecture) + community sources for other pitfalls + mitigation tested in GSD |
+| Stack | HIGH | All RDKit APIs verified in 2025.09.5 documentation, no new dependencies needed, existing HOSE infrastructure confirmed via codebase inspection |
+| Features | HIGH | Specifications directly from Sherlock thesis (Wenk 2023) with test case validation, thresholds (1% NN, 95% SN, 0.25 ppm grouping, 10 ppm match tolerance) documented with rationale |
+| Architecture | HIGH | Integration points verified in existing codebase (schema.py, stats_generator.py, cli/ pattern), data flow tested on small samples, storage estimates calculated |
+| Pitfalls | HIGH | Pitfalls 1-7 informed by lucy-ng architecture review, Sherlock analysis, RDKit documentation, and project memory (ibuprofen CASE learnings). Pitfalls 8-10 MEDIUM (edge cases, less documentation). Pitfalls 11-13 LOW (UX/performance, speculative) |
 
 **Overall confidence:** HIGH
 
-### Gaps to Address
+Research is comprehensive and actionable. All core APIs verified in official sources, all thresholds backed by Sherlock's experimental validation (45 test cases), all integration points confirmed in existing codebase. The foundation is solid.
 
-**Potential gaps during execution:**
+### Gaps to Address During Planning
 
-1. **Context management tuning** — Hybrid inlining sizes (~500-700 lines) are estimates based on LLM context limits. May need adjustment based on actual Task() spawn behavior. Mitigation: Start conservative (less inlined), expand if needed.
+**1. HOSE sphere 1 parsing accuracy**
+- Gap: Assumed HOSE first sphere neighbors map 1:1 to bond partners, but need to verify with hosegen library API.
+- How to handle: Phase 34-02 planning should include test cases with known bond partners, verify extraction matches expectations.
 
-2. **Loop detection threshold sensitivity** — Multi-signal detection thresholds (3+ iterations zero-solution, 5+ iterations churning) may need tuning based on real compound failures. Mitigation: Test on Virgiline (known failure case), adjust if false positives/negatives.
+**2. LSD parenthesized atom list syntax**
+- Gap: Sherlock documentation shows `HMBC (2 3) 8` syntax for grouping, but LSD manual doesn't explicitly document this as valid.
+- How to handle: Phase 34-04 planning should run LSD with parenthesized syntax test cases, verify solutions generated correctly.
 
-3. **Diagnostic specialist accuracy** — v2.0 diagnostic/SKILL.md is comprehensive (1,874 lines) but untested. Specialist may miss root causes on first attempts. Mitigation: Iterative refinement after observing failure patterns in Phase 32 validation.
+**3. Threshold tuning validation**
+- Gap: Sherlock's thresholds (1% NN, 95% SN) are defaults, but no systematic tuning study to prove optimality.
+- How to handle: Phase 34-07 validation should test threshold sensitivity (0.5%, 1%, 2% NN; 90%, 95%, 99% SN), report which performs best on test set.
 
-4. **Task tool model parameter bug timeline** — GitHub Issue #18873 may be fixed during v2.1 development, enabling per-task model selection. Mitigation: Use `model: inherit` initially, add per-task selection if bug fixed mid-development.
+**4. COCONUT structure quality quantification**
+- Gap: Inferred that COCONUT has variable curation quality, but no systematic measurement of bond assignment error rate.
+- How to handle: Phase 34-03 planning should include validation sampling (100 random structures manual inspection), reject design if >10% errors found.
 
-**No architectural unknowns.** All components either exist (v2.0 skills, CLI) or follow proven patterns (GSD orchestration). Gap handling is tuning, not discovery.
+**5. Agent decision hierarchy edge cases**
+- Gap: Defined chemistry-first hierarchy for stats-vs-knowledge conflicts, but untested on real contradiction scenarios.
+- How to handle: Phase 34-06 planning should create test scenarios (e.g., sp3 stats for aromatic shift), verify agent resolves correctly.
 
 ## Sources
 
 ### Primary (HIGH confidence)
 
-**Claude Code official documentation:**
-- [Extend Claude with skills - Claude Code Docs](https://code.claude.com/docs/en/skills) — Skill file format, frontmatter fields, context budget
-- [Create custom subagents - Claude Code Docs](https://code.claude.com/docs/en/sub-agents) — Agent definition format, tool permissions, model selection
-- [How Claude Code works - Claude Code Docs](https://code.claude.com/docs/en/how-claude-code-works) — Task tool blocking behavior, session lifecycle
+**Sherlock CASE System:**
+- Michael Wenk, PhD Thesis, Friedrich-Schiller-Universitat Jena, 2023 — Statistical detection methodology, thresholds (1% NN, 95% SN, 0.25 ppm grouping), test case validation (45 compounds, 40/45 solved, 38/40 at rank #1)
+- [Sherlock publication (Molecules 2023)](https://www.mdpi.com/1420-3049/28/3/1448) — System architecture, integration patterns
+- [Sherlock GitHub](https://github.com/michaelwenk/sherlock) — Source code (pyLSD implementation)
 
-**GSD production reference implementation:**
-- ~/.claude/commands/gsd/execute-phase.md (lines 256-276) — Context inlining pattern, @ reference workaround
-- ~/.claude/agents/gsd-executor.md — Agent definition reference
-- 40+ skills, 11 agent types — Proven orchestration patterns
+**RDKit API:**
+- [RDKit Atom Documentation](https://www.rdkit.org/docs/source/rdkit.Chem.rdchem.html) — GetHybridization(), GetNeighbors(), GetNumImplicitHs() verified
+- [RDKit Ring Documentation](https://www.rdkit.org/docs/cppapi/classRDKit_1_1RingInfo.html) — IsInRing(), GetRingInfo(), IsAtomInRingOfSize() verified
+- [RDKit Cookbook](https://www.rdkit.org/docs/Cookbook.html) — Implicit vs explicit hydrogen handling
 
-**lucy-ng v2.0 foundation:**
-- skill/SKILL.md (1,079 lines) — Core domain knowledge
-- skill/supervisor/SKILL.md (827 lines) — Loop detection patterns, CASE-PROGRESS.md format
-- skill/diagnostic/SKILL.md (1,874 lines) — LSD manual, diagnostic procedures
-- .planning/phases/26-thin-tools/26-05-PLAN.md — Thin CLI validation (Ibuprofen CASE success)
+**Lucy-ng Codebase:**
+- `src/lucy_ng/database/schema.py` — Schema version 3 confirmed, hose_stats table structure
+- `src/lucy_ng/prediction/stats_generator.py` — Welford algorithm for incremental statistics
+- `src/lucy_ng/prediction/hose.py` — HOSE code format (prefix encodes hybridisation)
+- Live database queries on lucy-ng-derep.db — 7.9M HOSE stats across radii 1-6
 
-**Known issues:**
-- [GitHub Issue #18873: Task tool model parameter returns 404](https://github.com/anthropics/claude-code/issues/18873) — Confirmed bug with workaround documented
+**LSD Software:**
+- [LSD Manual (GitHub)](https://github.com/UnixJunkie/LSD/blob/master/MANUAL_ENG.html) — DEFF, FEXP, LIST, ELEM, PROP command reference
+- Local installation (/Users/steinbeck/Dropbox/develop/LSD/Filters/) — Filter file formats (ring3, ring4) verified
 
 ### Secondary (MEDIUM confidence)
 
-**Multi-agent orchestration patterns (2026):**
-- [AI Agent Orchestration Guide - Patterns and Tools (2026) | Fast.io](https://fast.io/resources/ai-agent-orchestration/) — Hierarchical supervisor pattern
-- [Choosing the right orchestration pattern for multi agent systems](https://www.kore.ai/blog/choosing-the-right-orchestration-pattern-for-multi-agent-systems) — Supervisor vs swarm tradeoffs
-- [The Task Tool: Claude Code's Agent Orchestration System - DEV Community](https://dev.to/bhaidar/the-task-tool-claude-codes-agent-orchestration-system-4bf2) — Task tool usage patterns
+**COCONUT Database:**
+- [COCONUT 2.0 (NAR 2024)](https://academic.oup.com/nar/article/53/D1/D634/7908792) — Comprehensive overhaul and curation, 63+ source databases
+- [COCONUT original (JChemInf 2020)](https://jcheminf.biomedcentral.com/articles/10.1186/s13321-020-00478-9) — Database construction methodology
 
-**Context management:**
-- [Context Window Overflow in 2026: Fix LLM Errors Fast](https://redis.io/blog/context-window-overflow/) — System prompt overhead calculation
-- [Multi-agent orchestration for Claude Code in 2026](https://shipyard.build/blog/claude-code-multi-agent/) — Context depletion in subagent spawning
+**NMR Prediction:**
+- [HOSE code prediction performance (JChemInf 2023)](https://jcheminf.biomedcentral.com/articles/10.1186/s13321-023-00785-x) — Small data quantity analysis
+- [Stereo-aware HOSE extension (ACS Omega 2019)](https://pubs.acs.org/doi/10.1021/acsomega.9b00488) — Enhanced methods
 
-**Testing multi-agent systems:**
-- [Evaluating LLM Agents in Multi-Step Workflows (2026 Guide)](https://www.codeant.ai/blogs/evaluate-llm-agentic-workflows) — Integration test patterns
-- [Validating multi-agent AI systems](https://www.pwc.com/us/en/services/audit-assurance/library/validating-multi-agent-ai-systems.html) — Component-level then system-level validation
+### Tertiary (LOW confidence, needs validation)
 
-### Tertiary (LOW confidence)
+**Storage Estimates:**
+- Database size calculations (7.9M rows × 32 bytes/row = 253 MB increase) — arithmetic based on column types, not measured
+- Query performance estimates (5-10 ms for shift range) — extrapolated from small samples, not benchmarked on full DB
 
-**Community patterns (needs validation):**
-- [Claude Code Swarm Orchestration](https://gist.github.com/kieranklaassen/4f2aba89594a4aea4ad64d753984b2ea) — Alternative orchestration approach (swarm vs supervisor)
-- [Tracing Claude Code's LLM Traffic](https://medium.com/@georgesung/tracing-claude-codes-llm-traffic-agentic-loop-sub-agents-tool-use-prompts-7796941806f5) — Observability patterns (not validated in lucy-ng context)
-
-**Agent communication alternatives (not pursued):**
-- [Feature Request: Enable Agent-to-Agent Communication · Issue #4993](https://github.com/anthropics/claude-code/issues/4993) — Advanced messaging patterns (file-based sufficient for lucy-ng)
+**Threshold Optimality:**
+- Sherlock's 1% NN, 95% SN thresholds documented as defaults but no tuning study proving optimality — assumed based on 40/45 success rate
 
 ---
-*Research completed: 2026-02-08*
+*Research completed: 2026-02-10*
 *Ready for roadmap: yes*
+*Next step: gsd-roadmapper agent uses this SUMMARY.md to structure v3.0 milestone roadmap*
