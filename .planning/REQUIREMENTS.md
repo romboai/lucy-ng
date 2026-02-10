@@ -89,28 +89,36 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DETECT-01 | — | Pending |
-| DETECT-02 | — | Pending |
-| DETECT-03 | — | Pending |
-| DETECT-04 | — | Pending |
-| DETECT-05 | — | Pending |
-| DETECT-06 | — | Pending |
-| DETECT-07 | — | Pending |
-| RANK-01 | — | Pending |
-| RANK-02 | — | Pending |
-| RANK-03 | — | Pending |
-| RANK-04 | — | Pending |
-| AGENT-01 | — | Pending |
-| AGENT-02 | — | Pending |
-| AGENT-03 | — | Pending |
-| AGENT-04 | — | Pending |
-| AGENT-05 | — | Pending |
-| AGENT-06 | — | Pending |
+| DETECT-01 | Phase 34 | Pending |
+| DETECT-06 | Phase 34 | Pending |
+| DETECT-07 | Phase 34 | Pending |
+| DETECT-02 | Phase 35 | Pending |
+| DETECT-03 | Phase 35 | Pending |
+| DETECT-04 | Phase 36 | Pending |
+| DETECT-05 | Phase 37 | Pending |
+| RANK-01 | Phase 38 | Pending |
+| RANK-02 | Phase 38 | Pending |
+| RANK-03 | Phase 38 | Pending |
+| RANK-04 | Phase 38 | Pending |
+| AGENT-01 | Phase 39 | Pending |
+| AGENT-02 | Phase 39 | Pending |
+| AGENT-03 | Phase 39 | Pending |
+| AGENT-04 | Phase 39 | Pending |
+| AGENT-05 | Phase 39 | Pending |
+| AGENT-06 | Phase 39 | Pending |
 
 **Coverage:**
 - v3.0 requirements: 17 total
-- Mapped to phases: 0
-- Unmapped: 17 (pending roadmap creation)
+- Mapped to phases: 17 (100% coverage)
+- Phase 34: 3 requirements (DETECT-01, DETECT-06, DETECT-07)
+- Phase 35: 4 requirements (DETECT-02, DETECT-03, DETECT-06, DETECT-07)
+- Phase 36: 3 requirements (DETECT-04, DETECT-06, DETECT-07)
+- Phase 37: 1 requirement (DETECT-05)
+- Phase 38: 4 requirements (RANK-01, RANK-02, RANK-03, RANK-04)
+- Phase 39: 6 requirements (AGENT-01 through AGENT-06)
+- Phase 40: 0 requirements (validation phase)
+
+**Note:** DETECT-06 and DETECT-07 are foundational requirements that span Phases 34-36 since all detection features require schema extension and statistics generation.
 
 ### v2.0/v2.1 (Complete)
 
@@ -118,4 +126,4 @@ All 68 requirements (38 v2.0 + 30 v2.1) mapped and complete. See git history for
 
 ---
 *Requirements defined: 2026-02-10*
-*Last updated: 2026-02-10 after initial definition*
+*Last updated: 2026-02-10 after v3.0 roadmap creation*

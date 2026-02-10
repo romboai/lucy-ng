@@ -7,6 +7,7 @@
 - ✅ [v1.2 HOSE Database Prediction](milestones/v1.2-ROADMAP.md) - Phases 16-19 (shipped 2026-01-18)
 - ✅ **v2.0 Robust Multi-Agent CASE** - Phases 20-26 (completed 2026-02-08)
 - ✅ **v2.1 Working Multi-Agent CASE** - Phases 27-33 (completed 2026-02-09)
+- 🚧 **v3.0 Statistical Detection** - Phases 34-40 (in progress)
 
 ---
 
@@ -422,7 +423,8 @@ Plans:
 
 ---
 
-## v2.1 Working Multi-Agent CASE (Phases 27-33)
+<details>
+<summary>v2.1 Working Multi-Agent CASE (Phases 27-33) -- SHIPPED 2026-02-09</summary>
 
 **Milestone Goal:** Make multi-agent CASE orchestration actually work by implementing Claude Code's native orchestration primitives correctly, replacing v2.0's paper-only architecture with working sub-command skills that spawn agents, monitor progress, detect loops, and intervene autonomously.
 
@@ -568,6 +570,162 @@ Plans:
 - [x] 33-01-PLAN.md -- Update CLAUDE.md with sub-command reference and corrected architecture; write v2.1 release notes
 - [x] 33-02-PLAN.md -- Refresh PROJECT.md to v2.1 reality; inline LSD knowledge into diagnostic agent; confirm supervisor.md deletion
 
+</details>
+
+---
+
+## v3.0 Statistical Detection (Phases 34-40)
+
+**Milestone Goal:** Add data-driven statistical detection to replace agent guesswork in structure elucidation. Agent autonomously uses HOSE database statistics to constrain LSD input files with hybridisation, neighbourhood, and hetero-hetero bond detection. Two-tier ranking and badlist filters prevent MAE hallucinations. Inspired by Sherlock CASE system (Wenk PhD thesis) which achieved 5 orders of magnitude search space reduction.
+
+**Motivation:** Live ibuprofen CASE testing revealed that v2.1 produces wrong cyclohexadiene solutions because agent lacks statistical constraints. Sherlock solves the same case trivially because hybridisation + neighbourhood constraints reduce search space dramatically (Caripyrin: 8.5M → 30 structures). Without data-driven constraints, the AI agent is guessing.
+
+**Phase overview:**
+
+- [ ] **Phase 34: Hybridisation Detection** - Database schema extension, statistics generation, CLI command for sp1/sp2/sp3 detection from shift queries
+- [ ] **Phase 35: Neighbourhood Detection** - Bond partner statistics, CLI commands for forbidden/mandatory neighbour detection from HOSE sphere 1
+- [ ] **Phase 36: HHB and Ring Detection** - Hetero-hetero bond statistics, ring statistics for badlist foundation
+- [ ] **Phase 37: Signal Grouping** - Multiplicity-aware close shift detection, LSD parenthesized atom list generation
+- [ ] **Phase 38: Two-Tier Ranking and Badlist** - Match-count-first ranking, hardcoded 3/4-membered ring filters in agent
+- [ ] **Phase 39: Agent Integration** - CASE agent learns statistical detection protocol, chemistry-first hierarchy, threshold overrides
+- [ ] **Phase 40: Validation** - Test suite with Sherlock's 45 cases, metrics (accuracy, search space reduction, rank improvement)
+
+---
+
+### Phase 34: Hybridisation Detection
+**Goal**: Agent can query database for hybridisation state distribution of any 13C shift
+**Depends on**: Phase 33 (v2.1 complete)
+**Requirements**: DETECT-01, DETECT-06, DETECT-07
+**Success Criteria** (what must be TRUE):
+  1. Database schema extended with hybridization column in hose_stats table (TEXT storing sp3/sp2/sp1)
+  2. Statistics generator computes sp2/sp3/sp1 fractions during HOSE processing and stores in database
+  3. CLI command `lucy detect hybridisation <db> <shift>` returns JSON with sp2/sp3/sp1 fractions and confidence
+  4. Detection queries shift ± 2 ppm window and returns distributions excluding states <1% frequency
+  5. Command works on existing lucy-ng-derep.db after schema migration or fresh generation
+**Plans**: TBD
+
+Plans:
+- [ ] 34-01-PLAN.md: Extend database schema with hybridization column, write migration script
+- [ ] 34-02-PLAN.md: Update stats_generator.py to compute hybridisation fractions from HOSE prefixes
+- [ ] 34-03-PLAN.md: Create detection module (src/lucy_ng/detection/detector.py) with StatisticalDetector class
+- [ ] 34-04-PLAN.md: Create CLI command (src/lucy_ng/cli/detect.py) with hybridisation subcommand
+
+---
+
+### Phase 35: Neighbourhood Detection
+**Goal**: Agent can query database for forbidden and mandatory bond partners for any 13C shift
+**Depends on**: Phase 34 (schema and stats pipeline established)
+**Requirements**: DETECT-02, DETECT-03, DETECT-06, DETECT-07
+**Success Criteria** (what must be TRUE):
+  1. Database schema extended with bond partner columns (has_carbon_neighbor, has_oxygen_neighbor, has_nitrogen_neighbor boolean flags)
+  2. Statistics generator extracts sphere 1 neighbours from HOSE codes and computes element frequencies
+  3. CLI command `lucy detect neighbours <db> <shift> <multiplicity>` returns forbidden elements (<1% frequency) and mandatory elements (>95% frequency)
+  4. Detection supports override flags (--min-frequency for NN threshold, --mode relaxed for rare cases)
+  5. Command correctly identifies forbidden O-O bonds in non-peroxides and mandatory C=O bonds in carbonyl regions
+**Plans**: TBD
+
+Plans:
+- [ ] 35-01-PLAN.md: Extend schema with neighbour columns, validate HOSE sphere 1 parsing
+- [ ] 35-02-PLAN.md: Update stats_generator.py to extract bond partners and compute frequencies
+- [ ] 35-03-PLAN.md: Extend StatisticalDetector with neighbourhood detection methods
+- [ ] 35-04-PLAN.md: Add neighbours CLI subcommand with threshold override flags
+
+---
+
+### Phase 36: HHB and Ring Detection
+**Goal**: Agent can query hetero-hetero bond allowance and access ring statistics for badlist filtering
+**Depends on**: Phase 34 (schema established)
+**Requirements**: DETECT-04, DETECT-06, DETECT-07
+**Success Criteria** (what must be TRUE):
+  1. Database schema extended with ring columns (in_3ring, in_4ring, in_aromatic counts)
+  2. Statistics generator uses RDKit GetRingInfo() to compute ring membership during HOSE processing
+  3. CLI command `lucy detect hhb <db> <formula>` returns hetero-hetero bond frequency (percentage of compounds with element pair)
+  4. Detection uses 1% threshold for HHB allowance (returns "allowed" if >1% of compounds with formula contain bond pair)
+  5. Ring statistics accessible for Phase 38 badlist implementation (no dedicated CLI, queried internally)
+**Plans**: TBD
+
+Plans:
+- [ ] 36-01-PLAN.md: Extend schema with ring statistics columns
+- [ ] 36-02-PLAN.md: Update stats_generator.py to compute HHB and ring statistics
+- [ ] 36-03-PLAN.md: Add hhb CLI subcommand and internal ring query API
+
+---
+
+### Phase 37: Signal Grouping
+**Goal**: Agent can identify close carbon shifts for combinatorial LSD atom exchange
+**Depends on**: Phase 34 (independent of database, but follows detection pattern)
+**Requirements**: DETECT-05
+**Success Criteria** (what must be TRUE):
+  1. CLI command `lucy analyze grouping <shifts>` identifies clusters within 0.25 ppm tolerance
+  2. Grouping is multiplicity-aware (only groups CH/CH3 together if both ambiguous, never groups CH2 with CH)
+  3. Command returns LSD-compatible output format (parenthesized atom lists for HMBC constraints)
+  4. Agent can use grouped output to write LSD HMBC commands like `HMBC (2 3) 8` for combinatorial exploration
+  5. Documentation warns about false positive risk (close shifts that are truly different carbons)
+**Plans**: TBD
+
+Plans:
+- [ ] 37-01-PLAN.md: Create signal grouping algorithm (src/lucy_ng/detection/grouping.py)
+- [ ] 37-02-PLAN.md: Validate LSD parenthesized syntax with test cases
+- [ ] 37-03-PLAN.md: Add grouping CLI subcommand with multiplicity-aware clustering
+
+---
+
+### Phase 38: Two-Tier Ranking and Badlist
+**Goal**: Solution ranking prevents MAE hallucinations and badlist excludes strained rings
+**Depends on**: Phase 36 (ring statistics available)
+**Requirements**: RANK-01, RANK-02, RANK-03, RANK-04
+**Success Criteria** (what must be TRUE):
+  1. Modified `lucy lsd rank` command ranks by signal match count first (within 10 ppm tolerance), then MAE among matched signals
+  2. Solutions with fewer matched signals rank lower regardless of MAE (prevents ibuprofen cyclohexadiene hallucination)
+  3. Badlist patterns for 3/4-membered rings documented in CASE agent knowledge (DEFF/FEXP NOT commands)
+  4. Agent can optionally exclude strained rings by adding badlist filters to LSD input
+  5. Ranking reports HOSE prediction radius used per carbon (transparency for low-confidence predictions)
+**Plans**: TBD
+
+Plans:
+- [ ] 38-01-PLAN.md: Modify existing SolutionRanker to implement two-tier scoring
+- [ ] 38-02-PLAN.md: Add signal match counting logic with 10 ppm tolerance
+- [ ] 38-03-PLAN.md: Document badlist SMARTS patterns for 3/4-membered rings
+
+---
+
+### Phase 39: Agent Integration
+**Goal**: CASE agent autonomously uses statistical detection to write better-constrained LSD files
+**Depends on**: Phases 34, 35, 36, 37, 38 (all CLI commands stable)
+**Requirements**: AGENT-01, AGENT-02, AGENT-03, AGENT-04, AGENT-05, AGENT-06
+**Success Criteria** (what must be TRUE):
+  1. CASE agent definition (lucy-case-agent.md) teaches statistical detection protocol (call detect commands before writing LSD)
+  2. Agent uses hybridisation detection to set MULT hybridisation values in LSD (sp2 carbons get hybridisation hints)
+  3. Agent uses neighbourhood detection to add ELIM forbidden or LIST mandatory constraints
+  4. Agent uses HHB detection to decide whether to add hetero-hetero BOND constraints
+  5. Agent applies chemistry-first hierarchy (NMR knowledge trumps statistics, stats augment but don't override)
+  6. Agent uses signal grouping detection to identify ambiguous assignments and document in CASE-PROGRESS.md
+**Plans**: TBD
+
+Plans:
+- [ ] 39-01-PLAN.md: Update lucy-case-agent.md with statistical detection workflow section
+- [ ] 39-02-PLAN.md: Add chemistry-first hierarchy rules and threshold override examples
+- [ ] 39-03-PLAN.md: Create integration test with ibuprofen (verify correct aromatic structure found)
+
+---
+
+### Phase 40: Validation
+**Goal**: Statistical detection improvements measured against test cases before shipping
+**Depends on**: Phase 39 (agent integration complete)
+**Requirements**: None (validation phase, ensures quality)
+**Success Criteria** (what must be TRUE):
+  1. Validation test suite created with Sherlock's 45 test cases (downloaded from nmrXiv, sanitized)
+  2. Metrics computed for constraint accuracy (do detected constraints match known structures?)
+  3. Search space reduction measured (solution count with vs without statistical constraints)
+  4. Rank improvement measured (does correct structure rank higher with constraints?)
+  5. Ibuprofen CASE produces correct isobutylphenylpropanoic acid structure in top 3 (fixes v2.1 cyclohexadiene failure)
+**Plans**: TBD
+
+Plans:
+- [ ] 40-01-PLAN.md: Download and sanitize Sherlock's 45 test cases from nmrXiv
+- [ ] 40-02-PLAN.md: Create validation script to run CASE with/without statistical constraints
+- [ ] 40-03-PLAN.md: Compute metrics and write validation report
+
 ---
 
 ## Progress
@@ -612,6 +770,13 @@ Plans:
 | 31. Sanitization Skill | v2.1 | 1/1 | Complete | 2026-02-08 |
 | 32. End-to-End Validation | v2.1 | 1/1 | Complete | 2026-02-08 |
 | 33. Documentation and Cleanup | v2.1 | 2/2 | Complete | 2026-02-09 |
+| 34. Hybridisation Detection | v3.0 | 0/4 | Not started | - |
+| 35. Neighbourhood Detection | v3.0 | 0/4 | Not started | - |
+| 36. HHB and Ring Detection | v3.0 | 0/3 | Not started | - |
+| 37. Signal Grouping | v3.0 | 0/3 | Not started | - |
+| 38. Two-Tier Ranking and Badlist | v3.0 | 0/3 | Not started | - |
+| 39. Agent Integration | v3.0 | 0/3 | Not started | - |
+| 40. Validation | v3.0 | 0/3 | Not started | - |
 
 ---
-*Last updated: 2026-02-09 after Phase 33 execution complete*
+*Last updated: 2026-02-10 after v3.0 roadmap creation*
