@@ -83,7 +83,9 @@ All lucy-ng commands support `--format json` for programmatic use. The AI agent 
 | `lucy analyze symmetry` | formula, expected_carbons, observed_peaks, difference |
 | `lucy dereplicate c13` | is_match, top_matches (name, smiles, score) |
 | `lucy predict c13` | predictions (atom_index, shift, confidence), success |
-| `lucy lsd rank` | ranked_solutions (smiles, mae, quality, deviations) |
+| `lucy lsd rank` | ranked_solutions (smiles, matched_count, mae, quality, deviations) |
+
+**Ranking algorithm:** Solutions are ranked by signal match count (descending), then MAE (ascending). This prevents wrong solutions with coincidentally low MAE from outranking correct solutions with better spectral coverage.
 
 ---
 
