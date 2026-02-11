@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-02-10)
 
 **Core value:** AI agent autonomously determines compound structures from NMR, with data-driven statistical constraints replacing guesswork
-**Current focus:** v3.0 Statistical Detection — Phase 35 (Neighbourhood Detection)
+**Current focus:** v3.0 Statistical Detection — Phase 36 (HHB and Ring Detection)
 
 ## Current Position
 
@@ -82,7 +82,7 @@ Recent decisions affecting current work:
 - HOSE database hybridisation columns exist but are unpopulated (all 0) until database regeneration (v4→v5 migration adds neighbour columns with DEFAULT 0)
 - Database regeneration required: After stats generator update (35-02), full regeneration needed to populate neighbour counts
 - Ibuprofen failure root cause: 4-bond HMBC + rigid assignment + no statistical constraints → cyclohexadiene solutions
-- Research flags threshold sensitivity — may need override mechanisms in CLI
+- ~~Research flags threshold sensitivity~~ → RESOLVED: --mode relaxed and --min/max-frequency override flags implemented in Phase 35-04
 
 ## Session Continuity
 

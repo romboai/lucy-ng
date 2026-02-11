@@ -583,7 +583,7 @@ Plans:
 **Phase overview:**
 
 - [x] **Phase 34: Hybridisation Detection** - Database schema extension, statistics generation, CLI command for sp1/sp2/sp3 detection from shift queries
-- [ ] **Phase 35: Neighbourhood Detection** - Bond partner statistics, CLI commands for forbidden/mandatory neighbour detection from HOSE sphere 1
+- [x] **Phase 35: Neighbourhood Detection** - Bond partner statistics, CLI commands for forbidden/mandatory neighbour detection from HOSE sphere 1
 - [ ] **Phase 36: HHB and Ring Detection** - Hetero-hetero bond statistics, ring statistics for badlist foundation
 - [ ] **Phase 37: Signal Grouping** - Multiplicity-aware close shift detection, LSD parenthesized atom list generation
 - [ ] **Phase 38: Two-Tier Ranking and Badlist** - Match-count-first ranking, hardcoded 3/4-membered ring filters in agent
@@ -624,10 +624,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 35-01-PLAN.md -- Extend schema (v4->v5) with 5 neighbour columns, create HOSE sphere 1 parser, update DatabaseManager
-- [ ] 35-02-PLAN.md -- Update stats_generator.py WelfordAccumulator and generators to extract and track neighbours
-- [ ] 35-03-PLAN.md -- Extend StatisticalDetector with detect_neighbours() and add Pydantic result models
-- [ ] 35-04-PLAN.md -- Add `lucy detect neighbours` CLI subcommand with threshold override flags
+- [x] 35-01-PLAN.md -- Extend schema (v4->v5) with 5 neighbour columns, create HOSE sphere 1 parser, update DatabaseManager
+- [x] 35-02-PLAN.md -- Update stats_generator.py WelfordAccumulator and generators to extract and track neighbours
+- [x] 35-03-PLAN.md -- Extend StatisticalDetector with detect_neighbours() and add Pydantic result models
+- [x] 35-04-PLAN.md -- Add `lucy detect neighbours` CLI subcommand with threshold override flags
 
 ---
 
@@ -770,7 +770,7 @@ Plans:
 | 32. End-to-End Validation | v2.1 | 1/1 | Complete | 2026-02-08 |
 | 33. Documentation and Cleanup | v2.1 | 2/2 | Complete | 2026-02-09 |
 | 34. Hybridisation Detection | v3.0 | 3/3 | Complete | 2026-02-10 |
-| 35. Neighbourhood Detection | v3.0 | 0/4 | Planned | - |
+| 35. Neighbourhood Detection | v3.0 | 4/4 | Complete | 2026-02-11 |
 | 36. HHB and Ring Detection | v3.0 | 0/3 | Not started | - |
 | 37. Signal Grouping | v3.0 | 0/3 | Not started | - |
 | 38. Two-Tier Ranking and Badlist | v3.0 | 0/3 | Not started | - |
@@ -778,4 +778,4 @@ Plans:
 | 40. Validation | v3.0 | 0/3 | Not started | - |
 
 ---
-*Last updated: 2026-02-11 after Phase 35 planning*
+*Last updated: 2026-02-11 after Phase 35 execution*
