@@ -6,7 +6,6 @@ from pathlib import Path
 
 from lucy_ng.database import DatabaseManager
 from lucy_ng.detection.models import (
-    ElementConstraint,
     HybridisationDistribution,
     HybridisationResult,
     NeighbourDistribution,
