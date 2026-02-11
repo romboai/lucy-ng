@@ -14,6 +14,7 @@ from rdkit.Chem import HybridizationType
 from tqdm import tqdm
 
 from lucy_ng.database.models import HOSEStatsRecord
+from lucy_ng.prediction.hose_parser import parse_sphere_1
 
 from .hose import HOSECodeGenerator
 
@@ -72,6 +73,11 @@ class WelfordAccumulator:
     sp3_count: int = 0
     sp2_count: int = 0
     sp1_count: int = 0
+    has_carbon_neighbor: int = 0
+    has_oxygen_neighbor: int = 0
+    has_nitrogen_neighbor: int = 0
+    has_sulfur_neighbor: int = 0
+    has_halogen_neighbor: int = 0
 
     def update(self, value: float) -> None:
         """Add a single observation using Welford's algorithm.
@@ -99,6 +105,31 @@ class WelfordAccumulator:
             self.sp2_count += 1
         elif hybridisation == "sp1":
             self.sp1_count += 1
+
+    def update_with_neighbors(self, value: float, hybridisation: str, neighbors: dict[str, int]) -> None:
+        """Add a single observation with hybridisation and neighbour element tracking.
+
+        Args:
+            value: New shift observation to incorporate
+            hybridisation: Hybridisation state ("sp3", "sp2", or "sp1")
+            neighbors: Dict mapping element symbol to count (from parse_sphere_1)
+        """
+        # Handle shift and hybridisation
+        self.update_with_hybridisation(value, hybridisation)
+
+        # Track neighbour presence
+        if neighbors.get("C", 0) > 0:
+            self.has_carbon_neighbor += 1
+        if neighbors.get("O", 0) > 0:
+            self.has_oxygen_neighbor += 1
+        if neighbors.get("N", 0) > 0:
+            self.has_nitrogen_neighbor += 1
+        if neighbors.get("S", 0) > 0:
+            self.has_sulfur_neighbor += 1
+
+        # Halogen aggregation (F, Cl, Br, I)
+        if any(neighbors.get(hal, 0) > 0 for hal in ("F", "Cl", "Br", "I")):
+            self.has_halogen_neighbor += 1
 
     @property
     def variance(self) -> float:
@@ -132,6 +163,11 @@ class WelfordAccumulator:
                 sp3_count=self.sp3_count,
                 sp2_count=self.sp2_count,
                 sp1_count=self.sp1_count,
+                has_carbon_neighbor=self.has_carbon_neighbor,
+                has_oxygen_neighbor=self.has_oxygen_neighbor,
+                has_nitrogen_neighbor=self.has_nitrogen_neighbor,
+                has_sulfur_neighbor=self.has_sulfur_neighbor,
+                has_halogen_neighbor=self.has_halogen_neighbor,
             )
         if self.count == 0:
             return WelfordAccumulator(
@@ -141,6 +177,11 @@ class WelfordAccumulator:
                 sp3_count=other.sp3_count,
                 sp2_count=other.sp2_count,
                 sp1_count=other.sp1_count,
+                has_carbon_neighbor=other.has_carbon_neighbor,
+                has_oxygen_neighbor=other.has_oxygen_neighbor,
+                has_nitrogen_neighbor=other.has_nitrogen_neighbor,
+                has_sulfur_neighbor=other.has_sulfur_neighbor,
+                has_halogen_neighbor=other.has_halogen_neighbor,
             )
 
         combined_count = self.count + other.count
@@ -160,15 +201,35 @@ class WelfordAccumulator:
         merged.sp3_count = self.sp3_count + other.sp3_count
         merged.sp2_count = self.sp2_count + other.sp2_count
         merged.sp1_count = self.sp1_count + other.sp1_count
+        merged.has_carbon_neighbor = self.has_carbon_neighbor + other.has_carbon_neighbor
+        merged.has_oxygen_neighbor = self.has_oxygen_neighbor + other.has_oxygen_neighbor
+        merged.has_nitrogen_neighbor = self.has_nitrogen_neighbor + other.has_nitrogen_neighbor
+        merged.has_sulfur_neighbor = self.has_sulfur_neighbor + other.has_sulfur_neighbor
+        merged.has_halogen_neighbor = self.has_halogen_neighbor + other.has_halogen_neighbor
 
         return merged
 
-    def to_tuple(self) -> tuple[int, float, float, int, int, int]:
-        """Export as (count, mean, m2, sp3_count, sp2_count, sp1_count) tuple.
+    def to_tuple(self) -> tuple[int, float, float, int, int, int, int, int, int, int, int]:
+        """Export as 11-element tuple for database storage.
 
-        For database storage.
+        Returns:
+            Tuple of (count, mean, m2, sp3_count, sp2_count, sp1_count,
+                      has_carbon_neighbor, has_oxygen_neighbor, has_nitrogen_neighbor,
+                      has_sulfur_neighbor, has_halogen_neighbor)
         """
-        return (self.count, self.mean, self.m2, self.sp3_count, self.sp2_count, self.sp1_count)
+        return (
+            self.count,
+            self.mean,
+            self.m2,
+            self.sp3_count,
+            self.sp2_count,
+            self.sp1_count,
+            self.has_carbon_neighbor,
+            self.has_oxygen_neighbor,
+            self.has_nitrogen_neighbor,
+            self.has_sulfur_neighbor,
+            self.has_halogen_neighbor,
+        )
 
 
 class HOSEStatsGenerator:
@@ -208,7 +269,11 @@ class HOSEStatsGenerator:
     def generate_all(
         self,
         progress: bool = True,
-    ) -> tuple[dict[tuple[str, int], list[float]], dict[tuple[str, int], dict[str, int]]]:
+    ) -> tuple[
+        dict[tuple[str, int], list[float]],
+        dict[tuple[str, int], dict[str, int]],
+        dict[tuple[str, int], dict[str, int]],
+    ]:
         """Generate HOSE code shift aggregates from all compounds.
 
         Iterates through all compounds in the database, generates HOSE codes
@@ -222,6 +287,7 @@ class HOSEStatsGenerator:
             Tuple of:
             - Dict mapping (hose_code, radius) to list of observed shifts
             - Dict mapping (hose_code, radius) to hybridisation counts
+            - Dict mapping (hose_code, radius) to neighbour element counts
         """
         # Reset statistics
         self._compounds_processed = 0
@@ -234,6 +300,11 @@ class HOSEStatsGenerator:
         # Hybridisation counts: {(hose_code, radius): {"sp3": N, "sp2": M, "sp1": K}}
         hybridisations: dict[tuple[str, int], dict[str, int]] = defaultdict(
             lambda: {"sp3": 0, "sp2": 0, "sp1": 0}
+        )
+
+        # Neighbour element counts: {(hose_code, radius): {"C": N, "O": M, ...}}
+        neighbour_counts: dict[tuple[str, int], dict[str, int]] = defaultdict(
+            lambda: {"C": 0, "O": 0, "N": 0, "S": 0, "halogen": 0}
         )
 
         # Get total count for progress bar
@@ -281,23 +352,39 @@ class HOSEStatsGenerator:
                         if hose_code:
                             aggregates[(hose_code, radius)].append(shift_ppm)
                             hybridisations[(hose_code, radius)][hybridisation] += 1
+
+                            # Parse sphere 1 and track neighbour presence
+                            neighbors = parse_sphere_1(hose_code)
+                            if neighbors.get("C", 0) > 0:
+                                neighbour_counts[(hose_code, radius)]["C"] += 1
+                            if neighbors.get("O", 0) > 0:
+                                neighbour_counts[(hose_code, radius)]["O"] += 1
+                            if neighbors.get("N", 0) > 0:
+                                neighbour_counts[(hose_code, radius)]["N"] += 1
+                            if neighbors.get("S", 0) > 0:
+                                neighbour_counts[(hose_code, radius)]["S"] += 1
+                            if any(neighbors.get(hal, 0) > 0 for hal in ("F", "Cl", "Br", "I")):
+                                neighbour_counts[(hose_code, radius)]["halogen"] += 1
+
                             self._shifts_processed += 1
                     except Exception:
                         # Skip atoms that fail HOSE generation
                         continue
 
-        return dict(aggregates), dict(hybridisations)
+        return dict(aggregates), dict(hybridisations), dict(neighbour_counts)
 
     def compute_stats(
         self,
         aggregates: dict[tuple[str, int], list[float]],
         hybridisations: dict[tuple[str, int], dict[str, int]] | None = None,
+        neighbour_counts: dict[tuple[str, int], dict[str, int]] | None = None,
     ) -> list[HOSEStatsRecord]:
         """Compute statistics from aggregated shifts.
 
         Args:
             aggregates: Dict mapping (hose_code, radius) to list of shifts
             hybridisations: Dict mapping (hose_code, radius) to hybridisation counts
+            neighbour_counts: Dict mapping (hose_code, radius) to neighbour element counts
 
         Returns:
             List of HOSEStatsRecord with mean, std, count
@@ -323,6 +410,21 @@ class HOSEStatsGenerator:
                 sp2_count = 0
                 sp1_count = 0
 
+            # Get neighbour counts if provided
+            if neighbour_counts and (hose_code, radius) in neighbour_counts:
+                nb_counts = neighbour_counts[(hose_code, radius)]
+                has_carbon_neighbor = nb_counts.get("C", 0)
+                has_oxygen_neighbor = nb_counts.get("O", 0)
+                has_nitrogen_neighbor = nb_counts.get("N", 0)
+                has_sulfur_neighbor = nb_counts.get("S", 0)
+                has_halogen_neighbor = nb_counts.get("halogen", 0)
+            else:
+                has_carbon_neighbor = 0
+                has_oxygen_neighbor = 0
+                has_nitrogen_neighbor = 0
+                has_sulfur_neighbor = 0
+                has_halogen_neighbor = 0
+
             stats.append(
                 HOSEStatsRecord(
                     hose_code=hose_code,
@@ -333,6 +435,11 @@ class HOSEStatsGenerator:
                     sp3_count=sp3_count,
                     sp2_count=sp2_count,
                     sp1_count=sp1_count,
+                    has_carbon_neighbor=has_carbon_neighbor,
+                    has_oxygen_neighbor=has_oxygen_neighbor,
+                    has_nitrogen_neighbor=has_nitrogen_neighbor,
+                    has_sulfur_neighbor=has_sulfur_neighbor,
+                    has_halogen_neighbor=has_halogen_neighbor,
                 )
             )
 
@@ -356,11 +463,11 @@ class HOSEStatsGenerator:
         Returns:
             Number of statistics entries inserted
         """
-        # Generate aggregates and hybridisation counts
-        aggregates, hybridisations = self.generate_all(progress=progress)
+        # Generate aggregates, hybridisation counts, and neighbour counts
+        aggregates, hybridisations, neighbour_counts = self.generate_all(progress=progress)
 
         # Compute statistics
-        stats = self.compute_stats(aggregates, hybridisations)
+        stats = self.compute_stats(aggregates, hybridisations, neighbour_counts)
 
         # Insert into database
         count = self.db_manager.insert_hose_stats_batch(stats, batch_size=batch_size)
@@ -570,8 +677,10 @@ class ResumableHOSEStatsGenerator:
                     try:
                         hose_code = self._hose_gen.generate_for_atom(mol, atom_idx, radius)
                         if hose_code:
-                            accumulators[(hose_code, radius)].update_with_hybridisation(
-                                shift_ppm, hybridisation
+                            # Parse sphere 1 for neighbour elements
+                            neighbors = parse_sphere_1(hose_code)
+                            accumulators[(hose_code, radius)].update_with_neighbors(
+                                shift_ppm, hybridisation, neighbors
                             )
                             shifts_processed += 1
                     except Exception:
@@ -595,7 +704,8 @@ class ResumableHOSEStatsGenerator:
             return 0
 
         # Convert to tuple format for upsert
-        # Prepend hose_code and radius to the 6-element to_tuple() result
+        # Prepend hose_code and radius to the 11-element to_tuple() result
+        # Result: 13-element tuple for v5 schema
         stats = [
             (hose_code, radius) + acc.to_tuple()
             for (hose_code, radius), acc in accumulators.items()
@@ -954,8 +1064,10 @@ class SDFHOSEStatsGenerator:
                     try:
                         hose_code = self._hose_gen.generate_for_atom(mol, atom_idx, radius)
                         if hose_code:
-                            accumulators[(hose_code, radius)].update_with_hybridisation(
-                                shift_ppm, hybridisation
+                            # Parse sphere 1 for neighbour elements
+                            neighbors = parse_sphere_1(hose_code)
+                            accumulators[(hose_code, radius)].update_with_neighbors(
+                                shift_ppm, hybridisation, neighbors
                             )
                             shifts_processed += 1
                     except Exception:
@@ -971,7 +1083,8 @@ class SDFHOSEStatsGenerator:
         if not accumulators:
             return 0
 
-        # Prepend hose_code and radius to the 6-element to_tuple() result
+        # Prepend hose_code and radius to the 11-element to_tuple() result
+        # Result: 13-element tuple for v5 schema
         stats = [
             (hose_code, radius) + acc.to_tuple()
             for (hose_code, radius), acc in accumulators.items()
