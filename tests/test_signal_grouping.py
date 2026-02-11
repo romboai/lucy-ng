@@ -97,20 +97,34 @@ class TestGroupSignals:
         assert set(result.ungrouped) == {0, 1, 2}
 
     def test_multiplicity_filtering_all_compatible(self):
-        """Ambiguous multiplicities allow grouping."""
+        """Ambiguous multiplicities allow grouping when ALL pairs compatible."""
+        # Use all CH/CH3 - they're all compatible with each other
         result = group_signals(
-            [44.90, 45.03, 45.20],
-            multiplicities=["CH", "CH/CH3", "CH3"],
+            [44.90, 45.03, 45.15],
+            multiplicities=["CH/CH3", "CH/CH3", "CH/CH3"],
             tolerance=0.25
         )
-        # All three within 0.30 ppm, and CH/CH3 is compatible with both CH and CH3
+        # All three within 0.25 ppm and all multiplicities compatible
         # Should produce 1 group of 3
         assert len(result.groups) == 1
         assert len(result.ungrouped) == 0
 
         group = result.groups[0]
         assert group.indices == [0, 1, 2]
-        assert group.multiplicities == ["CH", "CH/CH3", "CH3"]
+        assert group.multiplicities == ["CH/CH3", "CH/CH3", "CH/CH3"]
+
+    def test_multiplicity_bridging_splits_group(self):
+        """CH/CH3 doesn't bridge incompatible CH and CH3 - pairwise check fails."""
+        result = group_signals(
+            [44.90, 45.03, 45.15],
+            multiplicities=["CH", "CH/CH3", "CH3"],
+            tolerance=0.25
+        )
+        # CH and CH3 are incompatible, so despite CH/CH3 being compatible with both,
+        # the pairwise check (CH vs CH3) fails and entire group splits
+        assert len(result.groups) == 0
+        assert len(result.ungrouped) == 3
+        assert set(result.ungrouped) == {0, 1, 2}
 
     def test_complete_linkage_not_chaining(self):
         """Complete linkage prevents chaining beyond tolerance."""
@@ -186,7 +200,7 @@ class TestGroupSignals:
         assert "44.90" in summary
         assert "45.03" in summary
         assert "tolerance 0.25" in summary
-        assert "1 group" in summary or "groups: 1" in summary
+        assert "Groups: 1" in summary  # Fixed: exact match for the format
 
 
 class TestEdgeCases:

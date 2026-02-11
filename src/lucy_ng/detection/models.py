@@ -366,3 +366,87 @@ class HHBResult(BaseModel):
                 )
 
         return "\n".join(lines)
+
+
+class SignalGroup(BaseModel):
+    """A group of chemically equivalent carbon signals.
+
+    Represents a cluster of carbon shifts within tolerance, potentially
+    representing the same carbon in different molecular environments
+    (e.g., conformational flexibility, minor tautomers).
+    """
+
+    indices: list[int]  # 0-based indices in original shift list
+    shifts: list[float]  # Shift values (ppm)
+    multiplicities: list[str | None] | None = None  # Optional multiplicity labels
+    span: float  # Max - min shift (ppm)
+    centroid: float  # Mean shift (ppm)
+
+    @property
+    def atom_ids(self) -> list[int]:
+        """Return 1-based atom IDs for LSD.
+
+        LSD uses 1-based atom numbering, Python uses 0-based.
+        """
+        return [idx + 1 for idx in self.indices]
+
+    def lsd_atom_list(self) -> str:
+        """Format atom IDs for LSD EXCH command.
+
+        Returns:
+            For multiple atoms: "(1 2 3)"
+            For single atom: "1"
+        """
+        if len(self.indices) == 1:
+            return str(self.atom_ids[0])
+        else:
+            return f"({' '.join(str(aid) for aid in self.atom_ids)})"
+
+
+class GroupingResult(BaseModel):
+    """Result of signal grouping analysis.
+
+    Contains groups of equivalent signals and ungrouped singletons,
+    plus metadata about the grouping parameters.
+    """
+
+    tolerance: float  # Grouping tolerance (ppm)
+    groups: list[SignalGroup] = []  # Multi-signal groups
+    ungrouped: list[int] = []  # 0-based indices of ungrouped signals
+    total_signals: int = 0  # Total number of input signals
+    warnings: list[str] = []  # Warning messages
+
+    def summary(self) -> str:
+        """Generate human-readable summary of grouping result.
+
+        Returns:
+            Multi-line text summary
+        """
+        lines = []
+
+        lines.append(f"Signal Grouping (tolerance {self.tolerance} ppm)")
+        lines.append(f"Total signals: {self.total_signals}")
+        lines.append(f"Groups: {len(self.groups)}")
+        lines.append(f"Ungrouped: {len(self.ungrouped)}")
+
+        if self.groups:
+            lines.append("")
+            lines.append("Groups:")
+            for i, group in enumerate(self.groups, 1):
+                shifts_str = ", ".join(f"{s:.2f}" for s in group.shifts)
+                lines.append(
+                    f"  Group {i}: [{shifts_str}] "
+                    f"(span={group.span:.2f}, centroid={group.centroid:.2f})"
+                )
+
+        if self.ungrouped:
+            lines.append("")
+            lines.append(f"Ungrouped indices: {self.ungrouped}")
+
+        if self.warnings:
+            lines.append("")
+            lines.append("Warnings:")
+            for warning in self.warnings:
+                lines.append(f"  {warning}")
+
+        return "\n".join(lines)
