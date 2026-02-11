@@ -4,7 +4,9 @@ import json
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 
+from lucy_ng.cli.main import cli
 from lucy_ng.database import DatabaseManager
 from lucy_ng.detection import StatisticalDetector
 from lucy_ng.detection.models import ConstraintType, NeighbourDistribution
@@ -318,3 +320,81 @@ def test_constraint_type_enum() -> None:
     assert ConstraintType.FORBIDDEN == "forbidden"
     assert ConstraintType.TYPICAL == "typical"
     assert ConstraintType.MANDATORY == "mandatory"
+
+
+# ===== CLI Integration Tests =====
+
+
+def test_cli_detect_neighbours_command_exists() -> None:
+    """Test that 'lucy detect neighbours --help' works."""
+    runner = CliRunner()
+    result = runner.invoke(cli, ["detect", "neighbours", "--help"])
+
+    assert result.exit_code == 0
+    assert "Detect forbidden and mandatory" in result.output
+    assert "--db" in result.output
+    assert "--radius" in result.output
+    assert "--window" in result.output
+    assert "--min-frequency" in result.output
+    assert "--max-frequency" in result.output
+    assert "--mode" in result.output
+    assert "--format" in result.output
+
+
+def test_cli_detect_group_shows_neighbours() -> None:
+    """Test that 'lucy detect --help' shows neighbours subcommand."""
+    runner = CliRunner()
+    result = runner.invoke(cli, ["detect", "--help"])
+
+    assert result.exit_code == 0
+    assert "neighbours" in result.output
+
+
+def test_cli_detect_neighbours_text_output(test_db: Path) -> None:
+    """Test neighbours command with text output format."""
+    runner = CliRunner()
+    result = runner.invoke(cli, ["detect", "neighbours", "170.5", "--db", str(test_db)])
+
+    assert result.exit_code == 0
+    assert "Neighbourhood Detection" in result.output
+    assert "170.5 ppm" in result.output
+    # Should show at least one of forbidden/mandatory
+    assert "Forbidden:" in result.output or "Mandatory:" in result.output
+
+
+def test_cli_detect_neighbours_json_output(test_db: Path) -> None:
+    """Test neighbours command with JSON output format."""
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["detect", "neighbours", "170.5", "--db", str(test_db), "--format", "json"]
+    )
+
+    assert result.exit_code == 0
+
+    # Parse JSON output
+    data = json.loads(result.output)
+
+    # Check expected keys
+    assert "shift_ppm" in data
+    assert "distribution" in data
+    assert "constraints" in data
+    assert "has_data" in data
+    assert "total_observations" in data
+    assert "unique_hose_codes" in data
+
+    # Verify types
+    assert isinstance(data["shift_ppm"], (int, float))
+    assert isinstance(data["has_data"], bool)
+    assert isinstance(data["total_observations"], int)
+
+
+def test_cli_detect_neighbours_mode_relaxed(test_db: Path) -> None:
+    """Test neighbours command with relaxed mode (0.1%/99% thresholds)."""
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["detect", "neighbours", "170.5", "--db", str(test_db), "--mode", "relaxed"]
+    )
+
+    assert result.exit_code == 0
+    # Should run without error
+    assert "170.5 ppm" in result.output
