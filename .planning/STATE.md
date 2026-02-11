@@ -11,9 +11,9 @@ See: .planning/PROJECT.md (updated 2026-02-10)
 
 **Milestone**: v3.0 Statistical Detection
 **Phase**: 35 of 40 (Neighbourhood Detection)
-**Plan**: 03 of 04 complete (neighbourhood detection API)
+**Plan**: 02 of 04 complete (stats generator extension) [Re-executed to verify tests]
 **Status**: In progress
-**Last activity**: 2026-02-11 — Completed 35-03-PLAN.md (neighbourhood detection models and detector)
+**Last activity**: 2026-02-11 — Re-executed 35-02-PLAN.md to verify neighbour tracking tests exist
 
 Progress: [█████████████████████████████████░░░░░░░] 85% (34/40 phases complete, 35 in progress)
 
@@ -58,6 +58,9 @@ Recent decisions affecting current work:
 - Phase 35-01: Halogen aggregation in single has_halogen_neighbor column (F/Cl/Br/I combined)
 - Phase 35-01: parse_sphere_1() uses regex [A-Z][a-z]? to extract elements, ignoring bond prefixes
 - Phase 35-01: Upsert accepts 5, 8, or 13-element tuples for v3/v4/v5 backward compatibility
+- Phase 35-02: update_with_neighbors() calls update_with_hybridisation() internally for composition
+- Phase 35-02: WelfordAccumulator.to_tuple() extended from 6 to 11 elements for v5 schema
+- Phase 35-02: HOSEStatsGenerator.generate_all() returns 3-tuple (aggregates, hybridisations, neighbour_counts)
 - Phase 35-03: mandatory_elements/forbidden_elements properties use hardcoded 0.95/0.01 thresholds for convenience
 - Phase 35-03: Constraints use custom thresholds passed to detect_neighbours() for flexibility
 - Phase 35-03: Warn on unpopulated neighbour columns (v4 databases) rather than fail
@@ -82,8 +85,8 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 35-03-PLAN.md (Neighbourhood detection Python API)
-Resume file: None (ready for Plan 35-04: CLI integration)
+Stopped at: Re-executed 35-02-PLAN.md (Stats generator extension with neighbour tracking)
+Resume file: None (Note: 35-03 already complete from prior session, ready for 35-04 CLI)
 
 ---
 *Last updated: 2026-02-11 after Plan 35-03 execution*
