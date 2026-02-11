@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from enum import Enum
+
 from pydantic import BaseModel
 
 
@@ -104,6 +106,188 @@ class HybridisationResult(BaseModel):
         if dominant != "unknown":
             definitive = "definitive" if self.distribution.is_definitive else "not definitive"
             lines.append(f"Dominant: {dominant} ({definitive})")
+
+        # Data coverage
+        lines.append(
+            f"Based on {self.total_observations:,} observations from "
+            f"{self.unique_hose_codes} HOSE codes"
+        )
+
+        return "\n".join(lines)
+
+
+class ConstraintType(str, Enum):
+    """Classification of element constraints based on frequency."""
+
+    FORBIDDEN = "forbidden"  # Below forbidden_threshold
+    TYPICAL = "typical"  # Between thresholds
+    MANDATORY = "mandatory"  # Above mandatory_threshold
+
+
+class ElementConstraint(BaseModel):
+    """Constraint on an element's presence as a bond partner.
+
+    Classifies an element (C, O, N, S, halogen) based on its observed
+    frequency in the database.
+    """
+
+    element: str  # Element name
+    frequency: float  # Observed frequency (0.0 to 1.0)
+    constraint_type: ConstraintType  # Classification
+
+
+class NeighbourDistribution(BaseModel):
+    """Distribution of bond partner elements for a carbon shift.
+
+    Frequencies represent the proportion of observations where the
+    carbon has at least one bond to the specified element type.
+
+    Frequencies are NOT mutually exclusive (sum can exceed 1.0).
+    """
+
+    carbon: float = 0.0  # Frequency 0.0-1.0
+    oxygen: float = 0.0
+    nitrogen: float = 0.0
+    sulfur: float = 0.0
+    halogen: float = 0.0
+
+    def get_constraints(
+        self,
+        forbidden_threshold: float = 0.01,
+        mandatory_threshold: float = 0.95,
+    ) -> list[ElementConstraint]:
+        """Classify each element as forbidden, typical, or mandatory.
+
+        Args:
+            forbidden_threshold: Elements below this frequency are forbidden
+            mandatory_threshold: Elements above this frequency are mandatory
+
+        Returns:
+            List of ElementConstraint objects for all elements
+        """
+        constraints = []
+
+        for element_name in ["carbon", "oxygen", "nitrogen", "sulfur", "halogen"]:
+            frequency = getattr(self, element_name)
+
+            if frequency < forbidden_threshold:
+                constraint_type = ConstraintType.FORBIDDEN
+            elif frequency > mandatory_threshold:
+                constraint_type = ConstraintType.MANDATORY
+            else:
+                constraint_type = ConstraintType.TYPICAL
+
+            constraints.append(
+                ElementConstraint(
+                    element=element_name,
+                    frequency=frequency,
+                    constraint_type=constraint_type,
+                )
+            )
+
+        return constraints
+
+    @property
+    def forbidden_elements(self) -> list[str]:
+        """Return elements with frequency below 1% (forbidden).
+
+        Returns:
+            List of element names
+        """
+        forbidden = []
+        for element_name in ["carbon", "oxygen", "nitrogen", "sulfur", "halogen"]:
+            frequency = getattr(self, element_name)
+            if frequency < 0.01:
+                forbidden.append(element_name)
+        return forbidden
+
+    @property
+    def mandatory_elements(self) -> list[str]:
+        """Return elements with frequency above 95% (mandatory).
+
+        Returns:
+            List of element names
+        """
+        mandatory = []
+        for element_name in ["carbon", "oxygen", "nitrogen", "sulfur", "halogen"]:
+            frequency = getattr(self, element_name)
+            if frequency > 0.95:
+                mandatory.append(element_name)
+        return mandatory
+
+
+class NeighbourResult(BaseModel):
+    """Result of neighbourhood detection query.
+
+    Contains both the frequency distribution and metadata about
+    the query parameters and data coverage.
+    """
+
+    shift_ppm: float  # Queried shift
+    window_ppm: float  # Query window used
+    radius: int  # HOSE radius used
+    forbidden_threshold: float = 0.01  # Threshold for forbidden classification
+    mandatory_threshold: float = 0.95  # Threshold for mandatory classification
+    distribution: NeighbourDistribution  # Element frequencies
+    constraints: list[ElementConstraint] = []  # Classified constraints
+    total_observations: int = 0  # Total count across all matching HOSE codes
+    unique_hose_codes: int = 0  # Number of HOSE codes that contributed
+    has_data: bool = False  # False if no matching HOSE codes or all counts are 0
+    warning: str | None = None  # Warning message
+
+    def summary(self) -> str:
+        """Generate human-readable summary of detection result.
+
+        Returns:
+            Multi-line text summary
+        """
+        lines = []
+
+        # Header
+        lines.append(
+            f"Neighbourhood Detection: {self.shift_ppm} ppm "
+            f"(window +/- {self.window_ppm} ppm, radius {self.radius})"
+        )
+
+        if not self.has_data:
+            lines.append("No data available")
+            if self.warning:
+                lines.append(f"Warning: {self.warning}")
+            return "\n".join(lines)
+
+        # Distribution line - show non-zero elements
+        dist_parts = []
+        for element in ["carbon", "oxygen", "nitrogen", "sulfur", "halogen"]:
+            freq = getattr(self.distribution, element)
+            if freq > 0.0:
+                dist_parts.append(f"{element[0].upper()}={freq*100:.1f}%")
+
+        if dist_parts:
+            lines.append("Distribution: " + ", ".join(dist_parts))
+
+        # Forbidden elements
+        forbidden = [
+            c.element
+            for c in self.constraints
+            if c.constraint_type == ConstraintType.FORBIDDEN
+        ]
+        if forbidden:
+            forbidden_str = ", ".join(
+                f"{e} (<{self.forbidden_threshold*100:.1f}%)" for e in forbidden
+            )
+            lines.append(f"Forbidden: {forbidden_str}")
+
+        # Mandatory elements
+        mandatory = [
+            c.element
+            for c in self.constraints
+            if c.constraint_type == ConstraintType.MANDATORY
+        ]
+        if mandatory:
+            mandatory_str = ", ".join(
+                f"{e} (>{self.mandatory_threshold*100:.1f}%)" for e in mandatory
+            )
+            lines.append(f"Mandatory: {mandatory_str}")
 
         # Data coverage
         lines.append(

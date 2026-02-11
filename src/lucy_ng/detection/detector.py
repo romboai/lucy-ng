@@ -5,7 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from lucy_ng.database import DatabaseManager
-from lucy_ng.detection.models import HybridisationDistribution, HybridisationResult
+from lucy_ng.detection.models import (
+    ElementConstraint,
+    HybridisationDistribution,
+    HybridisationResult,
+    NeighbourDistribution,
+    NeighbourResult,
+)
 
 
 class StatisticalDetector:
@@ -133,6 +139,124 @@ class StatisticalDetector:
             radius=radius,
             threshold=threshold,
             distribution=distribution,
+            total_observations=total_observations,
+            unique_hose_codes=unique_hose_codes,
+            has_data=True,
+        )
+
+    def detect_neighbours(
+        self,
+        shift_ppm: float,
+        radius: int = 3,
+        window_ppm: float = 2.0,
+        forbidden_threshold: float = 0.01,
+        mandatory_threshold: float = 0.95,
+    ) -> NeighbourResult:
+        """Detect bond partner element constraints from chemical shift.
+
+        Queries all HOSE codes at the given radius whose mean shift falls
+        within [shift_ppm - window_ppm, shift_ppm + window_ppm], aggregates
+        their neighbour element counts, and computes frequency distributions.
+
+        Elements are classified as forbidden (< forbidden_threshold),
+        typical (between thresholds), or mandatory (> mandatory_threshold).
+
+        Args:
+            shift_ppm: Target chemical shift in ppm
+            radius: HOSE code radius (1-6, default: 3)
+            window_ppm: Window size in ppm (default: 2.0)
+            forbidden_threshold: Minimum frequency to not be forbidden (default: 0.01 = 1%)
+            mandatory_threshold: Minimum frequency to be mandatory (default: 0.95 = 95%)
+
+        Returns:
+            NeighbourResult with distribution, constraints, and metadata
+        """
+        # Query database for matching HOSE stats
+        records = self._db.get_hose_stats_by_shift_window(
+            shift_ppm, radius, window_ppm
+        )
+
+        unique_hose_codes = len(records)
+        total_observations = sum(r.count for r in records)
+
+        # Check if we have any records
+        if total_observations == 0:
+            return NeighbourResult(
+                shift_ppm=shift_ppm,
+                window_ppm=window_ppm,
+                radius=radius,
+                forbidden_threshold=forbidden_threshold,
+                mandatory_threshold=mandatory_threshold,
+                distribution=NeighbourDistribution(),
+                constraints=[],
+                total_observations=0,
+                unique_hose_codes=0,
+                has_data=False,
+                warning="No data found for this shift range.",
+            )
+
+        # Aggregate neighbour counts
+        has_carbon = sum(r.has_carbon_neighbor for r in records)
+        has_oxygen = sum(r.has_oxygen_neighbor for r in records)
+        has_nitrogen = sum(r.has_nitrogen_neighbor for r in records)
+        has_sulfur = sum(r.has_sulfur_neighbor for r in records)
+        has_halogen = sum(r.has_halogen_neighbor for r in records)
+
+        # Check if all neighbour columns are zero (database has data but no neighbour info)
+        if (
+            has_carbon == 0
+            and has_oxygen == 0
+            and has_nitrogen == 0
+            and has_sulfur == 0
+            and has_halogen == 0
+        ):
+            return NeighbourResult(
+                shift_ppm=shift_ppm,
+                window_ppm=window_ppm,
+                radius=radius,
+                forbidden_threshold=forbidden_threshold,
+                mandatory_threshold=mandatory_threshold,
+                distribution=NeighbourDistribution(),
+                constraints=[],
+                total_observations=total_observations,
+                unique_hose_codes=unique_hose_codes,
+                has_data=False,
+                warning=(
+                    "Neighbour columns are unpopulated. "
+                    "Database needs regeneration with v5 schema."
+                ),
+            )
+
+        # Compute frequencies
+        carbon_freq = has_carbon / total_observations
+        oxygen_freq = has_oxygen / total_observations
+        nitrogen_freq = has_nitrogen / total_observations
+        sulfur_freq = has_sulfur / total_observations
+        halogen_freq = has_halogen / total_observations
+
+        # Create distribution
+        distribution = NeighbourDistribution(
+            carbon=carbon_freq,
+            oxygen=oxygen_freq,
+            nitrogen=nitrogen_freq,
+            sulfur=sulfur_freq,
+            halogen=halogen_freq,
+        )
+
+        # Get constraints
+        constraints = distribution.get_constraints(
+            forbidden_threshold=forbidden_threshold,
+            mandatory_threshold=mandatory_threshold,
+        )
+
+        return NeighbourResult(
+            shift_ppm=shift_ppm,
+            window_ppm=window_ppm,
+            radius=radius,
+            forbidden_threshold=forbidden_threshold,
+            mandatory_threshold=mandatory_threshold,
+            distribution=distribution,
+            constraints=constraints,
             total_observations=total_observations,
             unique_hose_codes=unique_hose_codes,
             has_data=True,
