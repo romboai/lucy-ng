@@ -661,12 +661,12 @@ Plans:
   3. Command returns LSD-compatible output format (parenthesized atom lists for HMBC constraints)
   4. Agent can use grouped output to write LSD HMBC commands like `HMBC (2 3) 8` for combinatorial exploration
   5. Documentation warns about false positive risk (close shifts that are truly different carbons)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 37-01-PLAN.md: Create signal grouping algorithm (src/lucy_ng/detection/grouping.py)
-- [ ] 37-02-PLAN.md: Validate LSD parenthesized syntax with test cases
-- [ ] 37-03-PLAN.md: Add grouping CLI subcommand with multiplicity-aware clustering
+- [ ] 37-01-PLAN.md — Signal grouping algorithm with Pydantic models and TDD tests
+- [ ] 37-02-PLAN.md — Validate LSD parenthesized syntax with actual solver runs
+- [ ] 37-03-PLAN.md — Add `lucy analyze grouping` CLI subcommand
 
 ---
 
