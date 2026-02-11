@@ -10,12 +10,12 @@ See: .planning/PROJECT.md (updated 2026-02-10)
 ## Current Position
 
 **Milestone**: v3.0 Statistical Detection
-**Phase**: 37 of 40 (Signal Grouping Detection)
-**Plan**: 03 of 03 complete (Signal grouping CLI)
-**Status**: Phase complete, verified (5/5 must-haves)
-**Last activity**: 2026-02-11 — Phase 37 complete, all 3 plans executed and verified
+**Phase**: 38 of 40 (Two-Tier Ranking and Badlist)
+**Plan**: 02 of 02 complete (Badlist documentation and ranking guidance)
+**Status**: Phase in progress (1/2 plans complete)
+**Last activity**: 2026-02-11 — Completed 38-02-PLAN.md
 
-Progress: [██████████████████████████████████░░░░░░░] 92.5% (37/40 phases complete)
+Progress: [██████████████████████████████████░░░░░░░] 95.0% (38/40 phases complete)
 
 ## Completed Milestones
 
@@ -30,9 +30,9 @@ Progress: [███████████████████████
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 56 (v1.0-v2.1: 39, v3.0: 17)
-- Average duration: ~3 hours per phase (v1.0-v1.2), < 15 min per phase (v2.0-v2.1 docs/skills), ~5.4 min per plan (v3.0 implementation)
-- Total execution time: ~68.0 hours
+- Total plans completed: 57 (v1.0-v2.1: 39, v3.0: 18)
+- Average duration: ~3 hours per phase (v1.0-v1.2), < 15 min per phase (v2.0-v2.1 docs/skills), ~5.1 min per plan (v3.0 implementation)
+- Total execution time: ~68.1 hours
 
 ## Accumulated Context
 
@@ -89,13 +89,17 @@ Recent decisions affecting current work:
 - Phase 37-03: Custom text formatting instead of GroupingResult.summary() for LSD atom list display
 - Phase 37-03: Lazy import of group_signals() following detect.py pattern
 - Phase 37-03: False positive warning mandatory in text output
+- Phase 38-02: 8 DEFF NOT patterns exclude all common strained ring motifs (3- and 4-membered)
+- Phase 38-02: Epoxide exception documented with specific shift range (45-55 ppm) and formula requirements
+- Phase 38-02: Two-tier ranking prioritizes signal match count over MAE to prevent wrong structures with coincidentally low errors
 
 ### Pending Todos
 
 - ~~Implement neighbourhood detection CLI commands (Phase 35)~~ → COMPLETE
 - ~~Implement HHB and ring detection (Phase 36)~~ → COMPLETE
 - ~~Signal grouping detection (Phase 37)~~ → COMPLETE
-- Implement two-tier ranking and badlist (Phase 38)
+- ~~Two-tier ranking implementation (Phase 38-01)~~ → COMPLETE
+- ~~Badlist documentation and ranking guidance (Phase 38-02)~~ → COMPLETE
 - Update CASE agent to use new CLI commands for constraint generation (Phase 39)
 - Validate on ibuprofen (Phase 40) — must find correct aromatic structure
 
@@ -110,8 +114,8 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 37-03-PLAN.md — Phase 37 complete (all 3 plans executed)
-Resume file: None — Ready for Phase 38 (two-tier ranking and badlist)
+Stopped at: Completed 38-02-PLAN.md — Phase 38 complete (all 2 plans executed)
+Resume file: None — Ready for Phase 39 (statistical constraints integration)
 
 ---
-*Last updated: 2026-02-11 after Plan 37-03 execution (Phase 37 Signal Grouping complete)*
+*Last updated: 2026-02-11 after Plan 38-02 execution (Phase 38 Two-Tier Ranking and Badlist complete)*
