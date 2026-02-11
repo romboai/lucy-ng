@@ -6,6 +6,8 @@ from pathlib import Path
 
 from lucy_ng.database import DatabaseManager
 from lucy_ng.detection.models import (
+    BondPairInfo,
+    HHBResult,
     HybridisationDistribution,
     HybridisationResult,
     NeighbourDistribution,
@@ -258,5 +260,98 @@ class StatisticalDetector:
             constraints=constraints,
             total_observations=total_observations,
             unique_hose_codes=unique_hose_codes,
+            has_data=True,
+        )
+
+    def detect_hhb(
+        self,
+        formula: str,
+        threshold: float = 0.01,
+    ) -> HHBResult:
+        """Detect allowed hetero-hetero bonds for a molecular formula.
+
+        Queries the bond_pair_stats table for which heteroatom-heteroatom
+        bonds (O-O, O-N, N-N, N-S, etc.) occur in compounds with the
+        given formula. Bonds below the threshold are classified as forbidden.
+
+        Args:
+            formula: Molecular formula (e.g., "C10H14O2")
+            threshold: Minimum frequency for allowed bond (default: 0.01 = 1%)
+
+        Returns:
+            HHBResult with allowed and forbidden bond pairs
+        """
+        import re
+
+        # Check if formula has heteroatoms (elements other than C and H)
+        # Simple check: look for N, O, S, F, Cl, Br, I, P, Si
+        heteroatom_pattern = r"(N|O|S|F|Cl|Br|I|P|Si)"
+        has_heteroatoms = bool(re.search(heteroatom_pattern, formula))
+
+        if not has_heteroatoms:
+            return HHBResult(
+                formula=formula,
+                threshold=threshold,
+                has_heteroatoms=False,
+            )
+
+        # Query bond pair stats by formula
+        records = self._db.get_bond_pair_stats_by_formula(formula)
+
+        # If no records found, check if formula exists in compounds table
+        if not records:
+            # Get total compound count for this formula
+            cursor = self._db.connection.cursor()
+            cursor.execute(
+                "SELECT COUNT(*) FROM compounds WHERE formula_normalized = ?",
+                (formula,),
+            )
+            result = cursor.fetchone()
+            total_compounds = result[0] if result else 0
+
+            if total_compounds == 0:
+                return HHBResult(
+                    formula=formula,
+                    threshold=threshold,
+                    has_data=False,
+                    warning=f"Formula '{formula}' not found in database",
+                )
+            else:
+                # Formula exists but no HHB bonds found (valid - many compounds have only C-X bonds)
+                return HHBResult(
+                    formula=formula,
+                    threshold=threshold,
+                    has_data=True,
+                    total_compounds=total_compounds,
+                    allowed_pairs=[],
+                    forbidden_pairs=[],
+                )
+
+        # Get total compounds for this formula from first record
+        total_compounds = records[0].total_compounds if records else 0
+
+        # Classify each bond pair
+        allowed_pairs = []
+        forbidden_pairs = []
+
+        for record in records:
+            pair_info = BondPairInfo(
+                element1=record.element1,
+                element2=record.element2,
+                frequency=record.frequency,
+                compound_count=record.compound_count,
+            )
+
+            if record.frequency >= threshold:
+                allowed_pairs.append(pair_info)
+            else:
+                forbidden_pairs.append(pair_info)
+
+        return HHBResult(
+            formula=formula,
+            threshold=threshold,
+            allowed_pairs=allowed_pairs,
+            forbidden_pairs=forbidden_pairs,
+            total_compounds=total_compounds,
             has_data=True,
         )

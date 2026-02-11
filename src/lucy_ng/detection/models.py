@@ -296,3 +296,73 @@ class NeighbourResult(BaseModel):
         )
 
         return "\n".join(lines)
+
+
+class BondPairInfo(BaseModel):
+    """Information about a hetero-hetero bond pair."""
+
+    element1: str  # First element (alphabetically)
+    element2: str  # Second element (alphabetically)
+    frequency: float  # Frequency of this bond pair (0.0 to 1.0)
+    compound_count: int  # Number of compounds with this pair
+
+
+class HHBResult(BaseModel):
+    """Result of hetero-hetero bond detection query.
+
+    Contains allowed and forbidden bond pairs for a molecular formula,
+    based on frequency analysis of the compound database.
+    """
+
+    formula: str  # Queried formula
+    threshold: float  # Threshold used for classification
+    allowed_pairs: list[BondPairInfo] = []  # Pairs at or above threshold
+    forbidden_pairs: list[BondPairInfo] = []  # Pairs below threshold
+    total_compounds: int = 0  # Compounds with this formula in database
+    has_data: bool = False  # True if formula found in database
+    has_heteroatoms: bool = True  # False if formula has no heteroatoms
+    warning: str | None = None  # Warning message
+
+    def summary(self) -> str:
+        """Generate human-readable summary."""
+        lines = []
+
+        lines.append(f"Hetero-Hetero Bond Detection: {self.formula}")
+        lines.append(f"Threshold: {self.threshold * 100:.1f}%")
+
+        if not self.has_heteroatoms:
+            lines.append("No heteroatoms in formula — HHB analysis not applicable")
+            return "\n".join(lines)
+
+        if not self.has_data:
+            lines.append("No data available")
+            if self.warning:
+                lines.append(f"Warning: {self.warning}")
+            return "\n".join(lines)
+
+        lines.append(f"Total compounds: {self.total_compounds:,}")
+
+        if self.allowed_pairs:
+            lines.append("")
+            lines.append("Allowed bonds (>= threshold):")
+            for pair in self.allowed_pairs:
+                lines.append(
+                    f"  {pair.element1}-{pair.element2}: "
+                    f"{pair.frequency * 100:.1f}% "
+                    f"({pair.compound_count:,} compounds)"
+                )
+        else:
+            lines.append("")
+            lines.append("No hetero-hetero bonds above threshold")
+
+        if self.forbidden_pairs:
+            lines.append("")
+            lines.append("Forbidden bonds (< threshold):")
+            for pair in self.forbidden_pairs:
+                lines.append(
+                    f"  {pair.element1}-{pair.element2}: "
+                    f"{pair.frequency * 100:.2f}% "
+                    f"({pair.compound_count:,} compounds)"
+                )
+
+        return "\n".join(lines)
