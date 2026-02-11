@@ -167,6 +167,8 @@ class SolutionRanker:
                 # error is always set (for MAE and deviation analysis)
                 error=closest_error,
                 closest_experimental=closest_shift,
+                radius_used=pred.radius_used,
+                confidence=pred.confidence,
             )
 
             assignments.append(assignment)

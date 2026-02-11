@@ -23,6 +23,14 @@ class ShiftAssignment(BaseModel):
         default=None,
         description="Closest experimental shift (used for MAE even if outside tolerance)",
     )
+    radius_used: int | None = Field(
+        default=None,
+        description="HOSE radius at which prediction was made (lower = more specific)",
+    )
+    confidence: float | None = Field(
+        default=None,
+        description="Prediction confidence score (0-1)",
+    )
 
     @property
     def is_matched(self) -> bool:
@@ -141,7 +149,8 @@ class RankingResult(BaseModel):
     """
 
     solutions: list[RankedSolution] = Field(
-        default_factory=list, description="Ranked solutions, sorted by match count (best first), then MAE"
+        default_factory=list,
+        description="Ranked solutions, sorted by match count (best first), then MAE",
     )
     experimental_shifts: list[float] = Field(
         default_factory=list, description="Experimental 13C shifts used for ranking"
