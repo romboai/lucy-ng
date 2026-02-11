@@ -10,8 +10,8 @@ class SolutionRanker:
     """Rank LSD solutions by comparing predicted vs experimental 13C shifts.
 
     Uses the local HOSE-based C13Predictor to predict shifts for each
-    candidate structure, then ranks by Mean Absolute Error (MAE) between
-    predicted and experimental shifts.
+    candidate structure, then ranks by signal match count (most matches first),
+    with MAE as tiebreaker.
 
     Example:
         >>> from lucy_ng import C13Predictor, SolutionRanker
@@ -49,7 +49,7 @@ class SolutionRanker:
             top_n: If specified, only return top N results
 
         Returns:
-            RankingResult with solutions sorted by MAE (best first)
+            RankingResult with solutions sorted by match count (best first), then MAE
         """
         ranked: list[RankedSolution] = []
         skipped = 0
@@ -91,8 +91,8 @@ class SolutionRanker:
             )
             ranked.append(ranked_solution)
 
-        # Sort by MAE (lower is better), then by match count (higher is better)
-        ranked.sort(key=lambda r: (r.mae, -r.matched_count))
+        # Sort by match count (higher is better), then MAE (lower is better)
+        ranked.sort(key=lambda r: (-r.matched_count, r.mae))
 
         # Store count before limiting
         total_ranked = len(ranked)

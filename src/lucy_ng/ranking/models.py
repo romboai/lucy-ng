@@ -136,12 +136,12 @@ class RankedSolution(BaseModel):
 class RankingResult(BaseModel):
     """Complete result of ranking LSD solutions.
 
-    Contains all ranked solutions sorted by MAE (best first),
+    Contains all ranked solutions sorted by match count (best first), then MAE,
     along with metadata about the ranking process.
     """
 
     solutions: list[RankedSolution] = Field(
-        default_factory=list, description="Ranked solutions, sorted by MAE (best first)"
+        default_factory=list, description="Ranked solutions, sorted by match count (best first), then MAE"
     )
     experimental_shifts: list[float] = Field(
         default_factory=list, description="Experimental 13C shifts used for ranking"

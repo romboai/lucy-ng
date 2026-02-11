@@ -314,9 +314,10 @@ def lsd_rank(
             click.echo(f"Top {len(result.solutions)} solutions:")
             click.echo("-" * 70)
             for i, sol in enumerate(result.solutions):
-                # Primary line: rank, solution index, MAE with quality label
+                # Primary line: rank, solution index, match count, MAE with quality label
                 click.echo(
                     f"{i+1:3}. Solution {sol.solution_index}: "
+                    f"Matched={sol.matched_count}/{sol.total_carbons} "
                     f"MAE={sol.mae:.2f} ppm ({sol.quality_label})"
                 )
                 # SMILES on second line
