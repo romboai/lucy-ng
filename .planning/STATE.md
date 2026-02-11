@@ -10,12 +10,12 @@ See: .planning/PROJECT.md (updated 2026-02-10)
 ## Current Position
 
 **Milestone**: v3.0 Statistical Detection
-**Phase**: 35 of 40 (Neighbourhood Detection)
-**Plan**: 04 of 04 complete (CLI subcommand) — PHASE COMPLETE
-**Status**: Phase 35 complete, ready for Phase 36
-**Last activity**: 2026-02-11 — Completed 35-04-PLAN.md (neighbours CLI subcommand)
+**Phase**: 36 of 40 (HHB and Ring Detection)
+**Plan**: 01 of 03 complete (Schema extension v6)
+**Status**: In progress
+**Last activity**: 2026-02-11 — Completed 36-01-PLAN.md (schema extension v6)
 
-Progress: [█████████████████████████████████░░░░░░░░] 87.5% (35/40 phases complete)
+Progress: [█████████████████████████████████░░░░░░░░] 87.5% (35/40 phases complete, 1/3 plans in phase 36)
 
 ## Completed Milestones
 
@@ -30,9 +30,9 @@ Progress: [███████████████████████
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 46 (v1.0-v2.1: 39, v3.0: 7)
+- Total plans completed: 47 (v1.0-v2.1: 39, v3.0: 8)
 - Average duration: ~3 hours per phase (v1.0-v1.2), < 15 min per phase (v2.0-v2.1 docs/skills), ~7 min per plan (v3.0 implementation)
-- Total execution time: ~66.4 hours
+- Total execution time: ~66.5 hours
 
 ## Accumulated Context
 
@@ -66,6 +66,10 @@ Recent decisions affecting current work:
 - Phase 35-03: Warn on unpopulated neighbour columns (v4 databases) rather than fail
 - Phase 35-04: --mode flag overrides --min-frequency/--max-frequency when both provided
 - Phase 35-04: No multiplicity argument for neighbours detection (research recommends ignoring it)
+- Phase 36-01: Bond pair statistics at formula level (not HOSE level) - correct granularity for HHB queries
+- Phase 36-01: Ring columns store counts (not booleans) for frequency distributions
+- Phase 36-01: Composite PRIMARY KEY (formula_normalized, element1, element2) for bond_pair_stats
+- Phase 36-01: Backward compatibility - get_bond_pair_stats_by_formula returns [] for v5 databases
 
 ### Pending Todos
 
@@ -87,8 +91,8 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 35-04-PLAN.md — Phase 35 (Neighbourhood Detection) complete
-Resume file: None — Ready to begin Phase 36 (HHB and Ring Detection)
+Stopped at: Completed 36-01-PLAN.md — Phase 36 Plan 1 (schema extension v6) complete
+Resume file: None — Ready for Phase 36 Plan 2 (stats generators)
 
 ---
-*Last updated: 2026-02-11 after Plan 35-04 execution (Phase 35 complete)*
+*Last updated: 2026-02-11 after Plan 36-01 execution (Phase 36 Plan 1 complete)*
