@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-02-10)
 
 **Milestone**: v3.0 Statistical Detection
 **Phase**: 35 of 40 (Neighbourhood Detection)
-**Plan**: Not started (ready for planning)
-**Status**: Ready to plan
-**Last activity**: 2026-02-11 — Phase 34 (Hybridisation Detection) completed, 3/3 plans executed, verified 5/5
+**Plan**: 01 of 04 complete (schema extension)
+**Status**: In progress
+**Last activity**: 2026-02-11 — Completed 35-01-PLAN.md (schema v5, migration, HOSE parser)
 
-Progress: [█████████████████████████████████░░░░░░░] 85% (34/40 phases complete)
+Progress: [█████████████████████████████████░░░░░░░] 85% (34/40 phases complete, 35 in progress)
 
 ## Completed Milestones
 
@@ -30,9 +30,9 @@ Progress: [███████████████████████
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 42 (v1.0-v2.1: 39, v3.0: 3)
-- Average duration: ~3 hours per phase (v1.0-v1.2), < 15 min per phase (v2.0-v2.1 docs/skills), ~12 min per plan (v3.0 implementation)
-- Total execution time: ~65.9 hours
+- Total plans completed: 43 (v1.0-v2.1: 39, v3.0: 4)
+- Average duration: ~3 hours per phase (v1.0-v1.2), < 15 min per phase (v2.0-v2.1 docs/skills), ~11 min per plan (v3.0 implementation)
+- Total execution time: ~66.1 hours
 
 ## Accumulated Context
 
@@ -54,6 +54,10 @@ Recent decisions affecting current work:
 - Phase 34-02: generate_all() returns tuple (aggregates, hybridisations) - minimal breaking change
 - Phase 34-02: Treat S and UNSPECIFIED hybridisations as sp3 (conservative default)
 - Phase 34-03: StatisticalDetector is pure query+frequency layer (no HOSE/RDKit logic)
+- Phase 35-01: Neighbour count columns store presence frequency (count of observations with ≥1 element)
+- Phase 35-01: Halogen aggregation in single has_halogen_neighbor column (F/Cl/Br/I combined)
+- Phase 35-01: parse_sphere_1() uses regex [A-Z][a-z]? to extract elements, ignoring bond prefixes
+- Phase 35-01: Upsert accepts 5, 8, or 13-element tuples for v3/v4/v5 backward compatibility
 
 ### Pending Todos
 
@@ -67,15 +71,16 @@ Recent decisions affecting current work:
 ### Blockers/Concerns
 
 - ~~HOSE database schema extension requires migration or fresh generation~~ → RESOLVED: ALTER TABLE migration is instant
-- HOSE database hybridisation columns exist but are unpopulated (all 0) until database regeneration
+- HOSE database hybridisation columns exist but are unpopulated (all 0) until database regeneration (v4→v5 migration adds neighbour columns with DEFAULT 0)
+- Database regeneration required: After stats generator update (35-02), full regeneration needed to populate neighbour counts
 - Ibuprofen failure root cause: 4-bond HMBC + rigid assignment + no statistical constraints → cyclohexadiene solutions
 - Research flags threshold sensitivity — may need override mechanisms in CLI
 
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Phase 34 complete (3/3 plans, verified 5/5). Ready for Phase 35 planning.
-Resume file: None (ready to start Phase 35 planning)
+Stopped at: Completed 35-01-PLAN.md (Schema v5 extension with neighbour columns)
+Resume file: None (ready for Plan 35-02: stats generator extension)
 
 ---
-*Last updated: 2026-02-11 after Phase 34 execution*
+*Last updated: 2026-02-11 after Plan 35-01 execution*
