@@ -587,7 +587,7 @@ Plans:
 - [x] **Phase 36: HHB and Ring Detection** - Hetero-hetero bond statistics, ring statistics for badlist foundation
 - [x] **Phase 37: Signal Grouping** - Multiplicity-aware close shift detection, LSD parenthesized atom list generation
 - [x] **Phase 38: Two-Tier Ranking and Badlist** - Match-count-first ranking, hardcoded 3/4-membered ring filters in agent
-- [ ] **Phase 39: Agent Integration** - CASE agent learns statistical detection protocol, chemistry-first hierarchy, threshold overrides
+- [x] **Phase 39: Agent Integration** - CASE agent learns statistical detection protocol, chemistry-first hierarchy, threshold overrides
 - [ ] **Phase 40: Validation** - Test suite with Sherlock's 45 cases, metrics (accuracy, search space reduction, rank improvement)
 
 ---
@@ -705,9 +705,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 39-01-PLAN.md — Add statistical detection protocol and LSD constraint translation to agent knowledge
-- [ ] 39-02-PLAN.md — Add chemistry-first hierarchy rules, conflict resolution, and threshold overrides
-- [ ] 39-03-PLAN.md — Validate agent structure, update CLAUDE.md, human verification checkpoint
+- [x] 39-01-PLAN.md — Add statistical detection protocol and LSD constraint translation to agent knowledge
+- [x] 39-02-PLAN.md — Add chemistry-first hierarchy rules, conflict resolution, and threshold overrides
+- [x] 39-03-PLAN.md — Validate agent structure, update CLAUDE.md, human verification checkpoint
 
 ---
 
@@ -777,8 +777,8 @@ Plans:
 | 36. HHB and Ring Detection | v3.0 | 3/3 | Complete | 2026-02-11 |
 | 37. Signal Grouping | v3.0 | 3/3 | Complete | 2026-02-11 |
 | 38. Two-Tier Ranking and Badlist | v3.0 | 2/2 | Complete | 2026-02-11 |
-| 39. Agent Integration | v3.0 | 0/3 | Not started | - |
+| 39. Agent Integration | v3.0 | 3/3 | Complete | 2026-02-11 |
 | 40. Validation | v3.0 | 0/3 | Not started | - |
 
 ---
-*Last updated: 2026-02-11 after Phase 38 execution*
+*Last updated: 2026-02-11 after Phase 39 execution*

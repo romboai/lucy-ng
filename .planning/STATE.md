@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-10)
 
 **Core value:** AI agent autonomously determines compound structures from NMR, with data-driven statistical constraints replacing guesswork
-**Current focus:** v3.0 Statistical Detection — Phase 38 (Two-Tier Ranking and Badlist)
+**Current focus:** v3.0 Statistical Detection — Phase 40 (Validation)
 
 ## Current Position
 
 **Milestone**: v3.0 Statistical Detection
-**Phase**: 39 of 40 (Agent Integration)
-**Plan**: 02 of 02 complete (Chemistry-first hierarchy integration)
-**Status**: Phase complete (2/2 plans complete)
-**Last activity**: 2026-02-11 — Completed 39-02-PLAN.md (chemistry-first hierarchy)
+**Phase**: 39 of 40 (Agent Integration) — COMPLETE
+**Plan**: 03 of 03 complete (validation + human checkpoint)
+**Status**: Phase 39 verified (30/30 must-haves), ready for Phase 40
+**Last activity**: 2026-02-11 — Phase 39 verified and complete
 
-Progress: [████████████████████████████████████░░░░░] 97.5% (39/40 phases complete, phase 39 complete)
+Progress: [████████████████████████████████████░░░░░] 97.5% (39/40 phases complete, Phase 40 remaining)
 
 ## Completed Milestones
 
@@ -30,7 +30,7 @@ Progress: [███████████████████████
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 62 (v1.0-v2.1: 39, v3.0: 23)
+- Total plans completed: 65 (v1.0-v2.1: 39, v3.0: 26)
 - Average duration: ~3 hours per phase (v1.0-v1.2), < 15 min per phase (v2.0-v2.1 docs/skills), ~4.5 min per plan (v3.0 implementation)
 - Total execution time: ~69.3 hours
 
@@ -112,8 +112,10 @@ Recent decisions affecting current work:
 - ~~Implement HHB and ring detection (Phase 36)~~ → COMPLETE
 - ~~Signal grouping detection (Phase 37)~~ → COMPLETE
 - ~~Implement two-tier ranking and badlist (Phase 38)~~ → COMPLETE
-- ~~Add detection protocol and chemistry-first hierarchy to CASE agent (Phase 39)~~ → COMPLETE
-- Validate detection workflow on ibuprofen (Phase 40) — must find correct aromatic structure with v3.0 detection
+- ~~Add detection protocol and chemistry-first hierarchy to CASE agent (Phase 39)~~ → COMPLETE (30/30 must-haves verified)
+- Validate detection workflow on test cases (Phase 40) — must demonstrate v3.0 detection value
+  - Pulegone (CASE3) tested: structure almost correct (wrong keto position), detection returned "No database data" (expected — DB not regenerated)
+  - Key finding: agent doesn't use COSY data for ring connectivity, leaving unconstrained atoms
 
 ### Blockers/Concerns
 
@@ -126,8 +128,8 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed Phase 39-02 — chemistry-first hierarchy integration (7/7 must-haves)
-Resume file: None — Phase 39 complete, ready for Phase 40 (Ibuprofen validation with v3.0 detection)
+Stopped at: Phase 39 complete and verified (30/30 must-haves). Pulegone CASE3 analysis done — wrong keto position due to unconstrained CH2 (no HMBC correlations, COSY unused).
+Resume file: None — ready for Phase 40 (Validation)
 
 ---
-*Last updated: 2026-02-11 after Phase 39-02 execution (Chemistry-first hierarchy integration complete, Phase 39 complete)*
+*Last updated: 2026-02-11 after Phase 39 verified complete (Agent Integration — 3 plans, 30/30 must-haves)*

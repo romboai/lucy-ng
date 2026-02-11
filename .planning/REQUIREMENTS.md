@@ -26,12 +26,12 @@ Requirements for v3.0 milestone. Each maps to roadmap phases.
 
 ### Agent Integration
 
-- [ ] **AGENT-01**: CASE agent calls lucy detect CLI commands to generate statistical constraints before writing LSD files
-- [ ] **AGENT-02**: CASE agent uses hybridisation detection to set MULT hybridisation values in LSD
-- [ ] **AGENT-03**: CASE agent uses neighbourhood detection to add ELIM/LIST constraints in LSD
-- [ ] **AGENT-04**: CASE agent uses HHB detection to add or omit hetero-hetero BOND constraints in LSD
-- [ ] **AGENT-05**: CASE agent applies chemistry-first hierarchy — NMR knowledge takes priority, statistics augment but don't override
-- [ ] **AGENT-06**: CASE agent uses signal grouping detection to identify ambiguous carbon assignments
+- [x] **AGENT-01**: CASE agent calls lucy detect CLI commands to generate statistical constraints before writing LSD files
+- [x] **AGENT-02**: CASE agent uses hybridisation detection to set MULT hybridisation values in LSD
+- [x] **AGENT-03**: CASE agent uses neighbourhood detection to add ELIM/LIST constraints in LSD
+- [x] **AGENT-04**: CASE agent uses HHB detection to add or omit hetero-hetero BOND constraints in LSD
+- [x] **AGENT-05**: CASE agent applies chemistry-first hierarchy — NMR knowledge takes priority, statistics augment but don't override
+- [x] **AGENT-06**: CASE agent uses signal grouping detection to identify ambiguous carbon assignments
 
 ## Previous Milestones (Complete)
 
@@ -100,12 +100,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RANK-02 | Phase 38 | Complete |
 | RANK-03 | Phase 38 | Complete |
 | RANK-04 | Phase 38 | Complete |
-| AGENT-01 | Phase 39 | Pending |
-| AGENT-02 | Phase 39 | Pending |
-| AGENT-03 | Phase 39 | Pending |
-| AGENT-04 | Phase 39 | Pending |
-| AGENT-05 | Phase 39 | Pending |
-| AGENT-06 | Phase 39 | Pending |
+| AGENT-01 | Phase 39 | Complete |
+| AGENT-02 | Phase 39 | Complete |
+| AGENT-03 | Phase 39 | Complete |
+| AGENT-04 | Phase 39 | Complete |
+| AGENT-05 | Phase 39 | Complete |
+| AGENT-06 | Phase 39 | Complete |
 
 **Coverage:**
 - v3.0 requirements: 17 total
@@ -126,4 +126,4 @@ All 68 requirements (38 v2.0 + 30 v2.1) mapped and complete. See git history for
 
 ---
 *Requirements defined: 2026-02-10*
-*Last updated: 2026-02-11 after Phase 38 execution*
+*Last updated: 2026-02-11 after Phase 39 execution*
