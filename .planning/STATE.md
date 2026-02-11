@@ -10,12 +10,12 @@ See: .planning/PROJECT.md (updated 2026-02-10)
 ## Current Position
 
 **Milestone**: v3.0 Statistical Detection
-**Phase**: 39 of 40 (Agent Integration) — COMPLETE
-**Plan**: 03 of 03 complete (validation + human checkpoint)
-**Status**: Phase 39 verified (30/30 must-haves), ready for Phase 40
-**Last activity**: 2026-02-11 — Phase 39 verified and complete
+**Phase**: 40 of 40 (Validation) — IN PROGRESS
+**Plan**: 02 of 04 complete (Tier 1 validation tests)
+**Status**: Detection and ranking validation tests passing (755 total tests)
+**Last activity**: 2026-02-11 — Completed Plan 40-02 (validation tests)
 
-Progress: [████████████████████████████████████░░░░░] 97.5% (39/40 phases complete, Phase 40 remaining)
+Progress: [████████████████████████████████████░░░░░] 97.5% (39/40 phases complete, Phase 40 in progress)
 
 ## Completed Milestones
 
@@ -30,9 +30,9 @@ Progress: [███████████████████████
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 65 (v1.0-v2.1: 39, v3.0: 26)
-- Average duration: ~3 hours per phase (v1.0-v1.2), < 15 min per phase (v2.0-v2.1 docs/skills), ~4.5 min per plan (v3.0 implementation)
-- Total execution time: ~69.3 hours
+- Total plans completed: 67 (v1.0-v2.1: 39, v3.0: 28)
+- Average duration: ~3 hours per phase (v1.0-v1.2), < 15 min per phase (v2.0-v2.1 docs/skills), ~6 min per plan (v3.0 implementation)
+- Total execution time: ~69.5 hours
 
 ## Accumulated Context
 
@@ -105,6 +105,10 @@ Recent decisions affecting current work:
 - Phase 39-02: Threshold override guidelines with mandatory documentation for every override
 - Phase 39-02: Detection failure handling with shift-based fallback heuristics when database has no entries
 - Phase 39-02: Principle: statistics augment NMR evidence, never override
+- Phase 40-02: Validation tests use synthetic data (no database regeneration required)
+- Phase 40-02: Chemistry principles documented in test docstrings for clarity
+- Phase 40-02: Badlist pattern existence validated via agent file inspection
+- Phase 40-02: Agent USAGE of badlist deferred to Plan 40-03 UAT report
 
 ### Pending Todos
 
@@ -113,23 +117,24 @@ Recent decisions affecting current work:
 - ~~Signal grouping detection (Phase 37)~~ → COMPLETE
 - ~~Implement two-tier ranking and badlist (Phase 38)~~ → COMPLETE
 - ~~Add detection protocol and chemistry-first hierarchy to CASE agent (Phase 39)~~ → COMPLETE (30/30 must-haves verified)
-- Validate detection workflow on test cases (Phase 40) — must demonstrate v3.0 detection value
-  - Pulegone (CASE3) tested: structure almost correct (wrong keto position), detection returned "No database data" (expected — DB not regenerated)
-  - Key finding: agent doesn't use COSY data for ring connectivity, leaving unconstrained atoms
+- ~~Tier 1 validation tests (Phase 40-02)~~ → COMPLETE (755 tests pass: 730 existing + 32 new)
+- Compile validation report (Phase 40-03) — document Gap 3 (agent CASE testing deferred)
+- Regenerate database with v6 detection data (Phase 40-04) — 2-3 hour DB rebuild
+- Live CASE testing with regenerated DB (post-phase UAT) — demonstrate v3.0 detection value on pulegone/ibuprofen
 
 ### Blockers/Concerns
 
 - ~~HOSE database schema extension requires migration or fresh generation~~ → RESOLVED: ALTER TABLE migration is instant
-- HOSE database hybridisation columns exist but are unpopulated (all 0) until database regeneration (v4→v5 migration adds neighbour columns with DEFAULT 0)
-- Database regeneration required: After stats generator update (35-02), full regeneration needed to populate neighbour counts
-- Ibuprofen failure root cause: 4-bond HMBC + rigid assignment + no statistical constraints → cyclohexadiene solutions
+- ~~HOSE database hybridisation columns exist but are unpopulated (all 0) until database regeneration~~ → PENDING: Phase 40-04 will regenerate
+- Ibuprofen failure root cause (v2.1): 4-bond HMBC + rigid assignment + no statistical constraints → cyclohexadiene solutions
 - ~~Research flags threshold sensitivity~~ → RESOLVED: --mode relaxed and --min/max-frequency override flags implemented in Phase 35-04
+- Gap 3 (agent CASE testing): Agent USAGE of detection/badlist not validated yet — deferred to post-phase UAT with regenerated DB
 
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Phase 39 complete and verified (30/30 must-haves). Pulegone CASE3 analysis done — wrong keto position due to unconstrained CH2 (no HMBC correlations, COSY unused).
-Resume file: None — ready for Phase 40 (Validation)
+Stopped at: Phase 40 Plan 02 complete. Tier 1 validation tests passing (755 total: 730 existing + 32 new). Detection accuracy validated (sp2/sp3 >90%). Two-tier ranking validated (prevents MAE hallucination). Badlist patterns validated (8/8 present in agent). Gap 3 identified: agent USAGE deferred to Plan 40-03 UAT.
+Resume file: None — continue Phase 40 Plans 03-04
 
 ---
-*Last updated: 2026-02-11 after Phase 39 verified complete (Agent Integration — 3 plans, 30/30 must-haves)*
+*Last updated: 2026-02-11 after Phase 40 Plan 02 complete (Tier 1 Validation Tests — 2 tasks, 755 tests pass)*
