@@ -3,7 +3,7 @@
 import sqlite3
 
 # Schema version for migrations
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Compounds table - stores compound metadata
 CREATE_COMPOUNDS_TABLE = """
@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS schema_meta (
 # HOSE statistics table - precomputed mean/std/count per HOSE code at each radius
 # m2 is the sum of squared differences from mean (for Welford's online algorithm)
 # Hybridisation counts: sp3_count, sp2_count, sp1_count (v4+)
+# Neighbour element counts: has_carbon_neighbor, has_oxygen_neighbor, etc. (v5+)
 CREATE_HOSE_STATS_TABLE = """
 CREATE TABLE IF NOT EXISTS hose_stats (
     hose_code TEXT NOT NULL,
@@ -66,6 +67,11 @@ CREATE TABLE IF NOT EXISTS hose_stats (
     sp3_count INTEGER NOT NULL DEFAULT 0,
     sp2_count INTEGER NOT NULL DEFAULT 0,
     sp1_count INTEGER NOT NULL DEFAULT 0,
+    has_carbon_neighbor INTEGER NOT NULL DEFAULT 0,
+    has_oxygen_neighbor INTEGER NOT NULL DEFAULT 0,
+    has_nitrogen_neighbor INTEGER NOT NULL DEFAULT 0,
+    has_sulfur_neighbor INTEGER NOT NULL DEFAULT 0,
+    has_halogen_neighbor INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (hose_code, radius)
 )
 """
@@ -136,6 +142,43 @@ def migrate_v3_to_v4(conn: sqlite3.Connection) -> None:
 
     # Create the composite index for detection queries
     cursor.execute(CREATE_HOSE_STATS_MEAN_RADIUS_INDEX)
+
+    # Update schema version
+    cursor.execute(
+        "UPDATE schema_meta SET value = ? WHERE key = ?",
+        ("4", "schema_version"),
+    )
+
+    conn.commit()
+
+
+def migrate_v4_to_v5(conn: sqlite3.Connection) -> None:
+    """Migrate database from schema v4 to v5.
+
+    Adds neighbour element count columns to hose_stats table for
+    neighbourhood detection.
+
+    Args:
+        conn: SQLite connection to database
+    """
+    cursor = conn.cursor()
+
+    # Add neighbour count columns with DEFAULT 0
+    cursor.execute(
+        "ALTER TABLE hose_stats ADD COLUMN has_carbon_neighbor INTEGER NOT NULL DEFAULT 0"
+    )
+    cursor.execute(
+        "ALTER TABLE hose_stats ADD COLUMN has_oxygen_neighbor INTEGER NOT NULL DEFAULT 0"
+    )
+    cursor.execute(
+        "ALTER TABLE hose_stats ADD COLUMN has_nitrogen_neighbor INTEGER NOT NULL DEFAULT 0"
+    )
+    cursor.execute(
+        "ALTER TABLE hose_stats ADD COLUMN has_sulfur_neighbor INTEGER NOT NULL DEFAULT 0"
+    )
+    cursor.execute(
+        "ALTER TABLE hose_stats ADD COLUMN has_halogen_neighbor INTEGER NOT NULL DEFAULT 0"
+    )
 
     # Update schema version
     cursor.execute(

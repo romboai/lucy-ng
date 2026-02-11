@@ -115,6 +115,7 @@ class HOSEStatsRecord(BaseModel):
     radius, enabling O(1) lookup at prediction time.
 
     Schema v4+ includes hybridisation detection fields.
+    Schema v5+ includes neighbourhood detection fields.
     """
 
     hose_code: str
@@ -126,3 +127,9 @@ class HOSEStatsRecord(BaseModel):
     sp3_count: int = 0
     sp2_count: int = 0
     sp1_count: int = 0
+    # Neighbour element counts (v5+)
+    has_carbon_neighbor: int = 0
+    has_oxygen_neighbor: int = 0
+    has_nitrogen_neighbor: int = 0
+    has_sulfur_neighbor: int = 0
+    has_halogen_neighbor: int = 0
