@@ -89,7 +89,7 @@ class TestHOSEStatsGenerator:
     def test_generate_all(self, db_manager):
         """Test generating HOSE aggregates from all compounds."""
         generator = HOSEStatsGenerator(db_manager, max_radius=3)
-        aggregates = generator.generate_all(progress=False)
+        aggregates, hybridisations = generator.generate_all(progress=False)
 
         # Should have generated some aggregates
         assert len(aggregates) > 0
@@ -109,6 +109,15 @@ class TestHOSEStatsGenerator:
             assert len(shifts) > 0
             for shift in shifts:
                 assert isinstance(shift, float)
+
+        # Hybridisations should have matching keys
+        assert len(hybridisations) == len(aggregates)
+        for key in aggregates:
+            assert key in hybridisations
+            hyb_counts = hybridisations[key]
+            assert "sp3" in hyb_counts
+            assert "sp2" in hyb_counts
+            assert "sp1" in hyb_counts
 
         # Statistics tracking should be updated
         assert generator.compounds_processed == 2  # ethanol + methanol (empty skipped)
@@ -240,7 +249,7 @@ class TestHOSEStatsGeneratorEdgeCases:
 
         with DatabaseManager(db_path) as db:
             generator = HOSEStatsGenerator(db, max_radius=2)
-            aggregates = generator.generate_all(progress=False)
+            aggregates, _ = generator.generate_all(progress=False)
 
             # Should still have processed the valid compound
             assert generator.compounds_processed == 2  # Both attempted
@@ -270,7 +279,7 @@ class TestHOSEStatsGeneratorEdgeCases:
         with DatabaseManager(db_path) as db:
             generator = HOSEStatsGenerator(db, max_radius=2)
             # Should not raise exception
-            aggregates = generator.generate_all(progress=False)
+            aggregates, _ = generator.generate_all(progress=False)
 
             # Should have processed valid shift only
             assert len(aggregates) > 0
@@ -296,7 +305,7 @@ class TestHOSEStatsGeneratorEdgeCases:
 
         with DatabaseManager(db_path) as db:
             generator = HOSEStatsGenerator(db, max_radius=2)
-            aggregates = generator.generate_all(progress=False)
+            aggregates, _ = generator.generate_all(progress=False)
 
             # Should process compound but skip the shift with None index
             assert generator.compounds_processed == 1
@@ -424,10 +433,13 @@ class TestWelfordAccumulator:
         acc.update(10.0)
         acc.update(20.0)
 
-        count, mean, m2 = acc.to_tuple()
+        count, mean, m2, sp3_count, sp2_count, sp1_count = acc.to_tuple()
         assert count == 2
         assert mean == 15.0
         assert m2 > 0  # Should have some m2 value
+        assert sp3_count == 0  # No hybridisation tracking with plain update
+        assert sp2_count == 0
+        assert sp1_count == 0
 
 
 @pytest.mark.skipif(not HOSEGEN_AVAILABLE, reason="hosegen not available")

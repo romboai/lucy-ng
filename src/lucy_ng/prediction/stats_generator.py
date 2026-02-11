@@ -6,10 +6,11 @@ import logging
 import math
 import statistics
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from rdkit.Chem import HybridizationType
 from tqdm import tqdm
 
 from lucy_ng.database.models import HOSEStatsRecord
@@ -18,6 +19,25 @@ from .hose import HOSECodeGenerator
 
 if TYPE_CHECKING:
     from lucy_ng.database import DatabaseManager
+
+
+def extract_hybridisation(atom) -> str:
+    """Extract hybridisation state from RDKit atom.
+
+    Returns "sp3", "sp2", or "sp1". Treats S and UNSPECIFIED as sp3.
+    Works on molecules with implicit hydrogens (lucy-ng standard).
+
+    CRITICAL: Never call AddHs() on molecules before this function.
+    """
+    hyb = atom.GetHybridization()
+    mapping = {
+        HybridizationType.SP3: "sp3",
+        HybridizationType.SP2: "sp2",
+        HybridizationType.SP: "sp1",
+        HybridizationType.S: "sp3",
+        HybridizationType.UNSPECIFIED: "sp3",
+    }
+    return mapping.get(hyb, "sp3")
 
 
 # Checkpoint keys for resumable generation
@@ -49,6 +69,9 @@ class WelfordAccumulator:
     count: int = 0
     mean: float = 0.0
     m2: float = 0.0  # Sum of squared differences from mean
+    sp3_count: int = 0
+    sp2_count: int = 0
+    sp1_count: int = 0
 
     def update(self, value: float) -> None:
         """Add a single observation using Welford's algorithm.
@@ -61,6 +84,21 @@ class WelfordAccumulator:
         self.mean += delta / self.count
         delta2 = value - self.mean
         self.m2 += delta * delta2
+
+    def update_with_hybridisation(self, value: float, hybridisation: str) -> None:
+        """Add a single observation with hybridisation state tracking.
+
+        Args:
+            value: New shift observation to incorporate
+            hybridisation: Hybridisation state ("sp3", "sp2", or "sp1")
+        """
+        self.update(value)
+        if hybridisation == "sp3":
+            self.sp3_count += 1
+        elif hybridisation == "sp2":
+            self.sp2_count += 1
+        elif hybridisation == "sp1":
+            self.sp1_count += 1
 
     @property
     def variance(self) -> float:
@@ -87,9 +125,23 @@ class WelfordAccumulator:
             New accumulator with combined statistics
         """
         if other.count == 0:
-            return WelfordAccumulator(count=self.count, mean=self.mean, m2=self.m2)
+            return WelfordAccumulator(
+                count=self.count,
+                mean=self.mean,
+                m2=self.m2,
+                sp3_count=self.sp3_count,
+                sp2_count=self.sp2_count,
+                sp1_count=self.sp1_count,
+            )
         if self.count == 0:
-            return WelfordAccumulator(count=other.count, mean=other.mean, m2=other.m2)
+            return WelfordAccumulator(
+                count=other.count,
+                mean=other.mean,
+                m2=other.m2,
+                sp3_count=other.sp3_count,
+                sp2_count=other.sp2_count,
+                sp1_count=other.sp1_count,
+            )
 
         combined_count = self.count + other.count
         delta = other.mean - self.mean
@@ -100,15 +152,23 @@ class WelfordAccumulator:
             + delta * delta * (self.count * other.count / combined_count)
         )
 
-        return WelfordAccumulator(
+        merged = WelfordAccumulator(
             count=combined_count,
             mean=combined_mean,
             m2=combined_m2,
         )
+        merged.sp3_count = self.sp3_count + other.sp3_count
+        merged.sp2_count = self.sp2_count + other.sp2_count
+        merged.sp1_count = self.sp1_count + other.sp1_count
 
-    def to_tuple(self) -> tuple[int, float, float]:
-        """Export as (count, mean, m2) tuple for database storage."""
-        return (self.count, self.mean, self.m2)
+        return merged
+
+    def to_tuple(self) -> tuple[int, float, float, int, int, int]:
+        """Export as (count, mean, m2, sp3_count, sp2_count, sp1_count) tuple.
+
+        For database storage.
+        """
+        return (self.count, self.mean, self.m2, self.sp3_count, self.sp2_count, self.sp1_count)
 
 
 class HOSEStatsGenerator:
@@ -148,7 +208,7 @@ class HOSEStatsGenerator:
     def generate_all(
         self,
         progress: bool = True,
-    ) -> dict[tuple[str, int], list[float]]:
+    ) -> tuple[dict[tuple[str, int], list[float]], dict[tuple[str, int], dict[str, int]]]:
         """Generate HOSE code shift aggregates from all compounds.
 
         Iterates through all compounds in the database, generates HOSE codes
@@ -159,7 +219,9 @@ class HOSEStatsGenerator:
             progress: Show progress bar
 
         Returns:
-            Dict mapping (hose_code, radius) to list of observed shifts
+            Tuple of:
+            - Dict mapping (hose_code, radius) to list of observed shifts
+            - Dict mapping (hose_code, radius) to hybridisation counts
         """
         # Reset statistics
         self._compounds_processed = 0
@@ -168,6 +230,11 @@ class HOSEStatsGenerator:
 
         # Aggregation: {(hose_code, radius): [shift1, shift2, ...]}
         aggregates: dict[tuple[str, int], list[float]] = defaultdict(list)
+
+        # Hybridisation counts: {(hose_code, radius): {"sp3": N, "sp2": M, "sp1": K}}
+        hybridisations: dict[tuple[str, int], dict[str, int]] = defaultdict(
+            lambda: {"sp3": 0, "sp2": 0, "sp1": 0}
+        )
 
         # Get total count for progress bar
         total = self.db_manager.get_compound_count()
@@ -204,27 +271,33 @@ class HOSEStatsGenerator:
                 except Exception:
                     continue
 
+                # Extract hybridisation once per atom
+                hybridisation = extract_hybridisation(atom)
+
                 # Generate HOSE codes at all radii
                 for radius in range(1, self.max_radius + 1):
                     try:
                         hose_code = self._hose_gen.generate_for_atom(mol, atom_idx, radius)
                         if hose_code:
                             aggregates[(hose_code, radius)].append(shift_ppm)
+                            hybridisations[(hose_code, radius)][hybridisation] += 1
                             self._shifts_processed += 1
                     except Exception:
                         # Skip atoms that fail HOSE generation
                         continue
 
-        return dict(aggregates)
+        return dict(aggregates), dict(hybridisations)
 
     def compute_stats(
         self,
         aggregates: dict[tuple[str, int], list[float]],
+        hybridisations: dict[tuple[str, int], dict[str, int]] | None = None,
     ) -> list[HOSEStatsRecord]:
         """Compute statistics from aggregated shifts.
 
         Args:
             aggregates: Dict mapping (hose_code, radius) to list of shifts
+            hybridisations: Dict mapping (hose_code, radius) to hybridisation counts
 
         Returns:
             List of HOSEStatsRecord with mean, std, count
@@ -239,6 +312,17 @@ class HOSEStatsGenerator:
             std = statistics.stdev(shifts) if len(shifts) > 1 else 0.0
             count = len(shifts)
 
+            # Get hybridisation counts if provided
+            if hybridisations and (hose_code, radius) in hybridisations:
+                hyb_counts = hybridisations[(hose_code, radius)]
+                sp3_count = hyb_counts.get("sp3", 0)
+                sp2_count = hyb_counts.get("sp2", 0)
+                sp1_count = hyb_counts.get("sp1", 0)
+            else:
+                sp3_count = 0
+                sp2_count = 0
+                sp1_count = 0
+
             stats.append(
                 HOSEStatsRecord(
                     hose_code=hose_code,
@@ -246,6 +330,9 @@ class HOSEStatsGenerator:
                     mean=mean,
                     std=std,
                     count=count,
+                    sp3_count=sp3_count,
+                    sp2_count=sp2_count,
+                    sp1_count=sp1_count,
                 )
             )
 
@@ -269,11 +356,11 @@ class HOSEStatsGenerator:
         Returns:
             Number of statistics entries inserted
         """
-        # Generate aggregates
-        aggregates = self.generate_all(progress=progress)
+        # Generate aggregates and hybridisation counts
+        aggregates, hybridisations = self.generate_all(progress=progress)
 
         # Compute statistics
-        stats = self.compute_stats(aggregates)
+        stats = self.compute_stats(aggregates, hybridisations)
 
         # Insert into database
         count = self.db_manager.insert_hose_stats_batch(stats, batch_size=batch_size)
@@ -475,12 +562,17 @@ class ResumableHOSEStatsGenerator:
                 except Exception:
                     continue
 
+                # Extract hybridisation once per atom
+                hybridisation = extract_hybridisation(atom)
+
                 # Generate HOSE codes at all radii
                 for radius in range(1, self.max_radius + 1):
                     try:
                         hose_code = self._hose_gen.generate_for_atom(mol, atom_idx, radius)
                         if hose_code:
-                            accumulators[(hose_code, radius)].update(shift_ppm)
+                            accumulators[(hose_code, radius)].update_with_hybridisation(
+                                shift_ppm, hybridisation
+                            )
                             shifts_processed += 1
                     except Exception:
                         continue
@@ -503,8 +595,9 @@ class ResumableHOSEStatsGenerator:
             return 0
 
         # Convert to tuple format for upsert
+        # Prepend hose_code and radius to the 6-element to_tuple() result
         stats = [
-            (hose_code, radius, acc.count, acc.mean, acc.m2)
+            (hose_code, radius) + acc.to_tuple()
             for (hose_code, radius), acc in accumulators.items()
             if acc.count > 0
         ]
@@ -517,7 +610,7 @@ class ResumableHOSEStatsGenerator:
         log_file: Path | str | None = None,
         resume: bool = True,
         fresh: bool = False,
-    ) -> "ResumableHOSEStatsResult":
+    ) -> ResumableHOSEStatsResult:
         """Run the resumable HOSE statistics generation.
 
         Args:
@@ -853,12 +946,17 @@ class SDFHOSEStatsGenerator:
                 except Exception:
                     continue
 
+                # Extract hybridisation once per atom
+                hybridisation = extract_hybridisation(atom)
+
                 # Generate HOSE codes at all radii
                 for radius in range(1, self.max_radius + 1):
                     try:
                         hose_code = self._hose_gen.generate_for_atom(mol, atom_idx, radius)
                         if hose_code:
-                            accumulators[(hose_code, radius)].update(shift_ppm)
+                            accumulators[(hose_code, radius)].update_with_hybridisation(
+                                shift_ppm, hybridisation
+                            )
                             shifts_processed += 1
                     except Exception:
                         continue
@@ -873,8 +971,9 @@ class SDFHOSEStatsGenerator:
         if not accumulators:
             return 0
 
+        # Prepend hose_code and radius to the 6-element to_tuple() result
         stats = [
-            (hose_code, radius, acc.count, acc.mean, acc.m2)
+            (hose_code, radius) + acc.to_tuple()
             for (hose_code, radius), acc in accumulators.items()
             if acc.count > 0
         ]
