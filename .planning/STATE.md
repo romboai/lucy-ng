@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-02-10)
 
 **Milestone**: v3.0 Statistical Detection
 **Phase**: 37 of 40 (Signal Grouping Detection)
-**Plan**: 01 of 03 complete (Signal grouping algorithm)
-**Status**: In progress
-**Last activity**: 2026-02-11 — Completed 37-01-PLAN.md (Signal grouping algorithm with multiplicity awareness)
+**Plan**: 03 of 03 complete (Signal grouping CLI)
+**Status**: Phase complete
+**Last activity**: 2026-02-11 — Completed 37-03-PLAN.md (Signal grouping CLI command with LSD integration)
 
-Progress: [██████████████████████████████████░░░░░░░] 90.0% (36/40 phases complete)
+Progress: [██████████████████████████████████░░░░░░░] 92.5% (37/40 phases complete)
 
 ## Completed Milestones
 
@@ -30,9 +30,9 @@ Progress: [███████████████████████
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 53 (v1.0-v2.1: 39, v3.0: 14)
-- Average duration: ~3 hours per phase (v1.0-v1.2), < 15 min per phase (v2.0-v2.1 docs/skills), ~6.5 min per plan (v3.0 implementation)
-- Total execution time: ~67.9 hours
+- Total plans completed: 56 (v1.0-v2.1: 39, v3.0: 17)
+- Average duration: ~3 hours per phase (v1.0-v1.2), < 15 min per phase (v2.0-v2.1 docs/skills), ~5.4 min per plan (v3.0 implementation)
+- Total execution time: ~68.0 hours
 
 ## Accumulated Context
 
@@ -86,12 +86,15 @@ Recent decisions affecting current work:
 - Phase 37-02: Use actual LSD runs instead of syntax mocking for validation (stronger validation)
 - Phase 37-02: Count solutions via .sol file detection (more reliable than stderr parsing)
 - Phase 37-02: Document false positive risk and tolerance rationale as test docstrings
+- Phase 37-03: Custom text formatting instead of GroupingResult.summary() for LSD atom list display
+- Phase 37-03: Lazy import of group_signals() following detect.py pattern
+- Phase 37-03: False positive warning mandatory in text output
 
 ### Pending Todos
 
 - ~~Implement neighbourhood detection CLI commands (Phase 35)~~ → COMPLETE
 - ~~Implement HHB and ring detection (Phase 36)~~ → COMPLETE
-- Signal grouping algorithm complete (Phase 37-01) → remaining: LSD validation (37-02), CLI (37-03)
+- ~~Signal grouping detection (Phase 37)~~ → COMPLETE
 - Implement two-tier ranking and badlist (Phase 38)
 - Update CASE agent to use new CLI commands for constraint generation (Phase 39)
 - Validate on ibuprofen (Phase 40) — must find correct aromatic structure
@@ -107,8 +110,8 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 37-01-PLAN.md — Phase 37 in progress (1 of 3 plans complete)
-Resume file: None — Ready for Plan 37-02 or 37-03 (parallel wave)
+Stopped at: Completed 37-03-PLAN.md — Phase 37 complete (all 3 plans executed)
+Resume file: None — Ready for Phase 38 (two-tier ranking and badlist)
 
 ---
-*Last updated: 2026-02-11 after Plan 37-01 execution (signal grouping algorithm complete)*
+*Last updated: 2026-02-11 after Plan 37-03 execution (Phase 37 Signal Grouping complete)*
