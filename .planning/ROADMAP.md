@@ -641,12 +641,12 @@ Plans:
   3. CLI command `lucy detect hhb <db> <formula>` returns hetero-hetero bond frequency (percentage of compounds with element pair)
   4. Detection uses 1% threshold for HHB allowance (returns "allowed" if >1% of compounds with formula contain bond pair)
   5. Ring statistics accessible for Phase 38 badlist implementation (no dedicated CLI, queried internally)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 36-01-PLAN.md: Extend schema with ring statistics columns
-- [ ] 36-02-PLAN.md: Update stats_generator.py to compute HHB and ring statistics
-- [ ] 36-03-PLAN.md: Add hhb CLI subcommand and internal ring query API
+- [ ] 36-01-PLAN.md — Extend schema to v6 with bond_pair_stats table and ring columns
+- [ ] 36-02-PLAN.md — Update stats generators with ring tracking and create BondPairStatsGenerator
+- [ ] 36-03-PLAN.md — Add HHB detection module and `lucy detect hhb` CLI subcommand
 
 ---
 
@@ -771,7 +771,7 @@ Plans:
 | 33. Documentation and Cleanup | v2.1 | 2/2 | Complete | 2026-02-09 |
 | 34. Hybridisation Detection | v3.0 | 3/3 | Complete | 2026-02-10 |
 | 35. Neighbourhood Detection | v3.0 | 4/4 | Complete | 2026-02-11 |
-| 36. HHB and Ring Detection | v3.0 | 0/3 | Not started | - |
+| 36. HHB and Ring Detection | v3.0 | 0/3 | Planned | - |
 | 37. Signal Grouping | v3.0 | 0/3 | Not started | - |
 | 38. Two-Tier Ranking and Badlist | v3.0 | 0/3 | Not started | - |
 | 39. Agent Integration | v3.0 | 0/3 | Not started | - |
