@@ -116,6 +116,7 @@ class HOSEStatsRecord(BaseModel):
 
     Schema v4+ includes hybridisation detection fields.
     Schema v5+ includes neighbourhood detection fields.
+    Schema v6+ includes ring membership fields.
     """
 
     hose_code: str
@@ -133,3 +134,24 @@ class HOSEStatsRecord(BaseModel):
     has_nitrogen_neighbor: int = 0
     has_sulfur_neighbor: int = 0
     has_halogen_neighbor: int = 0
+    # Ring membership counts (v6+)
+    in_3ring: int = 0
+    in_4ring: int = 0
+    in_aromatic: int = 0
+
+
+class BondPairStatsRecord(BaseModel):
+    """Statistics for a hetero-hetero bond pair within a molecular formula.
+
+    Used for HHB (hetero-hetero bond) detection at the formula level.
+    Answers questions like "Do C10H14O2 compounds typically have O-N bonds?"
+
+    Schema v6+.
+    """
+
+    formula_normalized: str
+    element1: str  # First element (alphabetically)
+    element2: str  # Second element (alphabetically)
+    compound_count: int  # Compounds with this bond pair
+    total_compounds: int  # Total compounds with this formula
+    frequency: float  # compound_count / total_compounds

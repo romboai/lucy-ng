@@ -3,7 +3,7 @@
 import sqlite3
 
 # Schema version for migrations
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # Compounds table - stores compound metadata
 CREATE_COMPOUNDS_TABLE = """
@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS schema_meta (
 # m2 is the sum of squared differences from mean (for Welford's online algorithm)
 # Hybridisation counts: sp3_count, sp2_count, sp1_count (v4+)
 # Neighbour element counts: has_carbon_neighbor, has_oxygen_neighbor, etc. (v5+)
+# Ring membership counts: in_3ring, in_4ring, in_aromatic (v6+)
 CREATE_HOSE_STATS_TABLE = """
 CREATE TABLE IF NOT EXISTS hose_stats (
     hose_code TEXT NOT NULL,
@@ -72,6 +73,9 @@ CREATE TABLE IF NOT EXISTS hose_stats (
     has_nitrogen_neighbor INTEGER NOT NULL DEFAULT 0,
     has_sulfur_neighbor INTEGER NOT NULL DEFAULT 0,
     has_halogen_neighbor INTEGER NOT NULL DEFAULT 0,
+    in_3ring INTEGER NOT NULL DEFAULT 0,
+    in_4ring INTEGER NOT NULL DEFAULT 0,
+    in_aromatic INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (hose_code, radius)
 )
 """
@@ -97,6 +101,25 @@ CREATE INDEX IF NOT EXISTS idx_hose_stats_mean_radius
 ON hose_stats(radius, mean)
 """
 
+# Bond pair statistics table - formula-level HHB detection (v6+)
+CREATE_BOND_PAIR_STATS_TABLE = """
+CREATE TABLE IF NOT EXISTS bond_pair_stats (
+    formula_normalized TEXT NOT NULL,
+    element1 TEXT NOT NULL,
+    element2 TEXT NOT NULL,
+    compound_count INTEGER NOT NULL,
+    total_compounds INTEGER NOT NULL,
+    frequency REAL NOT NULL,
+    PRIMARY KEY (formula_normalized, element1, element2)
+)
+"""
+
+# Index on formula for efficient formula-based HHB queries (v6+)
+CREATE_BOND_PAIR_FORMULA_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_bond_pair_formula
+ON bond_pair_stats(formula_normalized)
+"""
+
 # All schema statements in order
 SCHEMA_STATEMENTS = [
     CREATE_COMPOUNDS_TABLE,
@@ -107,6 +130,8 @@ SCHEMA_STATEMENTS = [
     CREATE_HOSE_STATS_TABLE,
     CREATE_HOSE_STATS_INDEX,
     CREATE_HOSE_STATS_MEAN_RADIUS_INDEX,
+    CREATE_BOND_PAIR_STATS_TABLE,
+    CREATE_BOND_PAIR_FORMULA_INDEX,
     CREATE_CHECKPOINT_TABLE,
 ]
 
@@ -178,6 +203,41 @@ def migrate_v4_to_v5(conn: sqlite3.Connection) -> None:
     )
     cursor.execute(
         "ALTER TABLE hose_stats ADD COLUMN has_halogen_neighbor INTEGER NOT NULL DEFAULT 0"
+    )
+
+    # Update schema version
+    cursor.execute(
+        "UPDATE schema_meta SET value = ? WHERE key = ?",
+        ("5", "schema_version"),
+    )
+
+    conn.commit()
+
+
+def migrate_v5_to_v6(conn: sqlite3.Connection) -> None:
+    """Migrate database from schema v5 to v6.
+
+    Adds bond_pair_stats table for HHB detection and ring membership
+    columns to hose_stats table for badlist filtering.
+
+    Args:
+        conn: SQLite connection to database
+    """
+    cursor = conn.cursor()
+
+    # Create bond pair statistics table
+    cursor.execute(CREATE_BOND_PAIR_STATS_TABLE)
+    cursor.execute(CREATE_BOND_PAIR_FORMULA_INDEX)
+
+    # Add ring membership columns to hose_stats
+    cursor.execute(
+        "ALTER TABLE hose_stats ADD COLUMN in_3ring INTEGER NOT NULL DEFAULT 0"
+    )
+    cursor.execute(
+        "ALTER TABLE hose_stats ADD COLUMN in_4ring INTEGER NOT NULL DEFAULT 0"
+    )
+    cursor.execute(
+        "ALTER TABLE hose_stats ADD COLUMN in_aromatic INTEGER NOT NULL DEFAULT 0"
     )
 
     # Update schema version
