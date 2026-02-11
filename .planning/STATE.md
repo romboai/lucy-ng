@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-02-10)
 
 **Milestone**: v3.0 Statistical Detection
 **Phase**: 38 of 40 (Two-Tier Ranking and Badlist)
-**Plan**: 02 of 02 complete (Badlist documentation and ranking guidance)
+**Plan**: 01 of 02 complete (Two-tier ranking implementation)
 **Status**: Phase in progress (1/2 plans complete)
-**Last activity**: 2026-02-11 — Completed 38-02-PLAN.md
+**Last activity**: 2026-02-11 — Completed 38-01-PLAN.md
 
-Progress: [██████████████████████████████████░░░░░░░] 95.0% (38/40 phases complete)
+Progress: [██████████████████████████████████░░░░░░░] 92.5% (37/40 phases complete)
 
 ## Completed Milestones
 
@@ -30,9 +30,9 @@ Progress: [███████████████████████
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 57 (v1.0-v2.1: 39, v3.0: 18)
-- Average duration: ~3 hours per phase (v1.0-v1.2), < 15 min per phase (v2.0-v2.1 docs/skills), ~5.1 min per plan (v3.0 implementation)
-- Total execution time: ~68.1 hours
+- Total plans completed: 58 (v1.0-v2.1: 39, v3.0: 19)
+- Average duration: ~3 hours per phase (v1.0-v1.2), < 15 min per phase (v2.0-v2.1 docs/skills), ~5.3 min per plan (v3.0 implementation)
+- Total execution time: ~68.5 hours
 
 ## Accumulated Context
 
@@ -89,6 +89,10 @@ Recent decisions affecting current work:
 - Phase 37-03: Custom text formatting instead of GroupingResult.summary() for LSD atom list display
 - Phase 37-03: Lazy import of group_signals() following detect.py pattern
 - Phase 37-03: False positive warning mandatory in text output
+- Phase 38-01: Sort key (-matched_count, mae) makes signal coverage primary ranking criterion
+- Phase 38-01: ShiftAssignment carries radius_used/confidence from PredictedShift for transparency
+- Phase 38-01: Hallucination test uses ghost carbons (predictions in gaps) for realistic scenario
+- Phase 38-01: CLI text output shows Matched=N/M alongside MAE for user visibility
 - Phase 38-02: 8 DEFF NOT patterns exclude all common strained ring motifs (3- and 4-membered)
 - Phase 38-02: Epoxide exception documented with specific shift range (45-55 ppm) and formula requirements
 - Phase 38-02: Two-tier ranking prioritizes signal match count over MAE to prevent wrong structures with coincidentally low errors
@@ -114,8 +118,8 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 38-02-PLAN.md — Phase 38 complete (all 2 plans executed)
-Resume file: None — Ready for Phase 39 (statistical constraints integration)
+Stopped at: Completed 38-01-PLAN.md — Phase 38 plan 1/2 complete (two-tier ranking)
+Resume file: None — Ready for Phase 38-02 (badlist documentation) or Phase 39
 
 ---
-*Last updated: 2026-02-11 after Plan 38-02 execution (Phase 38 Two-Tier Ranking and Badlist complete)*
+*Last updated: 2026-02-11 after Plan 38-01 execution (Two-tier ranking complete)*
