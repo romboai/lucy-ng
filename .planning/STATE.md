@@ -4,17 +4,17 @@
 
 See: .planning/PROJECT.md (updated 2026-02-16)
 
-**Core value:** AI agent autonomously determines compound structures from NMR, with data-driven statistical constraints replacing guesswork
-**Current focus:** Planning next milestone
+**Core value:** AI agent autonomously determines compound structures from NMR, with a collaborative team architecture that self-corrects through peer review
+**Current focus:** v4.0 Team-Based CASE — defining requirements
 
 ## Current Position
 
-**Milestone**: v3.0 Statistical Detection — SHIPPED 2026-02-16
-**Phase**: 40 of 40 (Validation) — COMPLETE
-**Status**: Milestone complete, archived to .planning/milestones/
-**Last activity**: 2026-02-16 — v3.0 milestone completed and archived
+**Milestone**: v4.0 Team-Based CASE — STARTED 2026-02-16
+**Phase**: Not started (defining requirements)
+**Status**: Defining requirements
+**Last activity**: 2026-02-16 — Milestone v4.0 started
 
-Progress: [█████████████████████████████████████████] 100% (40/40 phases complete)
+Progress: [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0%
 
 ## Completed Milestones
 
@@ -43,19 +43,18 @@ Decisions are logged in PROJECT.md Key Decisions table.
 ### Pending Todos
 
 - Post-phase UAT with additional compounds (pulegone, etc.)
-- Next milestone planning: agent workflow refinement, COSY integration, fragment library
 
 ### Blockers/Concerns
 
-- Agent behavior gaps from v3.0 UAT: DEFF NOT persistence, signal grouping not applied, grouped notation lost
-- COSY agent usage: Agent identifies COSY but doesn't use it
+- Agent behavior gaps from v3.0 UAT: DEFF NOT persistence, signal grouping not applied, grouped notation lost (v4.0 target)
+- COSY agent usage: deferred beyond v4.0
 - Database regeneration: End users with pre-v3.0 databases must regenerate
 
 ## Session Continuity
 
 Last session: 2026-02-16
-Stopped at: v3.0 milestone completed and archived
-Resume file: None — ready for /gsd:new-milestone
+Stopped at: v4.0 milestone started, defining requirements
+Resume file: None
 
 ---
-*Last updated: 2026-02-16 after v3.0 milestone completion*
+*Last updated: 2026-02-16 after v4.0 milestone start*

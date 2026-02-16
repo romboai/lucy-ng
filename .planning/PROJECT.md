@@ -10,6 +10,18 @@ Lucy-ng is an AI-agent skill for Computer-Assisted Structure Elucidation (CASE) 
 
 An AI agent can autonomously determine the structure of an unknown organic compound from its NMR spectra, with a multi-agent architecture that prevents unproductive loops and keeps the elucidation on track.
 
+## Current Milestone: v4.0 Team-Based CASE
+
+**Goal:** Replace the single autonomous CASE agent with a 5-agent collaborative team that self-corrects through real-time peer review, fixing all v3.0 constraint-loss bugs.
+
+**Target features:**
+- 5-agent CASE team: coordinator, nmr-chemist, lsd-engineer, solution-analyst, devils-advocate
+- Real-time peer feedback: every agent monitors others' work and flags issues
+- Constraint persistence: lsd-engineer builds from previous file, never from memory
+- Pre-run validation: devils-advocate diffs every LSD file before solver runs
+- Post-run quality: solution-analyst checks chemical plausibility, not just counts
+- Self-correcting loop: dropped DEFF NOT, lost SYME, unused detection results caught and fixed before they affect results
+
 ## Current State
 
 **Version:** v3.0 shipped 2026-02-16
@@ -64,12 +76,17 @@ An AI agent can autonomously determine the structure of an unknown organic compo
 
 ### Active
 
-(No active milestone — next milestone to be defined via `/gsd:new-milestone`)
+- [ ] 5-agent CASE team architecture (coordinator, nmr-chemist, lsd-engineer, solution-analyst, devils-advocate)
+- [ ] Team-based orchestrator skill replacing single-agent Task() spawning
+- [ ] Constraint inventory managed by lsd-engineer (read previous file, never reconstruct from memory)
+- [ ] Pre-run LSD validation by devils-advocate (diff vs previous, sp2, H budget, DEFF NOT, SYME)
+- [ ] Post-run solution quality review by solution-analyst (chemical plausibility, strained ring detection)
+- [ ] Real-time peer feedback protocol (any agent can flag issues in any other agent's work)
+- [ ] CASE-PROGRESS.md updated for team workflow (multi-agent contributions per iteration)
 
 ### Deferred
 
 - [ ] Support for COSY correlations in LSD constraints
-- [ ] Agent workflow refinement (DEFF NOT persistence, signal grouping application, grouped notation)
 - [ ] Fragment library for substructure suggestion
 - [ ] Stereochemistry handling (E/Z, R/S)
 - [ ] Interactive CASE mode with user feedback loop
@@ -141,6 +158,7 @@ Minimum viable spectral data for v1:
 | Two-tier ranking | v3.0: Match count primary, MAE secondary — prevents hallucination from wrong structures with coincidentally low MAE | Good |
 | Badlist via DEFF NOT | v3.0: Hardcoded strained ring exclusion in agent knowledge rather than automated filtering | Good — but agent drops across iterations |
 | Schema migration chain | v3.0: ALTER TABLE v3→v4→v5→v6 with backward-compatible queries | Good |
+| Team-based CASE | v4.0: 5-agent team (coordinator, nmr-chemist, lsd-engineer, solution-analyst, devils-advocate) replacing single autonomous agent. Peer feedback eliminates constraint loss. | — Pending |
 
 ## Technical State
 
@@ -167,4 +185,4 @@ Minimum viable spectral data for v1:
 - PROP/ELIM/LIST constraints never written despite neighbourhood detection results
 
 ---
-*Last updated: 2026-02-16 after v3.0 milestone completion*
+*Last updated: 2026-02-16 after v4.0 milestone start*

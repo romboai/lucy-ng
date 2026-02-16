@@ -2,5 +2,8 @@
   "mode": "yolo",
   "depth": "standard",
   "project": "lucy-ng",
-  "created": "2026-01-08"
+  "created": "2026-01-08",
+  "workflow": {
+    "auto_advance": true
+  }
 }
