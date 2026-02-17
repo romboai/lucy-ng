@@ -10,12 +10,12 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 **Milestone**: v4.0 Team-Based CASE — Phases 41-47
-**Phase**: 43 — Constraint Inventory System (in progress)
-**Plan**: 43-01 complete (LSD-Engineer inventory schema and protocol)
-**Status**: Phase 43 executing — 43-01 and 43-02 done, 43-03 pending (verification)
-**Last activity**: 2026-02-17 — 43-01 complete (LSD-Engineer Section 5 added, workflow steps 3-6 updated, 394 lines)
+**Phase**: 44 — CASE-PROGRESS.md Format (in progress)
+**Plan**: 44-02 complete (write_progress step added to case.md, spawn prompts updated)
+**Status**: Phase 44 executing — 44-01 (agent updates) and 44-02 (orchestrator write_progress) done
+**Last activity**: 2026-02-17 — 44-02 complete (write_progress step with 9 triggers, coordinator-as-sole-writer protocol enforced)
 
-Progress: [############░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 2/7 phases
+Progress: [############░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 3/7 phases
 
 ## Completed Milestones
 
@@ -51,6 +51,13 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - COSY agent usage: deferred beyond v4.0
 - Database regeneration: End users with pre-v3.0 databases must regenerate
 
+## Accumulated Decisions (Phase 44)
+
+- **44-02:** write_progress is a REFERENCE step (not sequential) — coordinator writes throughout workflow as messages arrive
+- **44-02:** 9 writing triggers defined covering all agent message types: file header, [SETUP-COMPLETE], iteration header, [ITERATION-COMPLETE], [VALIDATION-PASSED]/[VALIDATION-BLOCKED], coordinator solution count, [RANKING-COMPLETE], diagnostic intervention, intra-iteration revision
+- **44-02:** devils-advocate prompt changed from monitoring CASE-PROGRESS.md to receiving validation requests via SendMessage — aligns with its read-only tool access
+- **44-02:** All field names preserved identically to v3.0 (Solution count, Constraints added, sp2 count, H budget, HMBC correlations used) — LLM parsing handles deeper nesting transparently
+
 ## Accumulated Decisions (Phase 43)
 
 - **43-01:** JSON format confirmed safe in LSD ; comments (parser smoke test passed); inventory block at TOP of LSD file before MULT definitions
@@ -63,8 +70,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-02-17
-Stopped at: 43-01 complete (LSD-Engineer constraint inventory schema and protocol)
+Stopped at: 44-02 complete (write_progress step added to case.md, coordinator-as-sole-writer protocol)
 Resume file: None
 
 ---
-*Last updated: 2026-02-17 after 43-01 execution*
+*Last updated: 2026-02-17 after 44-02 execution*
