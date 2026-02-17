@@ -11,9 +11,9 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Milestone**: v4.0 Team-Based CASE — Phases 41-47
 **Phase**: 43 — Constraint Inventory System (in progress)
-**Plan**: 43-02 complete (Devils-Advocate inventory validation)
-**Status**: Phase 43 executing — 43-02 done, 43-01 pending (LSD-Engineer inventory)
-**Last activity**: 2026-02-17 — 43-02 complete (Devils-Advocate Section 5 added, 12-step workflow)
+**Plan**: 43-01 complete (LSD-Engineer inventory schema and protocol)
+**Status**: Phase 43 executing — 43-01 and 43-02 done, 43-03 pending (verification)
+**Last activity**: 2026-02-17 — 43-01 complete (LSD-Engineer Section 5 added, workflow steps 3-6 updated, 394 lines)
 
 Progress: [############░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 2/7 phases
 
@@ -53,6 +53,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 
 ## Accumulated Decisions (Phase 43)
 
+- **43-01:** JSON format confirmed safe in LSD ; comments (parser smoke test passed); inventory block at TOP of LSD file before MULT definitions
+- **43-01:** deff_not_patterns initialized at iteration 1 alongside DEFF NOT commands (atomic write rule prevents desync)
+- **43-01:** NEVER rebuild inventory from scratch -- same read-previous-never-reconstruct rule applied to inventory itself
 - **43-02:** Three-check inventory reconciliation (accuracy, regression, content) is the primary validation protocol for Devils-Advocate
 - **43-02:** Legacy fallback for files without inventory block -- backwards compatible with pre-Phase-43 LSD files
 - **43-02:** Detection coverage check at 3+ iterations triggers WARNING for pending_from_detection items
@@ -60,8 +63,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-02-17
-Stopped at: 43-02 complete (Devils-Advocate inventory validation added)
+Stopped at: 43-01 complete (LSD-Engineer constraint inventory schema and protocol)
 Resume file: None
 
 ---
-*Last updated: 2026-02-17 after 43-02 execution*
+*Last updated: 2026-02-17 after 43-01 execution*
