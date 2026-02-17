@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** AI agent autonomously determines compound structures from NMR, with a collaborative team architecture that self-corrects through peer review
-**Current focus:** v4.0 Team-Based CASE — Phase 45 in progress
+**Current focus:** v4.0 Team-Based CASE — Phase 46 complete
 
 ## Current Position
 
 **Milestone**: v4.0 Team-Based CASE — Phases 41-47
-**Phase**: 45 — Team Coordination Protocol (complete)
-**Plan**: 45-02 complete (full protocol trace, 6/6 SC verified PASS)
-**Status**: Phase 45 complete — both plans done, ready for Phase 46
-**Last activity**: 2026-02-17 — 45-02 complete (28-step protocol trace, all 6 success criteria PASS, no dead-end states found)
+**Phase**: 46 — Diagnostic Integration (complete)
+**Plan**: 46-01 complete (inventory awareness + analysis/ paths, 4/4 SC PASS)
+**Status**: Phase 46 complete — single plan done, ready for Phase 47
+**Last activity**: 2026-02-17 — 46-01 complete (diagnostic specialist receives constraint inventory, analysis/ path consistency)
 
-Progress: [##############░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 4/7 phases
+Progress: [#####################░░░░░░░░░░░░░░░░░░░░░] 5/7 phases
 
 ## Completed Milestones
 
@@ -31,7 +31,7 @@ Progress: [##############░░░░░░░░░░░░░░░░░░�
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 73 across 6 milestones (+ 9 in v4.0)
+- Total plans completed: 73 across 6 milestones (+ 10 in v4.0)
 - v3.0: 7 phases, 21 plans, 51 commits, 2 days
 - Total execution time: ~78.2 hours
 
@@ -50,6 +50,13 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - Agent behavior gaps from v3.0 UAT: DEFF NOT persistence, signal grouping not applied, grouped notation lost (v4.0 target)
 - COSY agent usage: deferred beyond v4.0
 - Database regeneration: End users with pre-v3.0 databases must regenerate
+
+## Accumulated Decisions (Phase 46)
+
+- **46-01:** LSD file path in delegate_specialist follows analysis/<latest_iteration>/compound.lsd pattern (matches file org convention)
+- **46-01:** Changed "per skill/diagnostic/SKILL.md" to "per your inlined knowledge" (knowledge inlined since Phase 25)
+- **46-01:** Inventory field guidance maps to known bugs: deff_not_patterns -> Bug 1, syme_pairs -> Bug 2, bond/list_prop -> Bug 5
+- **46-01:** DIAGNOSTIC-REPORT.md path consistently uses analysis/ subdirectory in both case.md and lucy-diagnostic.md
 
 ## Accumulated Decisions (Phase 45)
 
@@ -85,8 +92,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-02-17
-Stopped at: 45-02 complete (Phase 45 done — protocol verified, all 6 SC PASS)
+Stopped at: Completed 46-01-PLAN.md (Phase 46 done — diagnostic integration complete, 4/4 SC PASS)
 Resume file: None
 
 ---
-*Last updated: 2026-02-17 after 45-02 execution*
+*Last updated: 2026-02-17 after 46-01 execution*
