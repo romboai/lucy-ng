@@ -71,7 +71,15 @@ Plans:
   5. No agent has knowledge gaps that would cause workflow failure (coverage validated)
   6. Old lucy-case-agent.md preserved as reference until v4.0 ships
 
-**Research**: Likely needs deeper research on inter-agent message schemas and knowledge distribution boundaries
+**Research**: Complete (42-RESEARCH.md)
+**Plans:** 5 plans in 2 waves
+
+Plans:
+- [ ] 42-01-PLAN.md -- NMR-Chemist full agent definition
+- [ ] 42-02-PLAN.md -- LSD-Engineer full agent definition
+- [ ] 42-03-PLAN.md -- Solution-Analyst full agent definition
+- [ ] 42-04-PLAN.md -- Devils-Advocate full agent definition
+- [ ] 42-05-PLAN.md -- Knowledge coverage validation
 
 ---
 
@@ -156,7 +164,7 @@ Plans:
 | Phase | Milestone | Plans | Status | Completed |
 |-------|-----------|-------|--------|-----------|
 | 41. Orchestrator Skill Modification | v4.0 | Complete    | 2026-02-17 | -- |
-| 42. Agent Definitions | v4.0 | -- | Planned | -- |
+| 42. Agent Definitions | v4.0 | 5 plans    | Planned | -- |
 | 43. Constraint Inventory System | v4.0 | -- | Planned | -- |
 | 44. CASE-PROGRESS.md Format | v4.0 | -- | Planned | -- |
 | 45. Team Coordination Protocol | v4.0 | -- | Planned | -- |
