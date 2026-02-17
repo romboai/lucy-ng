@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** AI agent autonomously determines compound structures from NMR, with a collaborative team architecture that self-corrects through peer review
-**Current focus:** v4.0 Team-Based CASE — Phase 43 in progress
+**Current focus:** v4.0 Team-Based CASE — Phase 45 in progress
 
 ## Current Position
 
 **Milestone**: v4.0 Team-Based CASE — Phases 41-47
-**Phase**: 44 — CASE-PROGRESS.md Format (in progress)
-**Plan**: 44-02 complete (write_progress step added to case.md, spawn prompts updated)
-**Status**: Phase 44 executing — 44-01 (agent updates) and 44-02 (orchestrator write_progress) done
-**Last activity**: 2026-02-17 — 44-02 complete (write_progress step with 9 triggers, coordinator-as-sole-writer protocol enforced)
+**Phase**: 45 — Team Coordination Protocol (in progress)
+**Plan**: 45-01 complete (orchestrator-driven iteration tasks, shift list embedding, parallel tasks, time measurement)
+**Status**: Phase 45 executing — 45-01 done
+**Last activity**: 2026-02-17 — 45-01 complete (4 coordination gaps closed: iteration task creation, shift list delivery, parallel tasks, time measurement)
 
-Progress: [############░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 3/7 phases
+Progress: [##############░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 4/7 phases
 
 ## Completed Milestones
 
@@ -31,7 +31,7 @@ Progress: [############░░░░░░░░░░░░░░░░░░░
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 73 across 6 milestones (+ 8 in v4.0)
+- Total plans completed: 73 across 6 milestones (+ 9 in v4.0)
 - v3.0: 7 phases, 21 plans, 51 commits, 2 days
 - Total execution time: ~78.2 hours
 
@@ -50,6 +50,14 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - Agent behavior gaps from v3.0 UAT: DEFF NOT persistence, signal grouping not applied, grouped notation lost (v4.0 target)
 - COSY agent usage: deferred beyond v4.0
 - Database regeneration: End users with pre-v3.0 databases must regenerate
+
+## Accumulated Decisions (Phase 45)
+
+- **45-01:** Orchestrator (not lsd-engineer) creates all iteration tasks — prevents workflow stopping after iteration 1
+- **45-01:** Shift list embedded in ranking task description by orchestrator — solution-analyst no longer depends on nmr-chemist message for shifts
+- **45-01:** Parallel hmbc-selection task created alongside lsd-iteration task when solution_count is 10-50 and iterations >= 2
+- **45-01:** Elapsed time computed from CASE-PROGRESS.md Started timestamp; v3.0 iteration count (4) used as baseline surrogate (wall-clock not recorded in v3.0)
+- **45-01:** lsd-engineer spawn prompt updated to "Claim iteration tasks from TaskList as they become available" (removed task-creation instruction)
 
 ## Accumulated Decisions (Phase 44)
 
@@ -74,8 +82,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-02-17
-Stopped at: 44-01 re-executed (4 specialist agent definitions updated with structured SendMessage templates, coordinator-as-sole-writer protocol enforced)
+Stopped at: 45-01 complete (4 coordination gaps closed in case.md and lucy-solution-analyst.md)
 Resume file: None
 
 ---
-*Last updated: 2026-02-17 after 44-01 execution*
+*Last updated: 2026-02-17 after 45-01 execution*
