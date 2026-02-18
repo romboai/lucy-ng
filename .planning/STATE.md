@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** AI agent autonomously determines compound structures from NMR, with a collaborative team architecture that self-corrects through peer review
-**Current focus:** v4.0 Team-Based CASE — Phase 47 UAT follow-up (aromatic sanity check)
+**Current focus:** v4.0 Team-Based CASE — Phase 46.1 complete, Phase 47 UAT next
 
 ## Current Position
 
 **Milestone**: v4.0 Team-Based CASE — Phases 41-47
-**Phase**: 46 — Diagnostic Integration (complete)
-**Plan**: 46-01 complete (inventory awareness + analysis/ paths, 4/4 SC PASS)
-**Status**: Aromatic ring sanity check implemented (post-UAT fix)
-**Last activity**: 2026-02-18 — Aromatic sanity check on LSD ranking output (warns when shifts suggest aromaticity but no solutions contain aromatic rings)
+**Phase**: 46.1 — Agent Aromatic Ring Awareness (complete)
+**Plan**: 2/2 complete (solution-analyst Check 6, nmr-chemist aromatic expectation, devils-advocate defense-in-depth)
+**Status**: All 3 CASE agents updated with aromatic ring awareness
+**Last activity**: 2026-02-18 — Phase 46.1 executed (2 plans, 3 agent files updated)
 
-Progress: [#####################░░░░░░░░░░░░░░░░░░░░░] 5/7 phases
+Progress: [##########################░░░░░░░░░░░░░░░] 6/7 phases (+46.1)
 
 ## Completed Milestones
 
@@ -31,7 +31,7 @@ Progress: [#####################░░░░░░░░░░░░░░░░
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 73 across 6 milestones (+ 10 in v4.0)
+- Total plans completed: 73 across 6 milestones (+ 12 in v4.0)
 - v3.0: 7 phases, 21 plans, 51 commits, 2 days
 - Total execution time: ~78.2 hours
 
@@ -50,6 +50,18 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - Agent behavior gaps from v3.0 UAT: DEFF NOT persistence, signal grouping not applied, grouped notation lost (v4.0 target)
 - COSY agent usage: deferred beyond v4.0
 - Database regeneration: End users with pre-v3.0 databases must regenerate
+
+### Roadmap Evolution
+
+- Phase 46.1 inserted after Phase 46: Agent Aromatic Ring Awareness (URGENT)
+
+## Accumulated Decisions (Phase 46.1)
+
+- **46.1-01:** QUESTIONABLE severity (not IMPLAUSIBLE) for aromatic mismatch — issue is with LSD constraints (4J), not individual structures
+- **46.1-01:** Remediation targets benzylic/alpha HMBC correlations specifically (likely 4J through aromatic ring)
+- **46.1-02:** Three-way conditional for Aromatic expectation: DEPT-aware to distinguish aromatic from alkene sp2
+- **46.1-02:** Devils-advocate uses WARNING severity only (not CRITICAL) — defense-in-depth, solution-analyst is primary responder
+- **46.1-02:** Aromatic Ring Expectation check is post-ranking only — does not block solver run
 
 ## Accumulated Decisions (Phase 46)
 
@@ -92,8 +104,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-02-18
-Stopped at: Implemented aromatic ring sanity check (models.py, ranker.py, cli/lsd.py, test_ranking.py)
+Stopped at: Completed Phase 46.1 Agent Aromatic Ring Awareness (2 plans, 3 agent files)
 Resume file: None
 
 ---
-*Last updated: 2026-02-18 after aromatic sanity check implementation*
+*Last updated: 2026-02-18 after Phase 46.1 execution*

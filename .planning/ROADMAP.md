@@ -180,7 +180,7 @@ Plans:
 - `~/.claude/agents/lucy-nmr-chemist.md` — flag aromatic expectation in setup message
 - `~/.claude/agents/lucy-devils-advocate.md` — optional: post-ranking aromatic sanity check
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 46.1-01-PLAN.md — Solution-analyst: Check 6 aromatic ring verification + [RANKING-COMPLETE] template + workflow --format json
