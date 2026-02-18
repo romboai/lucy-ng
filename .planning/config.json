@@ -3,7 +3,10 @@
   "depth": "standard",
   "project": "lucy-ng",
   "created": "2026-01-08",
+  "milestone_version": "v4.0",
+  "milestone_name": "Team-Based CASE",
   "workflow": {
-    "auto_advance": true
+    "auto_advance": false,
+    "research": true
   }
 }

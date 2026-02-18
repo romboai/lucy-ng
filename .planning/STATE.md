@@ -5,15 +5,15 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** AI agent autonomously determines compound structures from NMR, with a collaborative team architecture that self-corrects through peer review
-**Current focus:** v4.0 Team-Based CASE — Phase 48 Integration Hygiene complete
+**Current focus:** v4.0 Team-Based CASE -- milestone complete, ready for archival
 
 ## Current Position
 
-**Milestone**: v4.0 Team-Based CASE — Phases 41-48
-**Phase**: 48 — Integration Hygiene & Tech Debt (complete)
+**Milestone**: v4.0 Team-Based CASE — Phases 41-48 (ALL COMPLETE)
+**Phase**: 48 — Integration Hygiene & Tech Debt (complete, last phase)
 **Plan**: All 2 plans complete
-**Status**: Phase 48 complete — all v4.0 phases done (41-48 + 46.1), ready for phase verification
-**Last activity**: 2026-02-18 — Phase 48 executed (DA relay, stale paths, VERIFICATION.md files)
+**Status**: v4.0 milestone 100% complete — all 8 phases + 46.1 done, ready for /gsd:complete-milestone
+**Last activity**: 2026-02-18 — Phase 48 verified (6/6 PASS), milestone boundary reached
 
 Progress: [########################################] 8/8 phases (+46.1)
 
@@ -47,7 +47,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 
 ### Blockers/Concerns
 
-- Agent behavior gaps from v3.0 UAT: DEFF NOT persistence, signal grouping not applied, grouped notation lost (v4.0 target)
+- Agent behavior gaps from v3.0 UAT: ALL 5 bugs verified FIXED in v4.0 (DEFF NOT, grouping, grouped notation, PROP/BOND, detection constraints)
 - COSY agent usage: deferred beyond v4.0
 - Database regeneration: End users with pre-v3.0 databases must regenerate
 
@@ -111,8 +111,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-02-18
-Stopped at: Phase 48 complete, ready for phase verification and milestone completion
+Stopped at: v4.0 milestone complete, ready for /gsd:complete-milestone v4.0
 Resume file: None
 
 ---
-*Last updated: 2026-02-18 after Phase 48 execution*
+*Last updated: 2026-02-18 after Phase 48 complete -- v4.0 milestone boundary*
