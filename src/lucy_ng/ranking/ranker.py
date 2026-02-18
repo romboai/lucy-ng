@@ -1,5 +1,7 @@
 """Solution ranking by 13C spectrum prediction."""
 
+from rdkit import Chem
+
 from lucy_ng.lsd.parser import LSDSolution
 from lucy_ng.prediction import C13Predictor, PredictedShift
 
@@ -80,6 +82,12 @@ class SolutionRanker:
             # Count successful matches
             matched_count = sum(1 for a in assignments if a.is_matched)
 
+            # Check for aromatic ring
+            has_aromatic = False
+            mol = Chem.MolFromSmiles(solution.smiles)
+            if mol is not None:
+                has_aromatic = any(atom.GetIsAromatic() for atom in mol.GetAtoms())
+
             ranked_solution = RankedSolution(
                 solution_index=solution.index,
                 smiles=solution.smiles,
@@ -88,6 +96,7 @@ class SolutionRanker:
                 total_carbons=prediction.carbon_count,
                 prediction_rate=prediction.success_rate,
                 assignments=assignments,
+                has_aromatic_ring=has_aromatic,
             )
             ranked.append(ranked_solution)
 
@@ -96,6 +105,25 @@ class SolutionRanker:
 
         # Store count before limiting
         total_ranked = len(ranked)
+
+        # Sanity checks
+        warnings: list[str] = []
+
+        # Aromatic ring sanity check: if experimental shifts strongly suggest
+        # aromaticity (>= 4 shifts in 110-160 ppm) but no solutions have
+        # aromatic rings, warn about possible 4J HMBC artifact
+        aromatic_shift_count = sum(
+            1 for s in experimental_shifts if 110.0 <= s <= 160.0
+        )
+        any_aromatic = any(r.has_aromatic_ring for r in ranked)
+        if aromatic_shift_count >= 4 and ranked and not any_aromatic:
+            warnings.append(
+                f"Aromatic ring expected ({aromatic_shift_count} shifts in "
+                f"110-160 ppm) but no solutions contain aromatic rings. "
+                f"Possible 4J HMBC artifact — consider removing HMBC "
+                f"correlations between aromatic ring positions and "
+                f"benzylic/alpha substituents."
+            )
 
         # Limit results if requested
         if top_n is not None:
@@ -108,6 +136,7 @@ class SolutionRanker:
             ranked_count=total_ranked,
             skipped_count=skipped,
             tolerance=self.tolerance,
+            warnings=warnings,
         )
 
     def _match_shifts(

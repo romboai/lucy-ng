@@ -5,15 +5,15 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** AI agent autonomously determines compound structures from NMR, with a collaborative team architecture that self-corrects through peer review
-**Current focus:** v4.0 Team-Based CASE — Phase 46 complete
+**Current focus:** v4.0 Team-Based CASE — Phase 47 UAT follow-up (aromatic sanity check)
 
 ## Current Position
 
 **Milestone**: v4.0 Team-Based CASE — Phases 41-47
 **Phase**: 46 — Diagnostic Integration (complete)
 **Plan**: 46-01 complete (inventory awareness + analysis/ paths, 4/4 SC PASS)
-**Status**: Phase 46 complete — single plan done, ready for Phase 47
-**Last activity**: 2026-02-17 — 46-01 complete (diagnostic specialist receives constraint inventory, analysis/ path consistency)
+**Status**: Aromatic ring sanity check implemented (post-UAT fix)
+**Last activity**: 2026-02-18 — Aromatic sanity check on LSD ranking output (warns when shifts suggest aromaticity but no solutions contain aromatic rings)
 
 Progress: [#####################░░░░░░░░░░░░░░░░░░░░░] 5/7 phases
 
@@ -91,9 +91,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-02-17
-Stopped at: Completed 46-01-PLAN.md (Phase 46 done — diagnostic integration complete, 4/4 SC PASS)
+Last session: 2026-02-18
+Stopped at: Implemented aromatic ring sanity check (models.py, ranker.py, cli/lsd.py, test_ranking.py)
 Resume file: None
 
 ---
-*Last updated: 2026-02-17 after 46-01 execution*
+*Last updated: 2026-02-18 after aromatic sanity check implementation*

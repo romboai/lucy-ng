@@ -298,9 +298,11 @@ def lsd_rank(
                     "prediction_rate": round(sol.prediction_rate, 3),
                     # Keep matched_count for backward compatibility
                     "matched_count": sol.matched_count,
+                    "has_aromatic_ring": sol.has_aromatic_ring,
                 }
                 for i, sol in enumerate(result.solutions)
             ],
+            "warnings": result.warnings,
         }
         click.echo(json.dumps(data, indent=2))
     else:
@@ -326,6 +328,12 @@ def lsd_rank(
                 click.echo(f"     {sol.tolerance_summary()}")
         else:
             click.echo("No solutions could be ranked.")
+
+        # Print warnings
+        if result.warnings:
+            click.echo()
+            for warning in result.warnings:
+                click.echo(f"WARNING: {warning}")
 
 
 @lsd.command("analyze")

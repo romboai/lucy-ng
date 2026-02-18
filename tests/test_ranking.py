@@ -651,6 +651,93 @@ class TestTwoTierRanking:
         assert result.solutions[0].mae < result.solutions[1].mae < result.solutions[2].mae
 
 
+class TestAromaticSanityCheck:
+    """Tests for aromatic ring sanity check on ranking results."""
+
+    @pytest.fixture
+    def mock_predictor(self):
+        """Create a mock predictor."""
+        predictor = MagicMock(spec=C13Predictor)
+        return predictor
+
+    def test_has_aromatic_ring_true_for_aromatic_smiles(self, mock_predictor):
+        """Test has_aromatic_ring is True for structures with aromatic rings."""
+        mock_predictor.predict_from_smiles.return_value = make_prediction_result(
+            "c1ccccc1", [128.0, 128.0, 128.0, 128.0, 128.0, 128.0]
+        )
+        ranker = SolutionRanker(mock_predictor, tolerance=3.0)
+        solutions = [LSDSolution(index=1, smiles="c1ccccc1")]
+        result = ranker.rank(solutions, [128.0])
+
+        assert result.solutions[0].has_aromatic_ring is True
+
+    def test_has_aromatic_ring_false_for_non_aromatic_smiles(self, mock_predictor):
+        """Test has_aromatic_ring is False for non-aromatic structures."""
+        mock_predictor.predict_from_smiles.return_value = make_prediction_result(
+            "C1CCCCC1", [27.0, 27.0, 27.0, 27.0, 27.0, 27.0]
+        )
+        ranker = SolutionRanker(mock_predictor, tolerance=3.0)
+        solutions = [LSDSolution(index=1, smiles="C1CCCCC1")]
+        result = ranker.rank(solutions, [27.0])
+
+        assert result.solutions[0].has_aromatic_ring is False
+
+    def test_warning_when_aromatic_expected_but_no_solutions_aromatic(self, mock_predictor):
+        """Test warning generated when 4+ shifts in 110-160 ppm but all solutions non-aromatic."""
+        mock_predictor.predict_from_smiles.return_value = make_prediction_result(
+            "C1CCCCC1", [130.0, 128.0, 125.0, 140.0, 27.0, 27.0]
+        )
+        ranker = SolutionRanker(mock_predictor, tolerance=3.0)
+        solutions = [LSDSolution(index=1, smiles="C1CCCCC1")]  # Non-aromatic
+        # 5 experimental shifts in 110-160 ppm range (aromatic region)
+        experimental = [129.4, 127.3, 137.0, 140.8, 141.0, 45.0, 30.0]
+
+        result = ranker.rank(solutions, experimental)
+
+        assert len(result.warnings) == 1
+        assert "Aromatic ring expected" in result.warnings[0]
+        assert "5 shifts in 110-160 ppm" in result.warnings[0]
+        assert "4J HMBC" in result.warnings[0]
+
+    def test_no_warning_when_solutions_contain_aromatic_rings(self, mock_predictor):
+        """Test no warning when at least one solution has an aromatic ring."""
+        mock_predictor.predict_from_smiles.return_value = make_prediction_result(
+            "c1ccccc1", [128.0, 128.0, 128.0, 128.0, 128.0, 128.0]
+        )
+        ranker = SolutionRanker(mock_predictor, tolerance=3.0)
+        solutions = [LSDSolution(index=1, smiles="c1ccccc1")]  # Aromatic
+        experimental = [128.0, 129.0, 130.0, 131.0, 45.0]
+
+        result = ranker.rank(solutions, experimental)
+
+        assert len(result.warnings) == 0
+
+    def test_no_warning_when_fewer_than_4_aromatic_shifts(self, mock_predictor):
+        """Test no warning when fewer than 4 experimental shifts are in the aromatic range."""
+        mock_predictor.predict_from_smiles.return_value = make_prediction_result(
+            "C1CCCCC1", [27.0, 27.0, 27.0, 27.0, 27.0, 27.0]
+        )
+        ranker = SolutionRanker(mock_predictor, tolerance=3.0)
+        solutions = [LSDSolution(index=1, smiles="C1CCCCC1")]  # Non-aromatic
+        # Only 2 shifts in aromatic range (below threshold of 4)
+        experimental = [130.0, 128.0, 45.0, 30.0, 22.0]
+
+        result = ranker.rank(solutions, experimental)
+
+        assert len(result.warnings) == 0
+
+    def test_no_warning_when_no_ranked_solutions(self, mock_predictor):
+        """Test no warning when all solutions were skipped (no ranked solutions)."""
+        mock_predictor.predict_from_smiles.side_effect = Exception("bad SMILES")
+        ranker = SolutionRanker(mock_predictor, tolerance=3.0)
+        solutions = [LSDSolution(index=1, smiles="INVALID")]
+        experimental = [128.0, 129.0, 130.0, 131.0, 132.0]
+
+        result = ranker.rank(solutions, experimental)
+
+        assert len(result.warnings) == 0
+
+
 class TestRankingCLI:
     """Tests for CLI integration (basic structure)."""
 

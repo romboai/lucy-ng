@@ -56,6 +56,9 @@ class RankedSolution(BaseModel):
     assignments: list[ShiftAssignment] = Field(
         default_factory=list, description="Detailed shift assignments"
     )
+    has_aromatic_ring: bool = Field(
+        default=False, description="Whether the structure contains an aromatic ring"
+    )
 
     @property
     def match_rate(self) -> float:
@@ -165,6 +168,10 @@ class RankingResult(BaseModel):
         default=0, description="Number of solutions skipped (no SMILES or prediction failed)"
     )
     tolerance: float = Field(default=3.0, description="Tolerance in ppm used for matching")
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Sanity-check warnings about the ranking results",
+    )
 
     def get_top(self, n: int) -> list[RankedSolution]:
         """Get the top N ranked solutions.
