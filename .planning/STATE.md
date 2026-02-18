@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** AI agent autonomously determines compound structures from NMR, with a collaborative team architecture that self-corrects through peer review
-**Current focus:** v4.0 Team-Based CASE — Phase 47 UAT with Live Compounds
+**Current focus:** v4.0 Team-Based CASE — Phase 48 Integration Hygiene complete
 
 ## Current Position
 
-**Milestone**: v4.0 Team-Based CASE — Phases 41-47
-**Phase**: 47 — UAT with Live Compounds (ready to execute)
-**Plan**: Not started (2 plans: live Ibuprofen CASE run, performance comparison report)
-**Status**: Ready for Phase 47 — all prerequisite phases complete (41-46 + 46.1)
-**Last activity**: 2026-02-18 — Phase 46.1 complete, transitioning to Phase 47
+**Milestone**: v4.0 Team-Based CASE — Phases 41-48
+**Phase**: 48 — Integration Hygiene & Tech Debt (complete)
+**Plan**: All 2 plans complete
+**Status**: Phase 48 complete — all v4.0 phases done (41-48 + 46.1), ready for phase verification
+**Last activity**: 2026-02-18 — Phase 48 executed (DA relay, stale paths, VERIFICATION.md files)
 
-Progress: [##########################░░░░░░░░░░░░░░░] 6/7 phases (+46.1)
+Progress: [########################################] 8/8 phases (+46.1)
 
 ## Completed Milestones
 
@@ -31,7 +31,7 @@ Progress: [##########################░░░░░░░░░░░░░░�
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 73 across 6 milestones (+ 12 in v4.0)
+- Total plans completed: 73 across 6 milestones (+ 14 in v4.0)
 - v3.0: 7 phases, 21 plans, 51 commits, 2 days
 - Total execution time: ~78.2 hours
 
@@ -54,6 +54,13 @@ Decisions are logged in PROJECT.md Key Decisions table.
 ### Roadmap Evolution
 
 - Phase 46.1 inserted after Phase 46: Agent Aromatic Ring Awareness (URGENT)
+
+## Accumulated Decisions (Phase 48)
+
+- **48-01:** DA relay covers both [DA-APPROVED] and [DA-BLOCKED] paths — completeness over just the happy path
+- **48-01:** No structural changes to case.md steps — all edits are surgical insertions/replacements within existing steps
+- **48-02:** Phase 46.1 verified as PASSED (4/4) through retrospective evidence from SUMMARY + UAT
+- **48-02:** Phase 47 honestly marked PARTIAL (3/5) — SC-1 rank #4, SC-4 skipped
 
 ## Accumulated Decisions (Phase 46.1)
 
@@ -104,8 +111,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-02-18
-Stopped at: Phase 46.1 complete, ready to execute Phase 47 UAT
+Stopped at: Phase 48 complete, ready for phase verification and milestone completion
 Resume file: None
 
 ---
-*Last updated: 2026-02-18 after Phase 46.1 -> 47 transition*
+*Last updated: 2026-02-18 after Phase 48 execution*
