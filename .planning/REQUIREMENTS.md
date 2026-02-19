@@ -10,9 +10,9 @@ Requirements for fragment library milestone. Each maps to roadmap phases.
 ### Fragment Infrastructure
 
 - [x] **FRAG-01**: Fragment database schema v7 with `ssc` and `ssc_bitset` tables in separate `lucy-ng-fragments.db`
-- [ ] **FRAG-02**: SSC extraction pipeline extracts substructure-subspectrum correlations from 928K compounds using BFS sphere fragmentation with bond-preservation rules
+- [x] **FRAG-02**: SSC extraction pipeline extracts substructure-subspectrum correlations from 928K compounds using BFS sphere fragmentation with bond-preservation rules
 - [x] **FRAG-03**: Extraction pipeline supports checkpointing and resume for multi-hour runs
-- [ ] **FRAG-04**: Fingerprint bin size (2 ppm) validated on 1K compound sample before full extraction
+- [x] **FRAG-04**: Fingerprint bin size (2 ppm) validated on 1K compound sample before full extraction
 
 ### Fragment Search
 
@@ -77,9 +77,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | FRAG-01 | Phase 49 | Complete |
-| FRAG-02 | Phase 50 | Pending |
+| FRAG-02 | Phase 50 | Complete |
 | FRAG-03 | Phase 50 | Complete |
-| FRAG-04 | Phase 50 | Pending |
+| FRAG-04 | Phase 50 | Complete |
 | SRCH-01 | Phase 51 | Pending |
 | SRCH-02 | Phase 51 | Pending |
 | SRCH-03 | Phase 51 | Pending |
