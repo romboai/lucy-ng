@@ -28,10 +28,12 @@ from __future__ import annotations
 
 from lucy_ng.fragments.db import FragmentDatabaseManager
 from lucy_ng.fragments.fingerprint import shifts_to_fingerprint
+from lucy_ng.fragments.lsd_formatter import DEFFFormatter
 from lucy_ng.fragments.models import SSCMatch, SSCRecord
 from lucy_ng.fragments.searcher import FragmentSearcher
 
 __all__ = [
+    "DEFFFormatter",
     "FragmentDatabaseManager",
     "FragmentSearcher",
     "SSCMatch",
