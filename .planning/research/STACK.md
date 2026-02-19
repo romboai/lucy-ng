@@ -1,603 +1,370 @@
-# Technology Stack: Multi-Agent CASE Coordination
+# Technology Stack: Fragment Library and SSC Search
 
 **Project:** lucy-ng
-**Milestone:** v4.0 Agent Teams for CASE
-**Researched:** 2026-02-16
+**Milestone:** v5.0 Fragment Library (SSC extraction, fingerprint indexing, spectral search)
+**Researched:** 2026-02-19
 **Confidence:** HIGH
 
 ---
 
-## Executive Summary
+## Context: What Already Exists
 
-lucy-ng v3.0 uses single autonomous CASE agent with post-hoc orchestrator intervention. v4.0 replaces this with 5-agent collaborative team for real-time self-correction.
+The existing stack (do not re-evaluate these):
 
-**Core finding:** Claude Code's agent teams feature (released Feb 5, 2026) provides all required coordination primitives. No new Python dependencies. Integration is orchestrator-level only—CLI tools and agent knowledge remain unchanged.
+| Component | Version | Status |
+|-----------|---------|--------|
+| Python | 3.10+ | Locked |
+| RDKit | 2025.9.4 | Installed, in use |
+| NumPy | 2.2.1 | Installed, in use |
+| SciPy | 1.17.0 | Installed, in use |
+| Pydantic v2 | 2.12.5 | Installed, in use |
+| Click | 8.1.8 | Installed, in use |
+| SQLite | stdlib | In use (schema v6, 928K compounds) |
+| tqdm | 4.67.3 | Installed, in use |
+| hosegen | git | Installed, in use |
 
-**Critical difference from v2.1 Task-based pattern:**
-- v2.1: Task() spawns isolated subagents that report back to parent only
-- v4.0: TeamCreate + Task(team_name) spawns teammates that message each other directly
-
----
-
-## Core Agent Teams Stack
-
-### Team Coordination APIs
-
-| API | Purpose | lucy-ng v4.0 Usage |
-|-----|---------|-------------------|
-| **TeamCreate** | Initialize team infrastructure | Coordinator calls once at workflow start. Creates `~/.claude/teams/case-{compound}/config.json` and `~/.claude/tasks/case-{compound}/` task list. |
-| **Task (with team_name)** | Spawn teammates | Coordinator spawns 4 specialists via `Task(team_name="case-{compound}", name="nmr-chemist", ...)`. Different from v3.0 isolated Task() calls. |
-| **SendMessage** | Inter-agent messaging | All agents use for direct communication. nmr-chemist → lsd-engineer (peak assignments), solution-analyst ↔ devils-advocate (ranking debates), coordinator → all (broadcasts). |
-| **TaskCreate** | Create shared work items | Coordinator populates task list with: peak-picking, statistical-detection, lsd-iteration-NN, ranking, final-analysis. |
-| **TaskList** | Query task state | All agents query to discover available work and check completion. Used by specialists to claim next task when idle. |
-| **TaskUpdate** | Modify task status/ownership | Specialists call when claiming (pending → in_progress), completing (in_progress → completed), or releasing blocked work. |
-
-**Version:** Released Feb 5, 2026 alongside Claude Opus 4.6
-**Feature flag:** `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (environment variable)
-**Documentation:** https://code.claude.com/docs/en/agent-teams (official)
-
-**Confidence:** HIGH (official docs, verified API parameters)
-
-### Message Types
-
-| Type | Purpose | lucy-ng Usage |
-|------|---------|---------------|
-| `"message"` | Direct 1-to-1 messaging | nmr-chemist sends peak assignments to lsd-engineer: `SendMessage(to="lsd-engineer", type="message", content="...")` |
-| `"broadcast"` | Team-wide announcements | Coordinator announces milestones: `SendMessage(type="broadcast", content="Iteration 3 complete, 47 solutions")` |
-| `"shutdown_request"` | Graceful termination | Coordinator sends when workflow complete or user stops. Teammates finalize work, save state, confirm ready. |
-| `"shutdown_response"` | Confirm shutdown readiness | Teammates respond to shutdown_request with approval or rejection + reason. |
-| `"plan_approval_request"` | Quality gate enforcement | NOT used in v4.0 MVP (no plan-before-implement workflow). Reserved for future if coordinator requires teammate approval before LSD changes. |
-| `"plan_approval_response"` | Approve/reject plans | NOT used in v4.0 MVP. |
-
-**Message delivery:** Automatic. SendMessage writes to `~/.claude/teams/{team}/inboxes/{agent}.json`. Recipient polls inbox on next turn.
-
-**Confidence:** HIGH (official docs, verified message flow)
-
-### Task Structure
-
-| Field | Type | Purpose | Example Value |
-|-------|------|---------|---------------|
-| `subject` | string | Task name/ID | `"lsd-iteration-03"` |
-| `description` | string | Task instructions | `"Run LSD iteration 3 with next HMBC batch (correlations 11-15)"` |
-| `status` | enum | Current state | `"pending"` / `"in_progress"` / `"completed"` |
-| `owner` | string | Assigned agent | `"lsd-engineer"` or `null` if unclaimed |
-| `dependencies` | array | Prerequisite tasks | `["peak-picking", "statistical-detection"]` |
-
-**Storage:** `~/.claude/tasks/{team-name}/{task-id}.json`
-**Locking:** File-based locking prevents race conditions when multiple agents claim same task.
-
-**Confidence:** HIGH (official docs, verified task schema)
-
-### Team Configuration
-
-| Setting | Value | Rationale |
-|---------|-------|-----------|
-| `teammateMode` | `"auto"` (default) | Uses tmux split panes if available (visual monitoring of 5 agents), falls back to in-process if not. No forced tmux prevents setup friction. |
-| `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | `"1"` | Required environment variable to enable feature. Documented in case.md orchestrator setup. |
-| Delegate mode | Enabled for coordinator | Restricts coordinator to coordination-only tools (TeamCreate, SendMessage, TaskCreate, TaskUpdate). Prevents coordinator from doing CASE work—only teammates execute. |
-| Permission inheritance | From coordinator session | Teammates start with coordinator's permission mode. If coordinator runs `--dangerously-skip-permissions`, all teammates inherit. Can change per-teammate after spawn. |
-| Model per agent | All opus (v4.0) | All agents need full reasoning for NMR/chemistry domain. No sonnet variants—CASE errors expensive (wasted LSD iterations). |
-
-**Confidence:** HIGH (official docs, verified configuration options)
+The fragment library milestone adds capabilities on top of this stack. **No existing dependencies are changed or removed.**
 
 ---
 
-## Agent Definitions Required
+## New Capabilities Required
 
-### Coordinator (Team Lead)
+The fragment library milestone needs to:
 
-**File:** `~/.claude/agents/lucy-case-coordinator.md`
-
-**Role:** CASE workflow orchestration via team coordination, NOT execution
-
-**Tools allowed:** TeamCreate, SendMessage, TaskCreate, TaskUpdate, TaskList, Read, Glob
-
-**Tools forbidden:** Bash (no lucy CLI execution), Write (no LSD file writing)
-
-**Why delegate mode:** Without it, coordinator implements tasks itself instead of delegating. Explicit tool restriction forces delegation-only workflow.
-
-**Responsibilities:**
-- Initialize team with TeamCreate(name="case-{compound}")
-- Spawn 4 specialists via Task(team_name="case-{compound}", name="...", agent_type="...")
-- Create task sequence: peak-picking → statistical-detection → lsd-iteration-01 → ... → ranking → final-analysis
-- Broadcast iteration milestones: "Iteration N complete, X solutions, Y constraints added"
-- Monitor task completion via TaskList, reassign if stuck
-- Send shutdown_request when workflow complete or user stops
-- Synthesize final results from solution-analyst + devils-advocate reports
-
-**Key knowledge:** Workflow structure, task dependencies, milestone definitions. NO NMR domain knowledge (delegates all chemistry reasoning).
-
-**Confidence:** HIGH (pattern adapted from GSD gsd-orchestrator, agent teams docs)
-
-### NMR Chemist (Specialist)
-
-**File:** `~/.claude/agents/lucy-nmr-chemist.md`
-
-**Role:** Peak picking, quality assessment, multiplicity determination
-
-**Tools:** Bash (lucy CLI), Read, Write, TaskList, SendMessage
-
-**Knowledge source:** Sections 2-3 from current lucy-case-agent.md (NMR background, spectral quality, peak picking)
-
-**Responsibilities:**
-- Claim peak-picking task from shared list
-- Run lucy pick 1d/hsqc/hmbc with quality-adjusted thresholds
-- Detect DEPT-135 negative peaks (CH2), disambiguate CH vs CH3
-- Assess spectral quality (SNR, digital resolution), adjust thresholds
-- Run statistical detection (hybridisation, neighbours, hhb, grouping)
-- Send findings to lsd-engineer via SendMessage(to="lsd-engineer", type="message", content="Peak assignments: ...")
-- Flag ambiguities (overlapping signals, low SNR) to coordinator
-
-**Output format:** Structured message with peak assignments + detection results + quality flags
-
-**Confidence:** HIGH (knowledge extraction from validated lucy-case-agent.md)
-
-### LSD Engineer (Specialist)
-
-**File:** `~/.claude/agents/lucy-lsd-engineer.md`
-
-**Role:** LSD file construction, constraint translation, iteration execution
-
-**Tools:** Bash (lucy CLI, LSD), Read, Write, TaskList, SendMessage
-
-**Knowledge source:** Sections 3-4 from current lucy-case-agent.md (LSD command reference, statistical detection protocol, incremental HMBC strategy)
-
-**Responsibilities:**
-- Claim lsd-iteration-NN tasks from shared list
-- Receive peak assignments + statistical detection results from nmr-chemist (via inbox or shared file)
-- Translate to LSD constraints: MULT, HSQC, HMBC, BOND, PROP
-- Apply chemistry-first hierarchy when detection conflicts with NMR
-- Write LSD file to analysis/iteration_NN/compound.lsd
-- Run LSD from iteration directory, convert solutions with outlsd 5
-- Send solution count + diagnostic summary to coordinator
-- Respond to diagnostic queries from devils-advocate
-- Update CASE-PROGRESS.md after EVERY iteration (append-only)
-
-**Critical constraint:** Must preserve auxiliary constraints (badlist DEFF NOT, signal grouping, heteroatom PROP) across iterations. v3.0 UAT showed agent drops these when rebuilding LSD file—v4.0 devils-advocate monitors for this.
-
-**Confidence:** HIGH (knowledge extraction from validated lucy-case-agent.md, UAT findings documented)
-
-### Solution Analyst (Specialist)
-
-**File:** `~/.claude/agents/lucy-solution-analyst.md`
-
-**Role:** 13C prediction ranking, confidence scoring, final structure selection
-
-**Tools:** Bash (lucy CLI), Read, Write, TaskList, SendMessage
-
-**Knowledge source:** Sections 6-7 from current lucy-case-agent.md (Ranking algorithm, confidence scoring)
-
-**Responsibilities:**
-- Claim ranking task when solution count ≤ 10 (task dependency: lsd-iteration-NN complete + solution_count ≤ 10)
-- Run lucy lsd rank solutions.smi --shifts "..."
-- Analyze two-tier ranking: match count (descending) → MAE (ascending)
-- Compute per-atom confidence: resolution + HOSE quality + correlations
-- Derive overall structure confidence: HIGH/MEDIUM/LOW
-- Send top candidates to devils-advocate for critique via SendMessage
-- Write final recommendation to analysis/final_results.md
-
-**Key insight:** Two-tier ranking means 13/13 matches with MAE 2.5 beats 11/13 matches with MAE 1.8. Completeness > precision. Devils-advocate validates this logic.
-
-**Confidence:** HIGH (algorithm validated in v3.0 UAT, ranking logic proven)
-
-### Devils Advocate (Specialist)
-
-**File:** `~/.claude/agents/lucy-devils-advocate.md`
-
-**Role:** Challenge assumptions, detect loops, prevent premature convergence
-
-**Tools:** Read, TaskList, SendMessage (NO execution tools—advisory only)
-
-**Knowledge source:** Loop detection patterns from current case.md orchestrator (detect_loops, diagnose steps), UAT learnings
-
-**Responsibilities:**
-- Monitor all task completions via TaskList
-- Read CASE-PROGRESS.md after each lsd-iteration-NN task completes
-- Detect loop patterns:
-  - ELIM thrashing (ELIM added/removed repeatedly)
-  - Zero-solution loop (3+ consecutive iterations with 0 solutions)
-  - Solution explosion (3+ iterations with >100 solutions, <10% reduction each)
-  - Constraint churning (high add/remove activity without convergence)
-- Challenge solution-analyst rankings: "Why does rank #1 have lower match count than rank #2?"
-- Question lsd-engineer constraint choices: "Why BOND for second oxygen instead of PROP? (Pitfall 6)"
-- Check for dropped constraints: "Iteration 1 had 6 DEFF NOT patterns, iteration 2 has 0—why?"
-- Send diagnostic advisories to coordinator via SendMessage when patterns detected
-- Challenge coordinator decisions: "Are we rushing to ranking with 47 solutions? Standard is ≤10."
-
-**Key knowledge:** Loop patterns, UAT failure modes (badlist dropped, grouped notation dropped, PROP not used), chemistry pitfalls (Pitfall 6: over-constraining heteroatoms, Pitfall 7: H budget diagnosis order)
-
-**Confidence:** HIGH (pattern extraction from validated case.md orchestrator, UAT findings)
+1. **Extract SSCs** — enumerate atom-environment fragments from 928K compounds, pair each fragment with its observed 13C subspectrum
+2. **Build fingerprints** — encode each SSC's subspectrum as a 256-bit bitset (2 ppm bins)
+3. **Index fingerprints** — store 24M+ SSC records in SQLite with binary fingerprints for fast retrieval
+4. **Screen fragments** — match experimental spectrum against SSC library via Boolean AND bitset pre-screening
+5. **Fine matching** — score surviving SSCs by DEV/AVGDEV spectral deviation
+6. **Convert to LSD constraints** — translate matching fragments to DEFF/FEXP goodlist commands
 
 ---
 
-## Orchestrator Integration
+## Recommended Stack Additions
 
-### case.md Skill Changes (v3.0 → v4.0)
+### Core: No New Python Dependencies
 
-**File:** `~/.claude/commands/lucy-ng/case.md`
+**Finding:** All required operations are achievable with the existing stack. No new `pip install` required.
 
-**v3.0 pattern (Task-based single agent):**
+| Operation | Implementation | Why No New Dependency |
+|-----------|---------------|----------------------|
+| Fragment extraction (atom environments) | `rdkit.Chem.FindAtomEnvironmentOfRadiusN` + `PathToSubmol` | Already in RDKit 2025.9.4 |
+| Bitset fingerprints (256-bit) | `numpy.ndarray` of `uint8[32]` with bitwise ops | NumPy 2.2.1 supports vectorized bitwise AND |
+| SSC storage | SQLite BLOB column for fingerprint bytes | Existing schema extension |
+| Bitset screening | `numpy.bitwise_and` on (N, 32) array | Vectorized, no extra lib needed |
+| DEFF fragment file generation | Python string formatting + file I/O | No new dependency |
+| Parallel extraction pipeline | `concurrent.futures.ProcessPoolExecutor` | Python stdlib |
+
+**Confidence:** HIGH — RDKit 2025.9.4 includes `FindAtomEnvironmentOfRadiusN`, `PathToSubmol`, `MolToSmiles`, all verified in official docs. NumPy 2.2.1 bitwise operations confirmed in official NumPy documentation.
+
+---
+
+### Schema Extension: SQLite Fragment Library Tables
+
+The existing SQLite database (schema v6) gets two new tables. Schema version bumps to v7.
+
+#### Table: `ssc_fragments`
+
+Stores the substructure side of each SSC — the atom-environment subgraph as SMILES.
+
+```sql
+CREATE TABLE ssc_fragments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    compound_id INTEGER NOT NULL,     -- FK to compounds.id
+    center_atom_idx INTEGER NOT NULL, -- atom index in parent compound
+    radius INTEGER NOT NULL,          -- sphere radius (1-4)
+    fragment_smiles TEXT NOT NULL,    -- canonical SMILES of fragment (no explicit H)
+    atom_count INTEGER NOT NULL,      -- number of heavy atoms in fragment
+    FOREIGN KEY (compound_id) REFERENCES compounds(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_ssc_fragments_smiles ON ssc_fragments(fragment_smiles);
+CREATE INDEX idx_ssc_fragments_compound ON ssc_fragments(compound_id);
+```
+
+**Rationale:** `fragment_smiles` as the lookup key allows deduplication — identical substructures from different compounds map to the same fragment. Indexing on SMILES enables grouping all SSCs by substructure.
+
+#### Table: `ssc_spectra`
+
+Stores the subspectrum side — the observed 13C shifts for each SSC, plus the 256-bit bitset fingerprint for fast screening.
+
+```sql
+CREATE TABLE ssc_spectra (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fragment_id INTEGER NOT NULL,     -- FK to ssc_fragments.id
+    shift_ppm REAL NOT NULL,          -- 13C shift for this carbon in the fragment
+    fingerprint BLOB NOT NULL,        -- 32 bytes = 256 bits, 2 ppm bins, 0-511 ppm
+    signal_count INTEGER NOT NULL,    -- number of 13C signals in this subspectrum
+    FOREIGN KEY (fragment_id) REFERENCES ssc_fragments(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_ssc_spectra_fragment ON ssc_spectra(fragment_id);
+```
+
+**Alternative design considered:** Single denormalized `ssc` table with all shifts comma-joined. Rejected because normalized schema enables:
+- Efficient per-signal queries for DEV/AVGDEV scoring
+- Easier schema migration if more spectral dimensions added (multiplicity, 1H shifts)
+- Standard relational integrity
+
+**Fingerprint encoding:** 256 bits = 32 bytes stored as BLOB. Each bit corresponds to a 2 ppm bin covering the 13C range 0-511 ppm (256 bins x 2 ppm/bin). Bit N is set if the subspectrum has a signal within bin N. Construction: `bin_idx = int(shift_ppm / 2.0); fingerprint[bin_idx // 8] |= (1 << (bin_idx % 8))`.
+
+**Confidence:** HIGH — 256-bit / 2 ppm bin design is from Sherlock paper (PMC9920390), confirmed: "each fragment has a bit string representation to indicate whether a given chemical shift in the assigned subspectrum exists."
+
+---
+
+## Implementation Patterns
+
+### Pattern 1: Fragment Extraction (SSC Construction)
+
+**Tool:** `rdkit.Chem.FindAtomEnvironmentOfRadiusN` + `Chem.PathToSubmol`
+
 ```python
-Task(
-  agent_type="lucy-case-agent",
-  model="opus",
-  instructions="Perform CASE for compound at {path} with formula {formula}. Write CASE-PROGRESS.md after EVERY iteration."
-)
-# Wait for agent return
-# Read CASE-PROGRESS.md
-# Detect loops post-hoc
-# Re-spawn agent with advisory if loop detected
+from rdkit import Chem
+
+def extract_ssc_for_atom(mol: Chem.Mol, atom_idx: int, radius: int) -> str | None:
+    """Extract atom-environment fragment SMILES at given radius."""
+    env = Chem.FindAtomEnvironmentOfRadiusN(mol, radius, atom_idx)
+    if not env:
+        return None
+    amap: dict[int, int] = {}
+    submol = Chem.PathToSubmol(mol, env, atomMap=amap)
+    if atom_idx not in amap:
+        return None
+    return Chem.MolToSmiles(submol, rootedAtAtom=amap[atom_idx], canonical=True)
 ```
 
-**v4.0 pattern (agent teams):**
+**Why this approach over BRICS or other fragmentation:** BRICS breaks retrosynthetic bonds to produce synthetically accessible fragments. SSC extraction needs atom-environment spheres centered on each NMR-observed carbon — structurally correlated with HOSE codes, not synthetic accessibility. `FindAtomEnvironmentOfRadiusN` produces exactly the radius-N neighborhood needed.
+
+**Key constraint:** Use molecules WITHOUT explicit hydrogens (same rule as HOSE code generation — see CLAUDE.md "Critical Architecture Decisions"). Consistent with existing database generation.
+
+### Pattern 2: Bitset Fingerprint Construction
+
+**Tool:** NumPy uint8 array, 32 bytes = 256 bits
+
 ```python
-# Step 1: Initialize team
-TeamCreate(
-  name="case-{compound_name}",
-  description="CASE workflow for {compound_name} ({formula})"
-)
+import numpy as np
 
-# Step 2: Spawn coordinator as team lead
-Task(
-  team_name="case-{compound_name}",
-  name="coordinator",
-  agent_type="lucy-case-coordinator",
-  model="opus",
-  instructions="Orchestrate CASE workflow. Spawn specialists: nmr-chemist, lsd-engineer, solution-analyst, devils-advocate. Create task sequence. Monitor progress. Synthesize results."
-)
+def shifts_to_fingerprint(shifts: list[float]) -> bytes:
+    """Encode list of 13C shifts as 256-bit fingerprint (2 ppm bins)."""
+    fp = np.zeros(32, dtype=np.uint8)
+    for shift in shifts:
+        if 0.0 <= shift < 512.0:
+            bin_idx = int(shift / 2.0)   # bin 0 = 0-2 ppm, bin 255 = 510-512 ppm
+            fp[bin_idx // 8] |= np.uint8(1 << (bin_idx % 8))
+    return fp.tobytes()
 
-# Coordinator spawns specialists internally via Task(team_name, name)
-# Coordinator manages task list via TaskCreate/TaskUpdate
-# Specialists communicate via SendMessage
-# Coordinator waits for all tasks complete before returning
+def fingerprint_matches_query(fragment_fp: bytes, query_fp: bytes) -> bool:
+    """Boolean AND screening: all fragment bits must be set in query."""
+    fp_array = np.frombuffer(fragment_fp, dtype=np.uint8)
+    q_array = np.frombuffer(query_fp, dtype=np.uint8)
+    # Fragment is candidate if ALL its set bits are present in query
+    return bool(np.all((fp_array & q_array) == fp_array))
 ```
 
-**Key differences:**
-- v3.0: Skill spawns agent directly → monitors externally → intervenes post-hoc
-- v4.0: Skill spawns coordinator → coordinator spawns specialists → real-time self-correction via devils-advocate
+**Vectorized screening over all SSCs:**
 
-**Why better:** Loop detection happens in real-time (devils-advocate monitors CASE-PROGRESS.md after each iteration), not after 3-5 wasted iterations.
-
-**Confidence:** HIGH (pattern from official agent teams docs, adapted to CASE workflow)
-
-### Task Dependency DAG
-
-```
-peak-picking (no deps)
-  ↓
-statistical-detection (depends: peak-picking)
-  ↓
-lsd-iteration-01 (depends: statistical-detection)
-  ↓
-lsd-iteration-02 (depends: lsd-iteration-01)
-  ↓
-lsd-iteration-03 (depends: lsd-iteration-02)
-  ↓
-... (conditional: while solution_count > 10 AND iterations < 10)
-  ↓
-ranking (depends: lsd-iteration-NN, condition: solution_count ≤ 10)
-  ↓
-final-analysis (depends: ranking)
-```
-
-**Coordinator responsibilities:**
-- Create all tasks at start (or dynamically as iterations progress)
-- Set dependencies correctly
-- Monitor TaskList to detect stuck tasks
-- Send broadcasts for milestone transitions
-
-**Specialist responsibilities:**
-- Query TaskList for available work (status=pending, deps satisfied, owner=null)
-- Claim task via TaskUpdate(id, owner=self, status=in_progress)
-- Execute work
-- Report completion via TaskUpdate(id, status=completed) + SendMessage to relevant agents
-
-**Confidence:** HIGH (task-based coordination pattern from official docs)
-
----
-
-## Architecture Patterns
-
-### Pattern 1: Task-Based Coordination (Recommended for v4.0)
-
-**How it works:**
-1. Coordinator creates tasks for each workflow stage
-2. Specialists claim tasks from shared list when ready
-3. Task dependencies prevent out-of-order execution
-4. TaskList provides shared visibility of workflow state
-
-**Example:**
 ```python
-# Coordinator creates tasks
-TaskCreate(subject="peak-picking", description="...", dependencies=[])
-TaskCreate(subject="lsd-iteration-01", description="...", dependencies=["peak-picking", "statistical-detection"])
-TaskCreate(subject="ranking", description="...", dependencies=["lsd-iteration-NN"], condition="solution_count <= 10")
-
-# Specialists query and claim
-tasks = TaskList()  # nmr-chemist queries
-available = [t for t in tasks if t.status == "pending" and t.owner is None and deps_satisfied(t)]
-claim = available[0]
-TaskUpdate(claim.id, owner="nmr-chemist", status="in_progress")
-# Execute work
-TaskUpdate(claim.id, status="completed")
+def screen_fragments(db_fingerprints: np.ndarray, query_fp: bytes) -> np.ndarray:
+    """
+    Vectorized Boolean AND screening.
+    db_fingerprints: shape (N, 32) uint8 — all N SSC fingerprints loaded into memory
+    query_fp: 32 bytes — experimental spectrum fingerprint
+    Returns: boolean mask of candidates that pass screening
+    """
+    q_array = np.frombuffer(query_fp, dtype=np.uint8)  # shape (32,)
+    # Broadcasting: for each row, check (row & query) == row
+    screened = (db_fingerprints & q_array) == db_fingerprints  # (N, 32) bool
+    return screened.all(axis=1)  # (N,) bool — True means candidate passed
 ```
 
-**Advantages:**
-- Self-documenting workflow state (TaskList shows pending/complete)
-- Automatic dependency resolution (blocked tasks unblock when deps complete)
-- Graceful resumption (if coordinator crashes, task state persists in filesystem)
-- Audit trail (task completion timestamps in JSON files)
+**Memory estimate:** 24.5M SSCs x 32 bytes = 784 MB for in-memory screening array. Acceptable for a one-time `lucy fragment build` operation; for `lucy fragment search`, load only SSCs matching atom count <= query carbon count first to reduce the array size, then screen.
 
-**When to use:** Default pattern for CASE. Iterative workflows with clear stage dependencies.
+**Confidence:** HIGH — NumPy 2.2.1 bitwise operations on uint8 arrays verified in official NumPy documentation. Vectorized broadcasting pattern is standard NumPy practice.
 
-**Confidence:** HIGH (official docs, verified task-based pattern)
+### Pattern 3: Fine Matching (DEV/AVGDEV)
 
-### Pattern 2: Direct Messaging Coordination (Alternative)
+After Boolean AND screening eliminates non-candidates, score survivors by spectral deviation.
 
-**How it works:**
-1. Coordinator spawns all teammates at start
-2. Sends instructions via SendMessage one-by-one
-3. Teammates report results via reply messages
-4. No task list—coordinator tracks state internally
+**DEV threshold (default: 3.0 ppm):** Maximum allowed deviation for any individual signal.
+**AVGDEV threshold (default: 2.0 ppm):** Average deviation across all matched signals.
 
-**Advantages:**
-- Simpler for short workflows (3-4 steps)
-- No task state management overhead
-- More flexible for dynamic workflows (branching logic)
-
-**Disadvantages:**
-- No shared visibility (coordinator is bottleneck)
-- No automatic dependency resolution
-- Hard to resume if coordinator crashes (no persistent state)
-
-**When to use:** Quick investigations (dereplication only, predict only). NOT recommended for full CASE (10+ iterations, complex state).
-
-**Confidence:** MEDIUM (pattern mentioned in docs but not detailed)
-
-### Pattern 3: Broadcast + Self-Coordination (Future)
-
-**How it works:**
-1. Coordinator broadcasts milestone announcements
-2. Specialists monitor broadcasts, self-coordinate via direct SendMessage
-3. No central task queue—specialists decide next work autonomously
-
-**Advantages:**
-- Maximum autonomy for specialists
-- Scales to larger teams (no central bottleneck)
-- Resilient to coordinator failure
-
-**Disadvantages:**
-- Complex coordination logic in each specialist
-- Risk of duplicate work or missed work
-- Hard to debug (no central state view)
-
-**When to use:** NOT for v4.0 MVP. Reserved for future multi-compound parallel CASE where multiple coordinators run simultaneously.
-
-**Confidence:** LOW (speculative pattern, not documented)
-
----
-
-## What NOT to Use
-
-### ❌ Nested Teams (Teammates Spawning Teammates)
-
-**API limitation:** Only team lead can spawn teammates. Teammates cannot call TeamCreate or spawn sub-teammates.
-
-**lucy-ng implication:** Coordinator must spawn all 4 specialists directly. lsd-engineer cannot spawn diagnostic sub-specialist.
-
-**Workaround:** If diagnostic needed, lsd-engineer sends message to coordinator requesting diagnostic spawn. Coordinator spawns 5th teammate (lucy-diagnostic) and connects lsd-engineer ↔ lucy-diagnostic via messaging.
-
-**Confidence:** HIGH (explicit limitation in official docs)
-
-### ❌ Plan Approval Gates (v4.0)
-
-**Feature:** SendMessage(type="plan_approval_request") + plan_approval_response
-
-**Why not use:** CASE iterations are exploratory—require rapid cycle time. Plan approval adds round-trip delay (lsd-engineer plans → coordinator reviews → approve/reject → lsd-engineer implements). Net loss: slows iteration without clear benefit.
-
-**Alternative:** Devils-advocate critiques post-facto. LSD iteration executes immediately, devils-advocate reviews CASE-PROGRESS.md and challenges decisions. If mistake detected, next iteration corrects.
-
-**Confidence:** HIGH (design decision based on CASE workflow analysis)
-
-### ❌ Broadcast for Routine Updates
-
-**Token cost:** Broadcast scales with team size. 5 agents × broadcast = 5× message cost vs direct message.
-
-**lucy-ng guideline:** Use SendMessage(to="specific-agent") for routine updates. Reserve broadcast ONLY for critical announcements:
-- "Zero solutions detected, all agents pause for diagnosis"
-- "User requested stop, begin shutdown sequence"
-- "Iteration 5 complete, solution count now 12—prepare for ranking"
-
-**Confidence:** HIGH (official docs warn about broadcast cost)
-
-### ❌ In-Process Mode (Forced)
-
-**Setting:** `teammateMode: "in-process"` forces all teammates into main terminal, no visual separation.
-
-**Why not:** User cannot see specialist activity. Debugging difficult when loop occurs. No way to inspect individual agent state.
-
-**Recommended:** `teammateMode: "auto"` (uses tmux if available, fallback in-process). User can Shift+Up/Down to switch between agents in-process mode, or see all agents in split panes with tmux.
-
-**Confidence:** HIGH (official docs, usability analysis)
-
-### ❌ Single Model Tier (All Sonnet)
-
-**Cost consideration:** Sonnet cheaper than Opus. Why not use sonnet for simple tasks?
-
-**CASE reality:** NMR/chemistry reasoning is complex. Errors = wasted LSD iterations (15-30 min per iteration × 3-5 wasted = 45-150 min). Sonnet error rate higher than opus for domain reasoning.
-
-**Token cost vs time cost:** Extra opus cost (~$3-6 per run) < cost of rework (45-150 min × user hourly value).
-
-**Decision:** All agents use opus. Token cost justified by avoiding iteration rework.
-
-**Confidence:** HIGH (domain complexity analysis, UAT learnings)
-
----
-
-## Team State Management
-
-| State Location | What's Stored | Who Reads | Who Writes |
-|----------------|---------------|-----------|------------|
-| `~/.claude/teams/{team}/config.json` | Team member list (names, agent IDs, types) | All agents (discover teammates via Read) | TeamCreate (init), Task(team_name) (add member) |
-| `~/.claude/tasks/{team}/` | Task definitions (subject, status, deps, owner) | All agents (via TaskList) | Coordinator (via TaskCreate), Specialists (via TaskUpdate) |
-| `~/.claude/teams/{team}/inboxes/{agent}.json` | Pending messages for agent | Each agent (inbox polling on each turn) | SendMessage callers |
-| `analysis/CASE-PROGRESS.md` | Iteration history, diagnostics | All agents (via Read) | lsd-engineer (append per iteration) |
-| `analysis/iteration_NN/compound.lsd` | LSD constraint definitions | lsd-engineer (current), solution-analyst (review), devils-advocate (audit) | lsd-engineer (Write) |
-| `analysis/final_results.md` | Top candidates, confidence, recommendation | Coordinator (synthesize), User (final output) | solution-analyst (Write) |
-
-**Critical insight:** Agent teams use filesystem for state, not in-memory. Enables:
-- Session resumption (coordinator crashes, re-spawn reads task state from disk)
-- Parallel inspection (user can `cat ~/.claude/tasks/{team}/task-03.json` to debug)
-- Audit trail (task completion timestamps in filesystem metadata)
-- Human monitoring (`tail -f analysis/CASE-PROGRESS.md` works during team execution)
-
-**Confidence:** HIGH (official docs, verified file locations)
-
----
-
-## Token Cost Model
-
-| Agent | Turns per Run | Avg Context per Turn | Total Tokens (Estimated) |
-|-------|---------------|----------------------|--------------------------|
-| Coordinator | 20-30 (task mgmt, broadcasts) | 5k (no NMR domain, coordination only) | 100-150k |
-| NMR Chemist | 5-8 (peak picking, quality, detection) | 15k (spectra summaries + detection results) | 75-120k |
-| LSD Engineer | 10-15 (iterations) | 20k (CASE-PROGRESS + LSD files + domain knowledge) | 200-300k |
-| Solution Analyst | 2-3 (ranking, confidence) | 15k (ranking results + top candidates) | 30-45k |
-| Devils Advocate | 10-20 (loop checks, challenges) | 8k (read-only, no execution, pattern matching) | 80-160k |
-| **TOTAL** | | | **485-775k tokens/run** |
-
-**Comparison to v3.0 single agent:**
-- v3.0: ~300-400k tokens/run (single agent, 10 iterations, post-hoc supervisor interventions)
-- v4.0: ~485-775k tokens/run (team, same 10 iterations, real-time self-correction)
-- **Overhead:** 60-95% increase
-- **Benefit:** Zero supervisor interventions (loop detection built-in), faster convergence (devils-advocate prevents thrashing), better quality (peer review at each step)
-
-**Cost justification:** LSD iteration rework is expensive (15-30 min per iteration × 3-5 wasted iterations = 45-150 min). Agent team overhead (185-375k extra tokens = ~$3.70-7.50 at opus pricing $0.02/1k input) prevents 1-2 wasted iterations → net time savings of 30-60 min.
-
-**Confidence:** MEDIUM (estimated based on v3.0 token usage extrapolated to 5 agents)
-
----
-
-## Installation
-
-```bash
-# 1. Enable agent teams feature
-export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
-
-# Or add to ~/.claude/settings.json:
-{
-  "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
-  },
-  "teammateMode": "auto"
-}
-
-# 2. Create agent definitions directory (if not exists)
-mkdir -p ~/.claude/agents
-
-# 3. Write 5 agent definition files:
-# - lucy-case-coordinator.md (team lead, delegation-only)
-# - lucy-nmr-chemist.md (peak picking, quality, detection)
-# - lucy-lsd-engineer.md (LSD files, iterations, constraints)
-# - lucy-solution-analyst.md (ranking, confidence, recommendations)
-# - lucy-devils-advocate.md (loop detection, challenges, quality gates)
-
-# 4. Update case.md orchestrator skill
-# Change from Task(agent_type) to TeamCreate + Task(team_name, name)
-
-# 5. Verify setup
-claude --version  # Should be >= Feb 5 2026 release
-echo $CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS  # Should print "1"
-
-# No new Python packages needed—agent teams are built into Claude Code
+```python
+def fine_match_ssc(fragment_shifts: list[float], query_shifts: list[float],
+                   dev_threshold: float = 3.0, avgdev_threshold: float = 2.0) -> float | None:
+    """
+    Match fragment subspectrum against query spectrum.
+    Returns AVGDEV if within thresholds, None if rejected.
+    """
+    deviations = []
+    for frag_shift in fragment_shifts:
+        # Find closest query shift
+        closest_dev = min(abs(frag_shift - q) for q in query_shifts)
+        if closest_dev > dev_threshold:
+            return None  # Individual signal exceeds DEV threshold
+        deviations.append(closest_dev)
+    avg_dev = sum(deviations) / len(deviations)
+    if avg_dev > avgdev_threshold:
+        return None
+    return avg_dev
 ```
 
-**Confidence:** HIGH (setup steps from official docs)
+**Source:** DEV/AVGDEV thresholds from Sherlock paper examples (PMC9920390): "DEV: 3 ppm, AVGDEV: 2 ppm" as working defaults. These match the +/- 2 ppm detection window used throughout existing detection code.
+
+### Pattern 4: DEFF/FEXP LSD Constraint Generation
+
+LSD uses external fragment files. `DEFF` maps a fragment number to a file path. `FEXP` combines fragments with Boolean logic. Confirmed from LSD manual (nuzillard.github.io/LSD/MANUAL_ENG.html).
+
+```
+; LSD goodlist fragment constraints
+DEFF F1 "fragments/frag_001.lsd"
+DEFF F2 "fragments/frag_002.lsd"
+FEXP "F1 AND F2"
+```
+
+Fragment files use standard LSD atom notation. For each matching SSC, the fragment substructure is serialized as an LSD atom definition using the existing MULT/BOND notation the lsd-engineer agent already knows.
+
+**Implementation strategy:** Generate fragment files alongside the main LSD file in the iteration directory. The `lucy fragment search` command outputs both the fragment files and the DEFF/FEXP lines to add to the LSD input.
+
+**Confidence:** MEDIUM — DEFF/FEXP syntax confirmed from LSD manual. Fragment file format (atom notation inside fragment files) requires verification against LSD manual appendix or test case before implementation.
 
 ---
 
-## Version Compatibility
+## Extraction Pipeline Architecture
 
-| Component | Version | Notes |
-|-----------|---------|-------|
-| Claude Code | ≥ Feb 5 2026 release | Agent teams released alongside Opus 4.6 |
-| Claude model | claude-opus-4-6 | Agent teams require opus model tier |
-| CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS | `"1"` | Must be set in environment or settings.json |
-| lucy-ng CLI | ≥ v3.0 | No CLI changes required—tools work identically in team context |
-| Existing agent definitions | DEPRECATED | lucy-case-agent.md (666 lines) NOT used in v4.0—knowledge split across 5 specialists |
-| Existing orchestrator | REPLACED | case.md orchestrator rewritten from Task() to TeamCreate + team-based Task() |
+### Build Pipeline (`lucy fragment build`)
 
-**Breaking change:** v3.0 → v4.0 requires:
-1. Replace single lucy-case-agent.md with 5 specialist agents
-2. Rewrite case.md orchestrator from Task(agent_type) to TeamCreate + Task(team_name)
-3. Add devils-advocate loop detection (replaces post-hoc supervisor pattern)
+One-time operation to populate `ssc_fragments` and `ssc_spectra` tables from existing 928K compounds.
 
-**Migration effort:** High (complete orchestrator rewrite). No backward compatibility (Task vs TeamCreate are different spawn mechanisms).
+**Verified prerequisite:** Database query confirms 23,994,980 of 24,063,169 shifts (99.7%) have `atom_index` populated. All 928,443 compounds have at least one indexed shift. SSC extraction from the full database is feasible without any data gaps.
 
-**Confidence:** HIGH (API differences verified against official docs)
+**Approach:** Batch processing with `concurrent.futures.ProcessPoolExecutor`
+
+```
+Stage 1: Read compounds from SQLite (id, smiles, shifts with atom_index)
+  | 928K compounds, 23.9M atom-indexed shifts
+Stage 2: [Parallel, 8 workers] For each compound:
+  a. Parse SMILES -> RDKit Mol (no explicit H)
+  b. For each carbon atom with known shift, extract fragment at radii 1-4
+  c. Build subspectrum: collect all shifts for atoms within the fragment
+  d. Compute 256-bit fingerprint from subspectrum shifts
+  e. Yield (compound_id, atom_idx, radius, fragment_smiles, shift_ppm, fingerprint)
+  | ~24M SSC records
+Stage 3: Deduplicate fragment_smiles (group SSCs by substructure)
+  | N unique fragments
+Stage 4: Batch INSERT to SQLite (executemany, 10K rows/batch)
+  | Populated ssc_fragments + ssc_spectra tables
+```
+
+**Parallelism:** Use `ProcessPoolExecutor` (not `ThreadPoolExecutor`) because RDKit SMILES parsing and fragment extraction are CPU-bound. `tqdm` already used in existing pipeline (stats_generator.py) — same pattern applies here.
+
+**Estimated runtime:** Existing HOSE stats generation processes 928K compounds in ~8 hours single-threaded. Parallel SSC extraction with 8 workers should complete in 2-3 hours. Acceptable for one-time build.
+
+**Radius strategy:** Extract radii 1-4 (not 1-6). Reasoning: radius 5-6 fragments are large enough that few compounds in the query will contain them — low search utility, high storage cost. This matches Sherlock's fragment library design (Wenk thesis confirms maximum radius was empirically tuned).
+
+**Confidence:** MEDIUM for radius cutoff — inferred from Sherlock's 24.5M SSC count. With 928K compounds x ~7 carbons/compound x 4 radii ~ 26M raw SSCs before deduplication, landing at Sherlock's 24.5M is plausible. Exact radius cutoff should be validated empirically.
+
+### Search Pipeline (`lucy fragment search`)
+
+Per-compound search during CASE workflow.
+
+```
+Input: experimental 13C shifts (list), molecular formula
+  |
+Step 1: Build query fingerprint from experimental shifts (256-bit)
+Step 2: Load candidate SSCs from SQLite
+  - Filter by atom_count <= compound carbon count (smaller fragments only)
+  - Load fingerprint BLOBs into numpy array (N, 32)
+Step 3: Vectorized Boolean AND pre-screening
+  - Result: candidates where (fragment_fp & query_fp) == fragment_fp
+Step 4: Load full subspectrum shifts for surviving candidates
+Step 5: Fine matching (DEV/AVGDEV) for each candidate
+Step 6: Rank survivors by AVGDEV ascending
+Step 7: Select top-K matching fragments (default K=5)
+Step 8: Generate DEFF fragment files + FEXP expression
+Output: fragment files + LSD constraint lines
+```
+
+---
+
+## What NOT to Add
+
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| FPSim2 | HDF5-based tool for Tanimoto similarity search. Overkill for Boolean AND screening; adds HDF5 dependency, changes storage format from SQLite. The SSC screening is Boolean AND (containment), not Tanimoto. | NumPy bitwise AND over SQLite-loaded arrays |
+| h5py / HDF5 | Separate binary storage for fingerprints adds complexity without benefit at 24M record scale. SQLite BLOB is sufficient and keeps single-file database architecture. | SQLite BLOB column in existing database |
+| BRICS fragmentation | Breaks retrosynthetic bonds. SSC extraction needs atom-environment spheres (radius-N neighborhoods), not synthetically motivated cuts. | `FindAtomEnvironmentOfRadiusN` + `PathToSubmol` |
+| scikit-fingerprints | General fingerprint library (Morgan, ECFP, etc.). SSC fingerprints are custom spectral bitsets (2 ppm bins), not molecular topological fingerprints. RDKit is already available. | Custom bitset construction with NumPy |
+| rdSubstructLibrary | Designed for SMARTS-based substructure screening of molecule libraries. The SSC search is spectral-match screening (not substructure queries). The library adds complexity without fitting the use case. | Direct SQLite queries + numpy bitset screening |
+| PostgreSQL or MongoDB | Sherlock uses these (MongoDB for SSC fragments, PostgreSQL for compounds). Lucy-ng is a single-user CLI tool. SQLite handles 24M+ rows efficiently with proper indexing. | SQLite with schema extension |
+| Numba / Cython | Premature optimization. NumPy vectorized bitwise AND on (N, 32) arrays is already SIMD-accelerated in numpy 2.2+. Profile first before adding compilation dependencies. | NumPy 2.2.1 vectorized bitwise ops |
 
 ---
 
 ## Alternatives Considered
 
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| Agent teams (5 specialists) | Task-based subagents (current v3.0) | Single-compound CASE where real-time self-correction not needed. Cheaper (40-60% lower token cost). |
-| Task-based coordination (shared task list) | Direct messaging (SendMessage only) | Simple workflows with < 5 steps and no complex dependencies. |
-| Delegate mode for coordinator | Coordinator with full tools | Rapid prototyping where coordinator may need to intervene directly. Risk: coordinator does work instead of delegating. |
-| 5 specialized agents (nmr, lsd, analyst, advocate, coordinator) | 3 general agents (nmr, lsd, qa) | Smaller team reduces coordination overhead (40% fewer agents). Loses devils-advocate real-time loop detection. |
-| All opus model tier | Mixed opus (coordinator) + sonnet (specialists) | If chemistry reasoning offloaded to specialist knowledge base. Risk: sonnet errors in NMR domain. |
+| Category | Recommended | Alternative | Why Not |
+|----------|-------------|-------------|---------|
+| Fragment extraction | `FindAtomEnvironmentOfRadiusN` | BRICS decomposition | BRICS produces retrosynthetic fragments, not NMR-correlated atom environments. Wrong semantic for SSC. |
+| Fingerprint storage | SQLite BLOB (32 bytes per SSC) | HDF5 + FPSim2 | Adds h5py dependency, breaks single-file database architecture. SQLite BLOB performs well for sub-100MB fingerprint loads. |
+| Bitset screening | NumPy uint8 array bitwise AND | Python integer `&` operator | Python int bitwise AND is 100x slower than vectorized NumPy for N=24M records. NumPy avoids per-row Python overhead. |
+| Fine matching | AVGDEV over all fragment signals | Cosine similarity | AVGDEV is domain-appropriate (NMR shift comparison), interpretable, and matches Sherlock's validated approach. Cosine requires normalization that loses shift-position meaning. |
+| Parallelism | `ProcessPoolExecutor` (stdlib) | `joblib`, `ray`, `dask` | Build pipeline is embarrassingly parallel with no inter-worker state. stdlib `ProcessPoolExecutor` + tqdm is sufficient. No extra dependencies. |
+| Fragment file format for DEFF | LSD atom notation files | SMILES-only | DEFF requires LSD-format fragment files. SMILES is insufficient — LSD needs MULT/BOND notation to define atom types and connectivity. |
 
-**Confidence:** HIGH (alternatives analysis based on official docs + CASE requirements)
+---
+
+## Version Compatibility
+
+| Component | Required Version | Installed | Notes |
+|-----------|-----------------|-----------|-------|
+| RDKit | >=2023.09 | 2025.9.4 | `FindAtomEnvironmentOfRadiusN` stable since 2021. `PathToSubmol` stable. |
+| NumPy | >=1.24 | 2.2.1 | Bitwise ops on uint8 arrays stable since 1.x. NumPy 2.x is backward compatible. |
+| Python | >=3.10 | project requirement | `ProcessPoolExecutor` available since 3.2. |
+| SQLite | >=3.31 | system | BLOB support available since SQLite 1.0. No version concern. |
+
+---
+
+## Installation
+
+No new packages required. The fragment library milestone uses only the existing lucy-ng dependencies.
+
+```bash
+# Verify existing stack covers all needs
+python3 -c "from rdkit.Chem import FindAtomEnvironmentOfRadiusN, PathToSubmol; print('RDKit OK')"
+python3 -c "import numpy as np; fp = np.zeros(32, dtype=np.uint8); print('NumPy OK')"
+python3 -c "from concurrent.futures import ProcessPoolExecutor; print('ProcessPoolExecutor OK')"
+
+# All three should print OK with existing installation
+```
 
 ---
 
 ## Sources
 
-### Official Documentation
-
 **PRIMARY SOURCES (HIGH confidence):**
-- [Orchestrate teams of Claude Code sessions - Claude Code Docs](https://code.claude.com/docs/en/agent-teams) — TeamCreate, SendMessage, Task API, team configuration, teammate spawning
-- [TechCrunch: Anthropic releases Opus 4.6 with agent teams](https://techcrunch.com/2026/02/05/anthropic-releases-opus-4-6-with-new-agent-teams/) — Release date Feb 5 2026, official announcement
+- [RDKit 2025.09.5 rdFingerprintGenerator docs](https://www.rdkit.org/docs/source/rdkit.Chem.rdFingerprintGenerator.html) — fingerprint generation API verified
+- [RDKit Getting Started in Python](https://www.rdkit.org/docs/GettingStartedInPython.html) — `FindAtomEnvironmentOfRadiusN`, `PathToSubmol` usage pattern confirmed
+- [NumPy 2.4 Manual: packbits](https://numpy.org/doc/stable/reference/generated/numpy.packbits.html) — bitset encoding approach verified
+- [LSD Manual (nuzillard.github.io)](https://nuzillard.github.io/LSD/MANUAL_ENG.html) — DEFF/FEXP syntax confirmed: `DEFF F_n_ <path>`, `FEXP "F1 AND F2"` pattern
+- [RDKit rdSubstructLibrary docs](https://www.rdkit.org/docs/source/rdkit.Chem.rdSubstructLibrary.html) — evaluated and rejected for this use case (spectral match, not SMARTS search)
+- lucy-ng SQLite database query — atom_index coverage: 99.7% (23,994,980 / 24,063,169 shifts), all 928,443 compounds covered
 
-**SECONDARY SOURCES (MEDIUM confidence, verified against official docs):**
-- [Claude Code Swarm Orchestration Gist](https://gist.github.com/kieranklaassen/4f2aba89594a4aea4ad64d753984b2ea) — TeammateTool operations (13 operations: spawnTeam, write, broadcast, requestShutdown, etc.), message flow, spawn backends
-- [From Tasks to Swarms: Agent Teams in Claude Code](https://alexop.dev/posts/from-tasks-to-swarms-agent-teams-in-claude-code/) — Task-based coordination patterns, practical examples
-- [Enable Team Mode in Claude Code](https://scottspence.com/posts/enable-team-mode-in-claude-code/) — Setup instructions, settings.json configuration, environment variable
-
-**TERTIARY SOURCES (LOW confidence, community discussions):**
-- [GitHub Issue: Superpowers #429](https://github.com/obra/superpowers/issues/429) — TeammateTool, SendMessage, TaskList API discussion (feature request, not authoritative)
-- [GitHub Issue: Superpowers #469](https://github.com/obra/superpowers/issues/469) — Parallel plan execution with agent teams (planning discussion, not implementation)
-
-### Existing lucy-ng Implementation (for knowledge migration)
-
-**AUTHORITATIVE SOURCES (HIGH confidence, validated via UAT):**
-- `/Users/steinbeck/.claude/agents/lucy-case-agent.md` (666 lines) — NMR domain knowledge, CASE workflow, statistical detection, pitfalls
-- `/Users/steinbeck/.claude/commands/lucy-ng/case.md` (672 lines) — Loop detection patterns, diagnostic decision trees, intervention logic
-- `/Users/steinbeck/Dropbox/develop/lucy-ng/CLAUDE.md` — Lucy-ng CLI reference, tool syntax
-- `/Users/steinbeck/Dropbox/develop/lucy-ng/.planning/STATE.md` — v3.0 UAT findings: badlist dropped, grouped notation dropped, PROP not used, H budget diagnosis order
-
-**Knowledge distribution for v4.0:**
-- lucy-case-agent.md Sections 1-3 → lucy-nmr-chemist.md (NMR background, quality, peak picking)
-- lucy-case-agent.md Sections 3-4 → lucy-lsd-engineer.md (LSD syntax, constraints, incremental HMBC)
-- lucy-case-agent.md Sections 6-7 → lucy-solution-analyst.md (ranking, confidence scoring)
-- case.md detect_loops + diagnose → lucy-devils-advocate.md (loop patterns, challenges, diagnostics)
-- case.md orchestrator → lucy-case-coordinator.md (workflow structure, task dependencies, synthesis)
-
-**Confidence:** HIGH (direct knowledge extraction from validated implementations)
+**SECONDARY SOURCES (MEDIUM confidence):**
+- [Sherlock PMC paper (PMC9920390)](https://pmc.ncbi.nlm.nih.gov/articles/PMC9920390/) — 256-bit fingerprint bitstring confirmed: "each fragment has a bit string representation to indicate whether a given chemical shift in the assigned subspectrum exists... screened via a bit string comparison where all set bits of a fragment have to be present in the query bitset"
+- [background/sherlock-analysis.md](/Users/steinbeck/Dropbox/develop/lucy-ng/background/sherlock-analysis.md) — 24.5M SSC count, 256-bit/2ppm fingerprint, DEV/AVGDEV thresholds (3 ppm DEV, 2 ppm AVGDEV), DEFF/FEXP application
+- [FPSim2 docs (chembl.github.io)](https://chembl.github.io/FPSim2/) — evaluated and rejected for this use case
+- [RDKit BRICS tutorial (greglandrum.github.io)](https://greglandrum.github.io/rdkit-blog/posts/2025-08-15-BRICS-tutorial.html) — evaluated and rejected for this use case
 
 ---
 
-## Next Steps
+## Open Questions Requiring Validation
 
-**ARCHITECTURE.md:** Agent interaction patterns, message flow diagrams, task dependency DAG, error handling
+1. **Fragment file format for DEFF:** The LSD manual describes `DEFF F_n_ <path>` where the file contains a fragment definition. The exact internal format of these fragment files (how MULT/BOND notation is used inside a fragment file vs. the main LSD input) needs verification against LSD manual appendix or test cases before implementing `lucy fragment generate-lsd`. This is the highest-risk open question — get it wrong and DEFF files will be syntactically invalid.
 
-**PITFALLS.md:** Team coordination failure modes, message delivery issues, task race conditions, coordinator bottleneck scenarios
-
-**SUMMARY.md:** Roadmap implications for v4.0 milestone (phase structure, research flags, integration with existing v3.0 baseline)
+2. **Radius cutoff empirics:** Radius 1-4 is inferred from SSC count math (928K x ~7 carbons/compound x 4 radii ~ 26M before dedup). Should be validated by building a small-scale fragment library (1% sample of compounds) at radii 1-6 and checking hit rates and storage overhead. Radii 5-6 may add too few useful fragments to justify the storage cost.
 
 ---
 
-*Stack research for: Multi-agent CASE workflow coordination with Claude Code agent teams*
-*Researched: 2026-02-16*
-*Confidence: HIGH (official docs + validated v3.0 baseline)*
+*Stack research for: Fragment library (SSC extraction, bitset fingerprinting, spectral search)*
+*Researched: 2026-02-19*
+*Confidence: HIGH for core implementation choices. MEDIUM for Sherlock-specific design parameters (radius cutoff, threshold values) and DEFF fragment file internal format.*

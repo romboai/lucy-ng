@@ -1,279 +1,343 @@
-# Feature Landscape: Agent Team CASE Workflow
+# Feature Landscape: Fragment Library and SSC Search
 
-**Domain:** Multi-agent Computer-Assisted Structure Elucidation (CASE)
-**Researched:** 2026-02-16
-**Confidence:** HIGH (official Claude Code docs, established multi-agent patterns, existing v3.0 architecture)
+**Domain:** Substructure-subspectrum correlation (SSC) fragment library for CASE
+**Researched:** 2026-02-19
+**Confidence:** HIGH — Wenk thesis (Sherlock) provides algorithmic specification; existing lucy-ng codebase provides integration context
 
-## Table Stakes
+---
 
-Features users expect from a team-based CASE agent. Missing = workflow feels incomplete.
+## Background: What SSC Search Does and Why It Matters
+
+The fragment library answers the question: "Given an experimental 13C spectrum, what previously characterized substructures are consistent with these chemical shifts?" Matching fragments are injected as LSD goodlist constraints (DEFF/FEXP), forcing every generated solution to contain those substructures. The effect is dramatic: in Sherlock, 34/40 cases reduced to a single solution with the first matched fragment.
+
+The mechanism has three stages:
+
+1. **Offline extraction** (one-time, slow): For each of 928K compounds in the database, generate all substructures (SSCs) using breadth-first fragmentation. Store each SSC with its associated subspectrum (chemical shifts of atoms remaining after fragmentation) and a 256-bit fingerprint (2 ppm bins, 0-510 ppm range).
+
+2. **Online pre-screening** (fast, bitset): Given experimental shifts, build a query fingerprint. For each SSC in the library, apply Boolean AND. If `AND(query, SSC) == SSC`, the SSC's signals are all present in the experimental spectrum — candidate passes.
+
+3. **Online fine matching** (slower, per-signal): For each pre-screening survivor, compute signal pairs using minimum-distance matching (same as dereplication). Filter by DEV (max per-signal deviation, default 2 ppm) and AVGDEV (average deviation, default 1 ppm). Require multiplicity match. The surviving fragments are ranked by size (descending) then AVGDEV (ascending).
+
+The first/best fragment is injected as a DEFF goodlist file + FEXP constraint into the LSD input. In Sherlock, only the first fragment is used — this is sufficient to reduce 34/40 cases to single solutions.
+
+---
+
+## Feature Landscape
+
+### Table Stakes (Users Expect These)
+
+Features that the CASE system needs for SSC search to be functional. Missing any of these means the feature does not work.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| **Task-based work distribution** | Standard agent team pattern — teammates claim tasks from shared list | Low | Built into Claude Code's TeammateTool (task creation, claim, complete) |
-| **Inter-agent messaging** | Teammates must communicate findings mid-iteration, not just report to lead | Low | Built into Claude Code (message/broadcast) |
-| **Shared CASE-PROGRESS.md** | All agents need access to the persistent state document | Low | Filesystem already shared across teammates |
-| **Independent context windows** | Each agent needs full workspace without token interference | Low | Automatic in agent teams architecture |
-| **File-based constraint persistence** | lsd-engineer must read previous LSD file, not reconstruct from memory | Medium | Agent discipline via spawn instructions — "read analysis/iteration_NN-1/compound.lsd FIRST" |
-| **Iteration subfolder organization** | analysis/iteration_NN/ pattern already established in v3.0 | Low | Existing pattern, team must maintain |
-| **Pre-run validation** | Diff previous vs current LSD file before `lucy lsd run` | Medium | devils-advocate task, requires file comparison logic |
-| **Post-run quality review** | Solution-analyst checks chemical plausibility (strained rings, valency) after ranking | Medium | Requires chemistry knowledge in agent |
-| **Coordinator role** | Lead manages iteration loop, task creation, result synthesis | Low | Standard team lead pattern |
-| **Graceful team shutdown** | Clean termination after success/failure/user intervention | Low | Built into Claude Code (shutdown requests) |
+| **SSC extraction from compound database** | The fragment library must be built from the existing 928K compounds | HIGH | One-time offline batch process. Fragmentation rules: preserve heteroatom bonds, preserve double/triple bonds, preserve carbon-to-multiple-heteroatom bonds, preserve ring systems as whole units. Max sphere = 3 (for atom-centered fragments), max sphere = 1 (for ring-system-centered fragments). Max ring size for ring detection = 6. |
+| **Duplicate SSC deduplication** | Different atoms in same compound or across compounds produce identical substructures | MEDIUM | SMILES-based deduplication. When duplicates found: keep record with lower AVGDEV to experimental spectrum. Sherlock produces 24.5M SSCs from 892K compounds — dedup is essential. |
+| **256-bit fingerprint per SSC** | Boolean AND pre-screening requires pre-computed bitstrings | MEDIUM | 2 ppm bins covering 0-510 ppm = 255 bins. Bit i = 1 if any SSC signal falls in [i*2, (i+1)*2) ppm. All 256 bits in a single integer or bytes object. |
+| **Fragment database table** | SSC records must be stored and indexed for efficient retrieval | HIGH | New SQLite table (schema v7). Columns: smiles, subspectrum_shifts, fingerprint, heavy_atom_count, avgdev. Index on fingerprint for bitset comparison. Estimated size: 24.5M records * ~200 bytes = ~5 GB. May require separate database file from compound/HOSE database. |
+| **Query fingerprint construction with tolerance expansion** | Query bits need ±1-bin tolerance to avoid boundary misses | LOW | Before screening, set each query bit's neighbors also to 1. Prevents misses when experimental signal at 44.9 and SSC signal at 45.1 fall in different 2 ppm bins. |
+| **Boolean AND pre-screening** | Eliminates non-matching SSCs fast without per-signal comparison | MEDIUM | `(query_fp & ssc_fp) == ssc_fp` — if true, all SSC signals are accounted for in query. Implemented as integer bitwise AND on 256-bit stored fingerprints. |
+| **Fine spectral matching** | Pre-screening passes many false positives; fine match filters by actual shift deviations | HIGH | Same algorithm as existing dereplication: minimum-distance signal pair assignment, require multiplicity match, check DEV <= 2 ppm per pair, check AVGDEV <= 1 ppm overall. Requires subspectrum stored with multiplicities per atom. |
+| **Fragment result ranking** | Multiple fragments pass fine matching; best one used as constraint | LOW | Primary: heavy atom count descending (larger fragments = stronger constraint). Secondary: AVGDEV ascending (better spectral fit). Implemented in ranker. |
+| **CLI command: `lucy fragment search`** | Agent needs to invoke fragment search from Bash | MEDIUM | `lucy fragment search --shifts "127.26,129.38,..." --formula C13H18O2 --format json`. Output: ranked list of fragments with SMILES, heavy atom count, AVGDEV, matched signal pairs. |
+| **LSD goodlist file generation** | Fragment must be written as DEFF/FEXP syntax for LSD | MEDIUM | Fragment SMILES → LSD SSTR/LINK syntax. Open sites (R groups from fragmentation) become generic atoms in LSD notation. The DEFF file contains the substructure definition; FEXP says `'F1'` to mandate it. |
+| **Agent integration: lsd-engineer writes fragment constraints** | CASE team must automatically apply the best fragment | MEDIUM | lsd-engineer runs `lucy fragment search`, takes rank #1 fragment, writes goodlist file, adds DEFF/FEXP to LSD input file. |
+| **Hybridisation check during fine matching** | Fragment atom hybridisations must match detected hybridisations for query signals | LOW | Already available from `lucy detect hybridisation`. If detected hybridisation list is non-empty for a query signal, the matching fragment atom's hybridisation must be in that list. |
 
-## Differentiators
+### Differentiators (Competitive Advantage)
 
-Features that set team-based CASE apart from v3.0 single-agent architecture. Not expected, but highly valued.
+Features that improve SSC search quality beyond the Sherlock baseline.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| **Real-time peer feedback** | Any agent can flag issues in another's work before it affects results | High | Requires inter-agent message protocol + detection rules |
-| **Constraint inventory tracking** | lsd-engineer maintains explicit list of all constraints (MULT, HSQC, HMBC, BOND, DEFF NOT, SYME) | Medium | Prevents v3.0 bug where DEFF NOT dropped across iterations |
-| **Detection→Constraint verification** | devils-advocate verifies statistical detection results are actually applied in LSD file | High | Requires mapping detection output to LSD commands |
-| **Multi-agent CASE-PROGRESS.md** | Each agent contributes to progress log with attributed sections (who did what) | Medium | Structured markdown with agent attribution |
-| **Chemistry adversarial review** | devils-advocate challenges every structural assumption before solver runs | Medium | Chemistry domain knowledge + critical reasoning |
-| **Iterative refinement with self-feedback** | Team reviews previous iteration's mistakes, proposes fixes, validates fixes worked | High | PEER-like pattern (Plan/Execute/Express/Review) adapted to CASE |
-| **Parallel hypothesis testing** | nmr-chemist and lsd-engineer explore competing interpretations of ambiguous spectra | High | Requires branching iteration paths, not linear |
-| **Automated strained ring detection** | solution-analyst flags cyclopropane/cyclobutane rings in ranked solutions | Medium | RDKit SSSR query on SMILES |
-| **H-budget verification** | devils-advocate checks sum of MULT H counts equals formula before each run | Low | Arithmetic check with clear error message |
-| **sp²-count verification** | devils-advocate counts MULT type 2 atoms and compares to hybridisation detection | Medium | Cross-reference MULT commands with `lucy detect hybridisation` results |
-| **Grouped notation persistence** | lsd-engineer preserves HMBC 2 (6 7) notation across iterations | Low | File reading discipline |
-| **Escalation to diagnostic specialist** | After 2 failed iterations, coordinator spawns specialist for deep failure analysis | Low | Existing lucy-diagnostic.md agent, just needs team integration |
+| **Multi-fragment injection strategy** | Use top N fragments instead of just the first when single fragment doesn't yield single solution | MEDIUM | Sherlock uses only the first fragment. Extension: if first fragment yields >5 solutions after LSD, inject second fragment via `FEXP 'F1 AND F2'`. Reduces residual multi-solution cases. |
+| **Fragment size filter** | Exclude very small fragments (1-3 heavy atoms) that provide no structural information | LOW | Threshold: minimum heavy atom count of 4. Small fragments match too broadly and waste constraint power. |
+| **Formula-aware pre-screening** | Filter SSCs by molecular formula compatibility before fingerprint comparison | MEDIUM | SSC atom composition must be a subset of the query compound formula. E.g., if query is C13H18O2, reject SSCs containing nitrogen. Eliminates chemically impossible fragments early. |
+| **Incremental fragment application** | Start with largest fragment; add smaller ones only if solution count remains high | MEDIUM | After applying fragment 1, if solutions > 10, apply fragment 2 as additional FEXP constraint. This avoids over-constraining when a good fragment already solves the problem. |
+| **Fragment display in CASE-PROGRESS.md** | Report which fragment was found and applied, with matched signals highlighted | LOW | Shows chemist what structural subunit was confirmed. Helps diagnose why fragment didn't reduce to single solution (wrong fragment, 4J issue, etc.). |
+| **Resumable extraction pipeline** | SSC extraction runs for hours; must survive interruption | MEDIUM | Checkpoint table already exists in schema. Track last processed compound_id. Resume from checkpoint on restart. |
+| **Fragment search statistics in CLI output** | Report pre-screening count, fine-match count, and final count | LOW | Diagnostic information. Helps tune DEV/AVGDEV thresholds. E.g., "24.5M SSCs → 2,341 passed pre-screen → 47 passed fine match → 5 after dedup". |
 
-## Anti-Features
+### Anti-Features (Commonly Requested, Often Problematic)
 
-Features to explicitly NOT build in team workflow.
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| **Storing all 24.5M fragments in the main compound database** | Single database is simpler | Main database is already 2.8 GB. Adding 24.5M SSC records (~5 GB) makes the file unmanageable and slows all existing queries (dereplication, prediction) due to SQLite page cache pressure. | Separate database file `lucy-ng-fragments.db` with symlink or config-based path. Fragment search CLI opens this file independently. |
+| **Real-time SSC extraction on each CASE run** | Avoids separate extraction step | 24.5M fragments from 928K compounds takes hours. Completely impractical per-run. Sherlock pre-builds this offline. | Pre-built fragment database shipped alongside compound database (Figshare). One-time extraction for users who build from source. |
+| **Using HOSE codes instead of fragmentation** | HOSE codes already exist in database | HOSE codes are atom-level descriptors (one HOSE per atom, single chemical shift). SSCs are substructure-level (a SMILES fragment + multiple shifts). They answer fundamentally different questions: HOSE says "what shift does this atom type have?" while SSC says "does this known substructure match my spectrum?" Cannot substitute. | Keep HOSE codes for prediction/ranking; add SSC library for fragment search. These are complementary, not competing. |
+| **Injecting many fragments simultaneously** | More constraints = fewer solutions | Injecting 3+ fragments simultaneously with FEXP 'F1 AND F2 AND F3' often over-constrains and produces zero solutions, particularly when one fragment has a borderline spectral match. | Use fragments sequentially: apply first, run LSD, count solutions. If still multiple, apply second. |
+| **Using fragment library for initial hypothesis** | Fragment search can provide structural hints | At the start of CASE (before any LSD run), the experimental spectrum fingerprint matches too many SSCs to be useful. Fragment constraints only become powerful in combination with MULT/HSQC/HMBC constraints. | Fragment search runs AFTER initial LSD to reduce multi-solution sets, not INSTEAD of initial setup. |
+| **Custom user-uploaded fragments** | Advanced users may want to add known substructures | Increases system complexity (upload, storage, validation), fragment format is non-trivial (SSTR/LINK syntax), and the workflow is manual. | Agent can write DEFF/FEXP manually if chemist provides a known substructure. Fragment library is for automatic discovery, not manual entry. |
 
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| **Nested teams** | Complexity explosion, Claude Code doesn't support it | Use 5-agent flat team, coordinator delegates tasks |
-| **Agent voting on decisions** | Slows iteration, introduces bikeshedding | devils-advocate has veto power on invalid LSD files, otherwise coordinator decides |
-| **Full LSD file regeneration** | Causes v3.0 bug where constraints are lost | lsd-engineer ALWAYS reads previous file, appends new HMBC lines |
-| **Automated ELIM constraint writing** | Premature elimination causes valid structures to be excluded | ELIM only on user request or after 3+ iterations with thousands of solutions |
-| **Split-pane display mode** | Requires tmux/iTerm2, adds setup friction for end users | Use in-process mode (default), Shift+Up/Down to view teammates |
-| **Parallel LSD solving** | LSD is sequential — each iteration depends on previous results | Linear iteration loop, not parallel |
-| **Dereplication in CASE workflow** | Already prohibited in v3.0, maintain absolute separation | Dereplication is /lucy-ng:dereplicate sub-command, never in CASE |
-| **Agent-initiated model selection** | Coordinator already uses Opus, teammates inherit | All teammates use opus (model: inherit) |
-| **Custom teammate permissions** | Complexity, not needed for CASE | All teammates inherit lead's permissions |
+---
 
 ## Feature Dependencies
 
 ```
-Coordinator spawning → Task creation
-Task creation → Teammate claiming
-Teammate claiming → File-based constraint persistence
-File-based constraint persistence → Pre-run validation
-Pre-run validation → Real-time peer feedback
-Real-time peer feedback → Multi-agent CASE-PROGRESS.md
-Multi-agent CASE-PROGRESS.md → Iterative refinement
-Iterative refinement → Post-run quality review
+SSC extraction pipeline
+    └── requires --> Compound database (928K compounds) [EXISTING]
+    └── requires --> RDKit fragmentation with bond-preservation rules [NEW]
+    └── requires --> Fragment database schema (v7) [NEW]
+    └── produces --> 24.5M SSC records with subspectra + fingerprints
+
+CLI: lucy fragment search
+    └── requires --> Fragment database [NEW, from extraction]
+    └── requires --> Bitset fingerprint computation [NEW]
+    └── requires --> Fine spectral matching algorithm [NEW, similar to dereplication]
+    └── requires --> Experimental shifts (from existing lucy pick 1d / CASE workflow)
+
+LSD goodlist file generation
+    └── requires --> Fragment SMILES [from CLI search]
+    └── requires --> SSTR/LINK syntax knowledge [in agent skill]
+    └── produces --> goodlist .def file for DEFF/FEXP in LSD
+
+Agent integration (lsd-engineer)
+    └── requires --> CLI: lucy fragment search [NEW]
+    └── requires --> LSD goodlist file generation [NEW]
+    └── requires --> lsd-engineer agent skill update [NEW]
+    └── enhances --> Constraint inventory (DEFF/FEXP now tracked) [EXISTING]
+
+Multi-fragment injection
+    └── requires --> Agent integration working [NEW, above]
+    └── requires --> Coordinator knowing current solution count [EXISTING]
+    └── enhances --> Fragment search (uses top-N result) [NEW, above]
 ```
 
-Sequential dependencies:
-- **Iteration N** → **lsd-engineer reads iteration N-1 LSD file** → **devils-advocate diffs and validates** → **coordinator spawns lucy lsd run task** → **solution-analyst reviews ranking** → **Iteration N+1**
+### Dependency Notes
 
-Parallel opportunities:
-- **nmr-chemist picks HMBC peaks** || **solution-analyst reviews previous iteration solutions** || **devils-advocate pre-checks detection results**
+- **SSC extraction requires formula-aware pre-screening:** During fine matching, the fragment's atom composition (from SMILES) must be checked against the query formula. This check needs compound formula data, already in the compounds table.
+- **Fragment database is a prerequisite for all search features:** No fragment search CLI, no agent integration, no multi-fragment injection works without the pre-built database. Extraction is phase 1 blocker.
+- **Agent integration depends on SSTR/LINK syntax knowledge:** The lsd-engineer agent must know how to convert a fragment SMILES with R groups to LSD SSTR/LINK notation. This is agent skill knowledge (similar to how LSD commands are currently inlined), not Python code.
+- **Checkpoint system enhances but does not block extraction:** Resumable extraction is a robustness feature for the extraction pipeline. Non-resumable extraction still works but wastes compute on failure.
+- **Multi-fragment injection conflicts with over-constraining:** Must only apply second fragment if solution count after first fragment is still above threshold. Coordinator checks `lucy lsd rank` output before deciding.
 
-## MVP Recommendation
+---
 
-**Phase 1: Core team mechanics (table stakes)**
-Prioritize:
-1. 5-agent spawning (coordinator, nmr-chemist, lsd-engineer, solution-analyst, devils-advocate)
-2. Task-based iteration loop via TeammateTool
-3. File-based constraint persistence (read previous LSD file)
-4. Shared CASE-PROGRESS.md with multi-agent attribution
-5. Pre-run H-budget + sp² verification
-6. Post-run strained ring detection
+## MVP Definition
 
-Defer:
-- Parallel hypothesis testing (High complexity, needs branching iteration paths)
-- Detection→Constraint verification (requires complex mapping logic, can do manual first)
-- Real-time peer feedback protocol (need core workflow stable first)
+### Launch With (v5.0 core)
 
-**Phase 2: Self-correction (differentiators)**
-Prioritize:
-1. Constraint inventory tracking (explicit list in CASE-PROGRESS.md)
-2. Real-time peer feedback with messaging protocol
-3. Iterative refinement loop (team reviews mistakes, proposes fixes)
-4. Chemistry adversarial review (devils-advocate challenges assumptions)
+Minimum viable feature set to validate that SSC search reduces solution counts.
 
-Defer:
-- Parallel hypothesis testing (still deferred — linear iteration sufficient for most compounds)
+- [x] **SSC extraction pipeline** — Without the library, nothing else works. Extract from all 928K compounds, store in separate fragment database.
+- [x] **256-bit fingerprint generation and Boolean AND pre-screening** — Core speed advantage. Without this, fine matching 24.5M SSCs per CASE run is computationally infeasible.
+- [x] **Fine spectral matching (DEV/AVGDEV)** — Pre-screening alone has too many false positives. Fine matching required to find the actually useful fragment.
+- [x] **CLI: `lucy fragment search`** — Agent-accessible interface. Required for lsd-engineer integration.
+- [x] **LSD goodlist file generation** — Fragment is only useful if it can be expressed in LSD syntax and applied as a constraint.
+- [x] **Agent integration: lsd-engineer applies first fragment** — The end-to-end workflow payoff. Agent runs fragment search, applies best fragment, sees reduced solution count.
+- [x] **Multi-compound UAT** — Validate impact on at least 5 compounds (ibuprofen + 4 others from Sherlock's test set). Confirm solution count reduction matches expected pattern.
 
-## Team Roles Specification
+### Add After Validation (v5.x)
 
-Based on [Claude Code agent teams documentation](https://code.claude.com/docs/en/agent-teams), adapted to CASE domain:
+- [ ] **Multi-fragment injection strategy** — Trigger: UAT shows cases where first fragment insufficient (solution count still > 5 after first fragment).
+- [ ] **Fragment search statistics in CLI output** — Trigger: debugging needs during UAT (thresholds need tuning).
+- [ ] **Formula-aware pre-screening** — Trigger: fragment search performance is slow (>5 seconds per search).
+- [ ] **Fragment display in CASE-PROGRESS.md** — Trigger: agent review of what fragment was used.
+- [ ] **Resumable extraction pipeline** — Trigger: extraction fails on interrupted run. Add checkpoint support then re-run.
 
-### Coordinator (Team Lead)
-- **Responsibility:** Manages iteration loop, creates tasks, synthesizes results, decides when to terminate
-- **Does NOT:** Perform CASE work directly (delegate mode prevents this)
-- **Tools:** TeammateTool (spawn, message, task management), lucy lsd run (via task delegation)
-- **Spawns:** 4 teammates at start, diagnostic specialist on escalation
+### Future Consideration (v5.2+)
 
-### nmr-chemist (Teammate)
-- **Responsibility:** Peak picking (1D/2D), signal grouping detection, spectral interpretation
-- **Key tasks:**
-  - Run `lucy pick 1d`, `lucy pick hsqc`, `lucy pick hmbc`
-  - Run `lucy analyze grouping` for close shifts
-  - Identify symmetry discrepancies
-- **Communicates with:** lsd-engineer (signals peaks detected), devils-advocate (defends assignments)
+- [ ] **Fragment size filter (min 4 heavy atoms)** — May not be needed if fine matching already filters small fragments by AVGDEV.
+- [ ] **Solvent-aware fragment search** — Requires solvent-tracking infrastructure (separate milestone). Not needed for core fragment library.
+- [ ] **Custom user-uploaded fragments** — Low value, high complexity. Deferred indefinitely.
+- [ ] **Fragment database regeneration from updated compound database** — Only needed when compound database is updated (rare).
 
-### lsd-engineer (Teammate)
-- **Responsibility:** LSD file construction, constraint inventory management, incremental HMBC addition
-- **Key tasks:**
-  - Read previous iteration LSD file FIRST (analysis/iteration_NN-1/compound.lsd)
-  - Append new HMBC correlations from nmr-chemist
-  - Maintain constraint inventory in CASE-PROGRESS.md (MULT count, HSQC count, HMBC count, BOND count, DEFF NOT patterns, SYME groups)
-- **Communicates with:** nmr-chemist (receives peaks), devils-advocate (receives validation feedback)
-- **CRITICAL:** NEVER reconstruct LSD file from memory — always read + append
+---
 
-### solution-analyst (Teammate)
-- **Responsibility:** Solution ranking quality review, strained ring detection, chemical plausibility checks
-- **Key tasks:**
-  - Run `lucy lsd rank` after outlsd
-  - Detect 3/4-membered rings in top solutions (RDKit SSSR)
-  - Flag solutions with valency violations or impossible bonding
-  - Recommend which HMBC correlations to add next based on gaps
-- **Communicates with:** coordinator (reports quality), lsd-engineer (suggests constraint additions)
+## Feature Prioritization Matrix
 
-### devils-advocate (Teammate)
-- **Responsibility:** Pre-run validation, assumption challenging, constraint verification
-- **Key tasks:**
-  - Diff previous vs current LSD file (what changed?)
-  - Verify H budget: sum of MULT H counts = formula H count
-  - Verify sp² count: MULT type 2 count matches `lucy detect hybridisation` results
-  - Check DEFF NOT patterns still present
-  - Check SYME groups from `lucy analyze grouping` are applied
-  - Challenge structural assumptions (why carboxylic acid vs ester?)
-- **Communicates with:** All teammates (can flag issues in anyone's work)
-- **Veto power:** Can block LSD run if validation fails
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| SSC extraction pipeline | HIGH | HIGH | P1 — must-have |
+| 256-bit fingerprint + Boolean AND | HIGH | MEDIUM | P1 — enables feasible search |
+| Fine spectral matching | HIGH | MEDIUM | P1 — eliminates false positives |
+| CLI: `lucy fragment search` | HIGH | MEDIUM | P1 — agent interface |
+| LSD goodlist file generation | HIGH | MEDIUM | P1 — constraint application |
+| Agent integration (lsd-engineer) | HIGH | MEDIUM | P1 — end-to-end workflow |
+| Fragment database schema (v7) | HIGH | LOW | P1 — infrastructure |
+| Resumable extraction | MEDIUM | LOW | P2 — robustness |
+| Fragment stats in CLI | MEDIUM | LOW | P2 — observability |
+| Multi-fragment injection | MEDIUM | MEDIUM | P2 — edge case improvement |
+| Formula-aware pre-screening | MEDIUM | MEDIUM | P2 — performance optimization |
+| Fragment display in progress log | LOW | LOW | P2 — transparency |
+| Fragment size filter | LOW | LOW | P3 — marginal quality |
+| Custom user fragments | LOW | HIGH | P3 — don't build |
 
-## Communication Patterns
+---
 
-Based on [multi-agent collaboration patterns research](https://aws.amazon.com/blogs/machine-learning/multi-agent-collaboration-patterns-with-strands-agents-and-amazon-nova/):
+## Workflow Steps (Concrete)
 
-### Message Types
+The complete SSC workflow from experimental spectrum to LSD constraint:
 
-| Type | Pattern | When | Example |
-|------|---------|------|---------|
-| **Broadcast** | coordinator → all teammates | Start of iteration, end of iteration | "Starting iteration 3. nmr-chemist: pick 5 more HMBC peaks. lsd-engineer: add to LSD file. devils-advocate: validate before run." |
-| **Direct** | teammate → teammate | Peer feedback, data handoff | nmr-chemist → lsd-engineer: "Found 5 new HMBC peaks: [[C12, H8], [C4, H15], ...]" |
-| **Challenge** | devils-advocate → any | Validation failure, assumption questioning | devils-advocate → lsd-engineer: "H budget off by 2. Current MULT sums to 20H, formula is C13H18O2. Check CH2 vs CH assignments." |
-| **Report** | teammate → coordinator | Task completion, findings | solution-analyst → coordinator: "Ranked 47 solutions. Top 3 all contain cyclopropane ring (DEFF NOT missing?)" |
-
-### Feedback Loop Protocol
-
-Adapted from [PEER pattern](https://www.marktechpost.com/2025/08/02/a-coding-guide-to-build-intelligent-multi-agent-systems-with-the-peer-pattern/) and [iterative refinement research](https://selfrefine.info/):
-
-1. **Plan (coordinator):** Broadcast iteration N goals
-2. **Execute (nmr-chemist, lsd-engineer):** Perform assigned tasks
-3. **Express (devils-advocate):** Review outputs, provide critique
-4. **Review (all):** If validation passes → coordinator spawns LSD task. If fails → return to Execute with feedback.
-
-**Termination:** Loop continues until:
-- Success: Top solution MAE < 3.0 ppm AND no strained rings AND H budget correct
-- Escalation: 10 failed iterations with same pattern → diagnostic specialist
-- User intervention: User stops the team
-
-## Task Structure
-
-Based on [Claude Code task assignment mechanisms](https://code.claude.com/docs/en/agent-teams#assign-and-claim-tasks):
-
-Tasks sized to ~15-30 minutes of work (per [best practices](https://code.claude.com/docs/en/agent-teams#size-tasks-appropriately)):
-
-### Iteration N Task Breakdown
-
-```markdown
-## Iteration N
-
-- [ ] **nmr-chemist**: Pick 5 new HMBC correlations (depends: none)
-- [ ] **nmr-chemist**: Check signal grouping for close shifts (depends: none)
-- [ ] **lsd-engineer**: Read iteration N-1 LSD file and add new HMBC lines (depends: nmr-chemist HMBC picking)
-- [ ] **devils-advocate**: Validate LSD file (H budget, sp² count, DEFF NOT present, SYME applied) (depends: lsd-engineer LSD update)
-- [ ] **coordinator**: Run LSD solver (depends: devils-advocate validation PASS)
-- [ ] **solution-analyst**: Rank solutions and review top 10 for plausibility (depends: coordinator LSD run)
-- [ ] **coordinator**: Update CASE-PROGRESS.md with iteration N results (depends: solution-analyst review)
-```
-
-Task dependencies prevent race conditions (devils-advocate can't validate until lsd-engineer finishes).
-
-## Token Cost Implications
-
-Per [Claude Code agent teams token costs](https://code.claude.com/docs/en/costs#agent-team-token-costs):
-
-**v3.0 single agent:** ~50K tokens/iteration × 4 iterations = 200K tokens
-**v4.0 5-agent team:** ~50K tokens/iteration × 4 iterations × 5 agents = 1M tokens
-
-**Mitigation strategies:**
-1. Size tasks appropriately — avoid tiny tasks that just add coordination overhead
-2. Use direct messages, not broadcasts (broadcasts cost 5× tokens)
-3. Keep teammate context minimal — spawn with task-specific instructions only
-4. Terminate teammates after iteration completes, respawn for next iteration (vs keeping all 5 alive entire workflow)
-
-**Tradeoff justification:** 5× token cost acceptable because team prevents constraint loss bugs that cause failed elucidations (which waste ALL tokens).
-
-## Quality Gates
-
-From [verification-first AI peer review research](https://arxiv.org/pdf/2601.16909):
-
-Automated quality checks before human review:
-
-| Gate | Check | Enforcer | Trigger |
-|------|-------|----------|---------|
-| **H-budget** | Sum MULT H = formula H | devils-advocate | Before every LSD run |
-| **sp²-count** | MULT type 2 count matches detection | devils-advocate | Before every LSD run |
-| **DEFF NOT present** | Badlist patterns in current LSD file | devils-advocate | Before every LSD run |
-| **SYME applied** | Signal groups from detection appear as SYME | devils-advocate | Before every LSD run |
-| **Strained rings** | Top 10 solutions checked for 3/4-rings | solution-analyst | After every ranking |
-| **Constraint inventory** | All constraint types counted in CASE-PROGRESS.md | lsd-engineer | After LSD file update |
-
-**Enforcement via TeammateIdle hook:**
-
+### Step 1: Pre-build (One-time, Offline)
 ```bash
-# .claude/hooks/TeammateIdle
-# Exit code 2 → send feedback and keep teammate working
-
-if [[ "$TEAMMATE_NAME" == "devils-advocate" ]]; then
-  # Check if validation task completed
-  if ! grep -q "VALIDATION PASSED" analysis/iteration_*/VALIDATION.md; then
-    echo "Complete validation checks before going idle."
-    exit 2
-  fi
-fi
+# New CLI command — extracts all SSCs from compound database
+lucy fragment build --database data/reference/lucy-ng-derep.db \
+                   --output data/reference/lucy-ng-fragments.db
+# Expected runtime: several hours for 928K compounds
+# Expected output: ~24.5M SSC records
 ```
 
-## Gaps Requiring Phase-Specific Research
+### Step 2: Fragment Search (Per CASE Iteration, After Initial LSD)
+```bash
+# lsd-engineer calls this after initial LSD yields multiple solutions
+lucy fragment search \
+  --shifts "18.08,22.37,30.14,44.90,45.03,127.26,129.38,136.96,140.84,180.56" \
+  --formula C13H18O2 \
+  --database data/reference/lucy-ng-fragments.db \
+  --top 5 \
+  --format json
+```
 
-These areas need deeper investigation during roadmap execution:
+Expected JSON output:
+```json
+{
+  "query_shifts": [18.08, 22.37, ...],
+  "prescreening_count": 2341,
+  "fine_match_count": 47,
+  "result_count": 5,
+  "fragments": [
+    {
+      "rank": 1,
+      "smiles": "c1cc(CC(C)C(=O)O)ccc1CC(C)C",
+      "heavy_atom_count": 13,
+      "avgdev": 0.17,
+      "matched_signals": [
+        {"query_shift": 18.08, "fragment_shift": 18.55, "deviation": 0.47},
+        ...
+      ]
+    },
+    ...
+  ]
+}
+```
 
-1. **Detection→Constraint mapping logic:** How to programmatically verify that `lucy detect neighbours` results are translated to correct PROP/ELIM/LIST commands in LSD file? May need CLI output comparison tool.
+### Step 3: Goodlist File Generation
+```bash
+# lsd-engineer generates the LSD fragment definition file
+lucy fragment to-lsd \
+  --smiles "c1cc(CC(C)C(=O)O)ccc1CC(C)C" \
+  --output analysis/iteration_02/fragment.def
+```
 
-2. **Parallel hypothesis testing branching:** If two teammates explore competing theories (e.g., "is 180 ppm an acid or ester?"), how to structure iteration tree? Need workflow for rejoining branches.
+Fragment .def file format (SSTR/LINK notation):
+```
+; Fragment: ibuprofen-like skeleton (rank 1, AVGDEV 0.17 ppm)
+; SMILES: c1cc(CC(C)C(=O)O)ccc1CC(C)C
+SSTR S1 C* (2 3) (1 2)    ; aromatic C
+SSTR S2 C* (2 3) (1 2)    ; aromatic C
+...
+LINK S1 S2
+...
+```
 
-3. **Diagnostic specialist integration:** lucy-diagnostic.md is designed for single-agent spawn. How to integrate into team context? Does it replace one teammate or operate alongside?
+### Step 4: LSD Integration
+lsd-engineer adds to compound.lsd:
+```
+; === Fragment constraints ===
+DEFF F1 'analysis/iteration_02/fragment.def'
+FEXP 'F1'
+```
 
-4. **Hook-based validation enforcement:** TeammateIdle vs TaskCompleted — which hook is appropriate for each quality gate? Need testing.
+Then runs LSD. Solution count drops from 7 to 1 (in the Sherlock ibuprofen example).
 
-5. **CASE-PROGRESS.md merge conflicts:** If multiple teammates try to append simultaneously, how to prevent race conditions? File locking? Sequential write protocol?
+### Step 5: Constraint Inventory Update
+lsd-engineer adds to the JSON inventory block in the LSD header:
+```json
+{
+  "fragments": [
+    {"rank": 1, "smiles": "...", "avgdev": 0.17, "heavy_atoms": 13, "iteration_applied": 2}
+  ]
+}
+```
 
-6. **Coordinator delegate mode reliability:** Does delegate mode fully prevent coordinator from doing CASE work itself, or can it still intervene? Need testing with actual spawn.
+Devils-advocate verifies DEFF/FEXP present in current iteration before each LSD run.
+
+---
+
+## Search Algorithm Parameters (Defaults from Sherlock)
+
+| Parameter | Default | Description | Source |
+|-----------|---------|-------------|--------|
+| Max fragment sphere (atom-centered) | 3 | Breadth-first radius from each non-H atom | Wenk thesis §3.1.4.1.4 |
+| Max fragment sphere (ring-centered) | 1 | Radius around complete ring systems | Wenk thesis §3.1.4.1.4 |
+| Max ring size for ring detection | 6 | Only rings with ≤6 heavy atoms kept whole | Wenk thesis §3.1.4.1.4 |
+| Fingerprint bit width | 2 ppm | Each bit covers a 2 ppm bin | Wenk thesis §3.1.4.1.4 |
+| Fingerprint range | 0-510 ppm | Covers all practical 13C shifts | Wenk thesis Fig. 26-27 |
+| Fingerprint bits total | 256 | 510/2 = 255 bins, round to 256 | Wenk thesis §3.1.4.1.4 |
+| Tolerance expansion | ±1 bin | Each set query bit expands to neighbors | Wenk thesis §3.1.4.1.4 |
+| Fine match DEV | 2 ppm | Max per-signal deviation | Wenk thesis §3.1.4.1.4 |
+| Fine match AVGDEV | 1 ppm | Max average deviation across matched signals | Wenk thesis §3.1.4.1.4 |
+| Multiplicity match required | true | Query and fragment atom must have same H count | Wenk thesis §3.1.4.1.4 |
+| Equivalence match required | true | Equivalence count must match | Wenk thesis §3.1.4.1.4 |
+| Fragment ranking primary | heavy atom count desc | Larger fragments = stronger constraint | Wenk thesis Table 5 |
+| Fragment ranking secondary | AVGDEV asc | Better spectral fit preferred | Wenk thesis Table 5 |
+| Fragments used per LSD run | 1 (first) | Only first fragment injected by default | Wenk thesis §4.2.2 |
+
+---
+
+## Bond-Preservation Rules (Fragmentation Algorithm)
+
+These rules determine which bonds are NOT cut during breadth-first fragmentation. A bond is preserved (atom kept, not replaced by R) when ANY of the following holds:
+
+1. **Heteroatom-heteroatom bond:** Both endpoint atoms are non-carbon (e.g., O-N, O-P). These encode functional group connectivity that must be preserved.
+
+2. **Bond order > 1:** Double or triple bonds encode hybridisation information. Always preserved.
+
+3. **Carbon bonded to multiple heteroatoms:** If a carbon connects to more than one non-carbon heavy atom (e.g., carboxyl carbon C(=O)O, which bonds to two oxygens), those bonds are preserved. This retains functional group context.
+
+4. **Ring atoms:** Any atom in a ring (detected using SSSR) is treated as part of the complete ring system. The entire ring (including all ring atoms and ring bonds) becomes a single starting point with radius 1 sphere, not just an individual atom with radius 3.
+
+When none of these conditions holds, the connected atom is replaced by R (an open-site pseudo-atom indicating an attachment point). Bond type to R is preserved (single R, double R=, etc.).
+
+Note: lucy-ng currently uses implicit hydrogens throughout HOSE code generation (no `AddHs()`). The same approach must be applied consistently during SSC extraction — work with RDKit molecules without explicit hydrogens.
+
+---
+
+## Expected Impact
+
+Based on Sherlock's published results (HIGH confidence — from Wenk thesis §4.2.2):
+
+| Metric | Sherlock Result | lucy-ng Baseline | Expected After v5.0 |
+|--------|-----------------|------------------|---------------------|
+| Cases reduced by first fragment | 27/40 had multiple solutions; 27 reduced | N/A | Similar reduction expected |
+| Cases reduced to single solution | 34/40 | 1/1 tested (ibuprofen failed — not fragmented) | Target: 34/40 parity |
+| Ibuprofen solution count | 2 → 1 (with fragment) | 7 (all wrong due to 4J) | Unknown — depends on whether correct structure is in solution set |
+| Fragment search time (per CASE run) | <2 seconds (Java/MongoDB) | TBD (Python/SQLite) | Likely 10-30 seconds (acceptable) |
+| Library size | 24.5M SSCs (892K compounds) | N/A | ~26M SSCs expected (928K compounds) |
+
+**Important caveat:** Ibuprofen specifically may not benefit from fragment search if the 4J HMBC constraint problem persists. Fragment constraints only help select among valid solutions — if the correct structure is excluded by wrong HMBC constraints (4J problem), no fragment can fix that. Fragment library (v5.0) and 4J detection (v5.1) are complementary.
+
+---
+
+## Competitor Feature Analysis
+
+| Feature | Sherlock | ACD/Structure Elucidator | lucy-ng v5.0 |
+|---------|----------|--------------------------|--------------|
+| Fragment library size | 24.5M SSCs | Large (proprietary, commercial) | ~26M SSCs (from 928K compounds) |
+| Fragment pre-screening | 256-bit bitsets, Boolean AND | Unknown (commercial) | 256-bit bitsets, Boolean AND (matching Sherlock) |
+| Fine matching | DEV/AVGDEV + multiplicity | Unknown | DEV/AVGDEV + multiplicity (matching Sherlock) |
+| Fragment injection | DEFF/FEXP goodlist | Automated goodlist | DEFF/FEXP goodlist (same LSD mechanism) |
+| Fragments per run | 1 (first) | Multiple (automated) | 1 default, N optional |
+| Impact (single solution) | 34/40 (85%) | High (commercial, not benchmarked) | Target 34/40 parity |
+| Autonomous operation | No (manual GUI) | No (requires user interaction) | Yes (agent-driven) — lucy-ng advantage |
+| Speed | <2 seconds (Java/MongoDB) | Fast (commercial) | Slower (Python/SQLite) but acceptable |
+
+---
 
 ## Sources
 
-**HIGH confidence sources:**
-- [Claude Code Agent Teams Documentation](https://code.claude.com/docs/en/agent-teams) — Official specification
-- [AddyOsmani: Claude Code Swarms](https://addyosmani.com/blog/claude-code-agent-teams/) — Practical patterns
-- [Multi-Agent Collaboration Patterns with Strands Agents](https://aws.amazon.com/blogs/machine-learning/multi-agent-collaboration-patterns-with-strands-agents-and-amazon-nova/) — Architecture patterns
-- [Self-Refine: Iterative Refinement with Self-Feedback](https://selfrefine.info/) — Feedback loop patterns
-- [PEER Pattern for Multi-Agent Systems](https://www.marktechpost.com/2025/08/02/a-coding-guide-to-build-intelligent-multi-agent-systems-with-the-peer-pattern/) — Collaborative workflow
+**HIGH confidence (authoritative):**
+- Wenk, M. (2023). *Development of a System for Computer-Assisted Structure Elucidation of Small Organic Compounds.* PhD Thesis, Friedrich-Schiller-Universitat Jena. (`background/wenk-thesis.txt` and `background/Dissertation Michael Wenk.pdf`) — Primary specification source for all SSC algorithm parameters, bond-preservation rules, fingerprint dimensions, thresholds, and impact statistics.
+- `background/sherlock-analysis.md` — Project-specific synthesis of Sherlock capabilities vs. lucy-ng gaps, updated 2026-02-19.
+- `src/lucy_ng/database/schema.py` — Existing v6 schema; v7 extension point for fragment table.
+- `src/lucy_ng/dereplication/` — Existing fine-matching algorithm (reusable for fragment fine matching).
+- `.planning/PROJECT.md` — Current milestone definition and deferred feature list.
 
-**MEDIUM confidence sources:**
-- [Verification-First AI Peer Review](https://arxiv.org/pdf/2601.16909) — Quality gate principles
-- [AI Scientist v2](https://pub.sakana.ai/ai-scientist-v2/paper/paper.pdf) — Automated scientific workflow
-- [Multi-Agent Peer Review Research](https://github.com/HITsz-TMG/Multi-agent-peer-review) — Peer feedback mechanisms
+**MEDIUM confidence:**
+- Sherlock casekit library (GitHub: github.com/michaelwenk/casekit) — Java implementation of fragmentation and fragment search. Provides implementation reference but requires translation to Python/RDKit.
+- Elyashberg, M. et al. — Referenced in thesis (Chapter 7.4.1) as inspiration for SSC approach. Not directly accessed.
 
-**Project-specific (HIGH confidence):**
-- lucy-ng v3.0 CLAUDE.md, PROJECT.md, STATE.md — Existing architecture
-- ~/.claude/commands/lucy-ng/case.md — Current orchestrator (672 lines)
-- ~/.claude/agents/lucy-case-agent.md — Current autonomous agent (666 lines)
+---
+
+*Feature research for: v5.0 Fragment Library and SSC Search*
+*Researched: 2026-02-19*

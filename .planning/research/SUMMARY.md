@@ -1,250 +1,195 @@
-# Project Research Summary: v3.0 Statistical Detection
+# Project Research Summary
 
-**Project:** lucy-ng v3.0 — Statistical Detection Milestone
-**Domain:** Computer-Assisted Structure Elucidation (CASE) with NMR spectroscopy
-**Researched:** 2026-02-10
-**Confidence:** HIGH
+**Project:** lucy-ng — v5.0 Fragment Library and SSC Search
+**Domain:** Substructure-subspectrum correlation (SSC) fragment library for autonomous CASE
+**Researched:** 2026-02-19
+**Confidence:** HIGH (primary source: Wenk PhD thesis + existing codebase direct inspection)
 
 ## Executive Summary
 
-Statistical detection represents a transformative shift from heuristic-based CASE to data-driven structure elucidation. Research shows this approach delivers 5 orders of magnitude search space reduction (Sherlock: Caripyrin 8.5M → 30 structures) and solves 89% of multi-solution cases compared to v2.1's constraint-free approach. The key insight: the existing HOSE database already contains all necessary information — hybridisation is encoded in HOSE prefixes, bond partners are visible in sphere 1 neighbors, and shift distributions reveal what's mandatory vs forbidden.
+The v5.0 milestone adds a Sherlock-style SSC fragment library to lucy-ng's autonomous CASE workflow. The core idea is well-established and algorithmically validated: extract 24.5M substructure-subspectrum correlations (SSCs) from the existing 928K-compound database, encode each as a 256-bit bitset fingerprint, and enable fast Boolean AND pre-screening during CASE runs to identify which known substructures are consistent with an experimental spectrum. The best-matching fragment is injected as an LSD DEFF/FEXP goodlist constraint, forcing every generated structure to contain that substructure. In Sherlock's validated results, this reduces 34/40 test cases to a single solution after applying the first fragment. This is the highest-leverage missing capability in lucy-ng today.
 
-The recommended approach requires ZERO new dependencies. Database schema extends with 8 new columns to hose_stats (18% storage increase), statistics generation extends existing stats_generator.py (10-20% runtime overhead), and CLI adds a new detect command group following established Click patterns. Implementation centers on six table-stakes features: hybridisation detection (queries shift → sp2/sp3 distribution), neighbourhood detection (queries shift → bond partner frequencies), HHB detection (queries formula → hetero-hetero bond prevalence), signal grouping (identifies close shifts for combinatorial LSD), two-tier ranking (counts signal matches before MAE), and badlist filters (excludes strained rings).
+The recommended approach requires no new Python dependencies — all needed functionality is available in the existing stack (RDKit 2025.9.4, NumPy 2.2.1, SQLite, ProcessPoolExecutor from stdlib). The critical implementation choices are: separate database file (`lucy-ng-fragments.db`) to avoid inflating the existing 2.8 GB compound database, resumable checkpointed extraction to survive multi-hour pipeline runs, 2 ppm bin size validated empirically before full extraction (baked into every stored fingerprint, unrecoverable if wrong), and batch SQLite scanning for bitset pre-screening rather than loading 768 MB into memory at module startup. The fragment library and the 4J detection problem (from v4.0 UAT) are complementary, not competing: fragments can only select among structurally valid solutions — if the correct structure is excluded by wrong HMBC constraints, no fragment constraint can restore it.
 
-Critical risks center on HOSE hydrogen consistency (using AddHs() breaks 100% of predictions), threshold over-sensitivity (1% NN threshold works for 82% of cases but requires overrides for rare heteroatoms), and agent workflow confusion (statistical output must augment, not replace, chemistry knowledge). These are preventable through architecture enforcement, CLI override flags, and clear agent integration hierarchy.
+The top implementation risk is extraction pipeline reliability. The existing HOSE stats generator took 8h39m for 7.9M entries; SSC extraction will be comparable or longer at 24M entries. A crash at hour 7 without checkpointing requires a full restart. The second major risk is DEFF goodlist vs. DEFF NOT badlist semantic confusion — the lsd-engineer agent already knows DEFF NOT (badlist), and conflating the two semantics produces wrong results with no error signal (either zero solutions or no constraint effect). Both risks have clear prevention strategies that must be built into the first deliverable.
 
 ## Key Findings
 
 ### Recommended Stack
 
-**NO NEW DEPENDENCIES.** All statistical detection features build on the existing lucy-ng stack: Python 3.10+, RDKit (molecular analysis), SQLite (HOSE statistics), and Pydantic v2 (data models). The critical architectural insight from STACK research: HOSE codes already encode hybridisation in their prefix (C-4 = sp3, C-3 = sp2, C-2 = sp), eliminating need for separate hybridisation extraction during lookup.
+No new Python dependencies are required. The fragment library milestone is buildable entirely from existing installed packages: RDKit 2025.9.4 (`FindAtomEnvironmentOfRadiusN`, `PathToSubmol`), NumPy 2.2.1 (vectorized uint8 bitwise AND), SQLite BLOB storage, and stdlib `concurrent.futures.ProcessPoolExecutor` for parallel extraction. The existing database schema (v6) is extended to v7 with two new tables. The SSC data should live in a separate `lucy-ng-fragments.db` file to keep the main compound database at its current 2.8 GB size.
 
-**Core technologies (unchanged):**
-- Python 3.10+ — Language runtime (KEEP, no version bump)
-- RDKit 2025.09.5+ — GetHybridization(), GetNeighbors(), GetRingInfo() APIs verified
-- SQLite 3.x — Extend hose_stats schema with 8 columns (+18% storage to ~3.3 GB)
-- Pydantic v2 — Add DetectionStatsRecord, DetectionResult models
-- hosegen — HOSE code generation (unchanged)
-- Click — New detect.py command group
+The only medium-confidence architectural decision is separate vs. single database file. Research firmly recommends a separate file: the existing database lives on Dropbox, macOS sync will choke on a 5+ GB file that changes during extraction, and index contention during insertion could slow dereplication and prediction queries. This decision must be made before any extraction code is written.
 
-**Database migration strategy:** Extend existing hose_stats table with nullable columns (hybridization TEXT, has_*_neighbor flags, ring_* counts). Backfill via stats_generator.py update or regenerate fresh DB from COCONUT/NMRShiftDB sources for v3.0 release.
-
-**RDKit APIs for statistical extraction:**
-- `atom.GetHybridization()` → HybridizationType (SP3, SP2, SP)
-- `atom.GetNeighbors()` → sequence of bonded atoms (excludes implicit H)
-- `atom.IsInRing()`, `ring_info.IsAtomInRingOfSize(atom_idx, size)` → ring membership
-- CRITICAL: All operations use molecules WITHOUT explicit hydrogens (consistent with existing HOSE prediction)
+**Core technologies:**
+- RDKit 2025.9.4: fragment extraction via `FindAtomEnvironmentOfRadiusN` + `PathToSubmol` — already installed, correct API for atom-environment spheres (not BRICS, which produces retrosynthetic fragments)
+- NumPy 2.2.1: 256-bit fingerprint bitset storage and vectorized AND screening — 32-byte uint8 arrays, SIMD-accelerated in NumPy 2.x, no FPSim2 or h5py needed
+- SQLite BLOB: fingerprint storage at 32 bytes per SSC — single-file architecture, no external service; SSC data in separate `lucy-ng-fragments.db`
+- ProcessPoolExecutor (stdlib): parallel extraction over 928K compounds — CPU-bound RDKit work, no joblib/ray/dask needed
 
 ### Expected Features
 
-**Must have (table stakes):**
-- Hybridisation detection — Query shift ± 2 ppm → sp2/sp3/sp1 distribution, exclude <1% states. Delivers 5 orders of magnitude search space reduction (Sherlock: Caripyrin case).
-- Neighbourhood detection (forbidden) — Query shift → bond partner frequencies, exclude elements <1% (NN threshold). Prevents chemically unreasonable bonds (O-O in non-peroxides).
-- Neighbourhood detection (mandatory) — Query shift → bond partner frequencies, require elements >95% (SN threshold). Enforces strong chemical evidence (carbonyl C MUST bond to O).
-- Two-tier ranking — Rank by (1) signal match count (within 10 ppm tolerance), then (2) MAE among matches. Prevents v2.1's MAE-only hallucination (ibuprofen cyclohexadiene ranked #1 with MAE 1.93 but wrong structure).
-- Signal grouping — Identify shifts within 0.25 ppm, generate LSD HMBC parenthesized atom lists for combinatorial exchange. CRITICAL for ibuprofen-class cases (C4/C5 at 44.90/45.03 ppm).
-- Badlist filters — DEFF/FEXP NOT commands to exclude 3/4-membered rings (chemically rare in natural products). Hardcoded in agent knowledge, no CLI needed.
+The MVP (v5.0 core) is the end-to-end path from offline extraction to agent-usable fragment constraints. Every item in the P1 list is a hard dependency — missing any one means the feature does not function at all.
 
-**Should have (competitive differentiators for v3.1+):**
-- Hetero-hetero bond (HHB) allowance — Automatic HETE 0/1 determination based on formula element statistics
-- Fragment library search — 24.5M substructure-subspectrum correlations (SSCs) from Sherlock approach, reduces 27/40 multi-solution cases
-- Solvent-aware prediction — Per-solvent HOSE statistics (CDCl3 vs DMSO), reduces MAE from ~2.5 to ~0.83 ppm
+**Must have (table stakes, v5.0 launch):**
+- SSC extraction pipeline with checkpointing — without the library, nothing else works; extraction must survive multi-hour interruption
+- 256-bit fingerprint per SSC (2 ppm bins, validated before full extraction) with Boolean AND pre-screening — without pre-screening, fine-matching 24M SSCs per CASE run is computationally infeasible
+- Fine spectral matching (DEV 2 ppm, AVGDEV 1 ppm) with multiplicity and equivalence match — pre-screening has too many false positives; fine match selects genuinely useful fragments
+- CLI: `lucy fragment search --shifts "..." --format json` — agent-accessible interface; lsd-engineer reads JSON and injects DEFF commands directly
+- LSD goodlist file generation (SSTR/LINK format in fragment .lsd files) — fragment only useful if expressible in LSD syntax
+- Agent integration in lsd-engineer — fragment search runs before each LSD write iteration; DEFF/FEXP injected before MULT commands; sequential single-fragment injection with solution-count validation
+- Multi-compound UAT on at least 5 compounds from Sherlock test set — validates that solution count reduction matches Sherlock's expected pattern
 
-**Defer (explicit anti-features for v3.0):**
-- ELIM command automation — Notoriously finicky, Sherlock disables by default
-- 4-bond HMBC detection — High false positive rate, requires manual marking
-- COSY correlation constraints — Complex multiplets, rarely improve results
-- Stereochemistry (E/Z, R/S) — LSD doesn't handle well, defer to v4.0 with DFT ranking
-- GUI parameter adjustment — Autonomous AI agent is differentiator, don't regress to manual tweaking
+**Should have (v5.x, after validation):**
+- Multi-fragment sequential injection (inject second fragment if first still yields >5 solutions)
+- Fragment search statistics in CLI output (diagnostic for threshold tuning)
+- Formula-aware pre-screening (filter SSC by atom composition against query formula for speed)
+- Fragment display in CASE-PROGRESS.md (transparency for chemist review)
+- Resumable extraction checkpoint in CLI (--resume/--fresh flags; add if extraction is interrupted)
+
+**Defer (v5.2+):**
+- Fragment size filter (min 4 heavy atoms) — fine matching likely handles this implicitly via AVGDEV
+- Custom user-uploaded fragments — high complexity, low value
+- Fragment database regeneration when compound DB updates — only needed on rare compound DB updates
 
 ### Architecture Approach
 
-Statistical detection integrates cleanly as additive layers over existing HOSE infrastructure. No invasive changes to core prediction pipeline. Database layer extends hose_stats schema, statistics generation extends stats_generator.py accumulator logic, CLI adds detect.py command group, and agent calls lucy detect via Bash (same pattern as existing lucy lsd rank).
+The fragment library is a new subsystem that slots cleanly between two existing systems: the SQLite compound database (source of SSC data) and the LSD CASE workflow (consumer of DEFF/FEXP constraints). The integration is additive — no existing code paths are broken. The new `lucy_ng/fragments/` module follows all established patterns: thin CLI calling module logic, context manager for DB access, resumable chunked processing (clone of `ResumableHOSEStatsGenerator`), JSON output format for agent consumption. The lsd-engineer agent gains one new step: run `lucy fragment search` before writing each LSD iteration file, prepend DEFF/FEXP output before the MULT section.
 
 **Major components:**
-1. Database layer (schema.py, manager.py) — Extend hose_stats with hybridization, bond partner flags, ring counts. Migration via ALTER TABLE or fresh generation.
-2. Statistics generation (stats_generator.py) — Extend WelfordAccumulator to track sp2/sp3 counts, neighbor symbols, ring membership during existing HOSE processing loop.
-3. Detection module (detection/detector.py) — NEW: StatisticalDetector class queries extended hose_stats, returns DetectionResult with confidence scores.
-4. CLI commands (cli/detect.py) — NEW: detect hybridisation/neighbours/hhb commands with JSON output for agent consumption.
-5. Agent integration (lucy-case-agent.md) — Use detection to AUGMENT NMR knowledge, not replace. Chemistry-first hierarchy: never violate basic chemistry, use stats to narrow among valid options.
-6. Two-tier ranking (ranking/ranker.py) — Modify existing SolutionRanker to count signal matches before MAE sorting. Optional HybridisationFilter pre-filter.
-
-**Data flow:** User calls `lucy detect hybridisation db.sqlite 139.94` → CLI parses args → StatisticalDetector queries hose_stats WHERE mean BETWEEN 137.94 AND 141.94 → Database returns sp2_fraction/sp3_fraction → Detector compares fractions → Returns DetectionResult(prediction="sp2", confidence=0.91) → CLI formats JSON → Agent parses, uses in LSD MULT command.
-
-**Build order:** (1) Schema extension, (2) Statistics generation, (3) Detection module, (4) CLI commands, (5) Agent integration, (6) Two-tier ranking (optional). Each phase depends on previous, enforced by dependency chain.
+1. **SSC Extractor** (`fragments/extractor.py`) — BFS sphere fragmentation over all 928K compounds, aromaticity-standardized SMILES deduplication, 256-bit fingerprint generation, checkpoint/resume via existing `operation_checkpoint` table; follows `ResumableHOSEStatsGenerator` pattern exactly
+2. **Fragment Searcher** (`fragments/searcher.py`) — batched bitset pre-screening (100K rows/batch from SQLite, avoiding 768 MB RAM load at startup), fine spectral matching (DEV/AVGDEV + multiplicity + equivalence), result ranking by atom_count DESC then AVGDEV ASC
+3. **DEFF Formatter** (`fragments/lsd_formatter.py`) — converts matched SSC SMILES (with R group open sites) to SSTR/LINK format files; generates DEFF/FEXP command strings ready for direct injection; writes fragment files to current iteration directory
+4. **Fragment CLI** (`cli/fragment.py`) — `lucy fragment build`, `lucy fragment search`, `lucy fragment info` commands; JSON output is the complete agent interface including exact LSD command strings
+5. **Schema v7** (`database/schema.py`) — `ssc` and `ssc_bitset` tables in separate `lucy-ng-fragments.db`, migration function following existing v6 pattern; bin size recorded in `schema_meta` before extraction starts
+6. **lsd-engineer agent update** — adds fragment search step at start of each LSD write iteration; adds DEFF/FEXP to constraint inventory; sequential injection protocol (one fragment at a time, discard if zero solutions); devils-advocate checks fragment file existence pre-run
 
 ### Critical Pitfalls
 
-1. **HOSE Hydrogen Consistency Violation** — Using AddHs() during statistical extraction while prediction uses implicit H breaks 100% of lookups. HOSE codes from mol vs AddHs(mol) are structurally different. Prevention: Enforce no-explicit-H in all molecule processing, use GetNumImplicitHs() to count hydrogens. Detection: CLI test `lucy predict c13 "CCO"` must return predictions with count > 0.
+1. **No checkpointing in SSC extraction** — 24M SSC extraction will run 4-8 hours; a crash without checkpointing requires a full restart from zero. Prevention: reuse `operation_checkpoint` table and `set_checkpoint`/`get_checkpoint` from existing `DatabaseManager`; batch in groups of 1000 compounds; validate resume by checking SSC count matches prior progress.
 
-2. **Threshold Over-Sensitivity Without Overrides** — Hardcoded 1% NN, 95% SN thresholds work for 82% of Sherlock's cases but fail for rare heteroatoms or unusual hybridisation states. Agent gets stuck in "0 solutions with constraints" loops. Prevention: CLI override flags (--min-frequency 0.005, --mode relaxed), orchestrator intervention protocol when pattern detected, document threshold semantics.
+2. **Wrong fingerprint bin size baked into all stored fingerprints** — bin size (2 ppm recommended from Sherlock thesis) is computed at extraction time and stored in every SSC row; changing it requires full re-extraction at 4-8 hours cost. Prevention: validate 2 ppm on a 1K compound sample across 5 known structures before full extraction; confirm recall >99% and candidates-per-search <1000; record bin size in `schema_meta` before starting full extraction.
 
-3. **Circular Validation Risk** — Same HOSE database used for constraints (pre-LSD) and ranking (post-LSD) reinforces systematic biases. If database over-represents aromatic C-O, both steps favor aromatic structures. Mitigation: Database size (928K) provides diversity, threshold filtering (1%/95%) only applies strong patterns, agent fallback protocol (retry without constraints if 0 solutions), validation with held-out test set.
+3. **DEFF goodlist vs. DEFF NOT badlist semantic confusion** — lsd-engineer agent already knows DEFF NOT (badlist). Adding goodlist support creates a conflation risk with no error message distinguishing the outcomes: wrong goodlist semantics produces zero solutions or no constraint effect. Prevention: explicit worked examples in agent knowledge; CLI outputs exact LSD command strings, not just SMILES; smoke test goodlist semantics on minimal LSD case before agent integration.
 
-4. **COCONUT Data Quality Unknown** — 96.87% of HOSE data from COCONUT (predicted spectra), structures are "as-deposited" with varying curation. Bond assignments, tautomers, protonation states may have errors affecting bond partner statistics. Prevention: Extract from sanitized RDKit molecules (corrects many errors), validate sampling (100 random structures), cross-reference with NMRShiftDB subset (3.13% experimental data), conservative thresholds (1% NN tolerates noise).
+4. **Fragment constraint conflicts with HMBC constraints eliminating correct structure** — a valid fragment may individually match spectral data but be topologically incompatible with HMBC-derived constraints, producing zero solutions. Prevention: inject one fragment at a time, run LSD after each, discard any fragment that yields zero solutions; never inject 3+ fragments simultaneously; agent logs conflict and continues rather than halting.
 
-5. **Signal Grouping False Positives** — Grouping shifts within 0.25 ppm creates combinatorial explosion when carbons are truly different (distinguished by multiplicities). Example: C4 at 44.90 (CH2), C5 at 45.03 (CH), C6 at 45.20 (CH3) → 6x search space, 5 permutations wrong. Prevention: Multiplicity-aware grouping (group only if same mult or both ambiguous CH/CH3), agent override mechanism, post-ranking collapse of identical-assignment solutions.
+5. **RDKit aromatic substructure mismatch between extraction and query** — SMILES in the compound database may be stored in aromatic or Kekulé form; RDKit's aromaticity perception depends on sanitization path. Inconsistency between storage and query time causes false negatives for aromatic compounds. Prevention: standardize all molecules through one explicit aromaticity model (`SetAromaticity` with `AROMATICITY_MDL`) at both extraction and query time; validate with self-search test (100 compounds, their own spectrum must find their own SSCs in results).
 
 ## Implications for Roadmap
 
-Based on research findings and dependency analysis, v3.0 should follow a foundation-first approach: implement core statistical detection before advanced features, validate thoroughly before agent integration, defer fragment library and solvent-awareness to v3.1+.
+Based on combined research, the phase structure is strongly constrained by hard dependencies. Phase 1 and Phase 2 must complete in sequence before any subsequent phase can be meaningfully tested. The extraction pipeline is the first hard blocker; the DEFF formatter's fragment file format is the highest-risk unresolved question.
 
-### Suggested Phase Structure (6 phases)
+### Phase 1: Database Schema and Extraction Infrastructure
 
-### Phase 34-01: Hybridisation Detection
-**Rationale:** Highest impact (5 orders magnitude reduction), cleanest implementation (HOSE prefix parsing), no database queries during detection (prefix already encodes state).
-**Delivers:** `lucy detect hybridisation <shift>` CLI command, extended hose_stats schema with hybridization column, statistics generation for sp2/sp3/sp1 fractions.
-**Addresses:** Table stakes feature 1 (hybridisation detection), foundation for all other statistical features.
-**Avoids:** Pitfall 1 (HOSE H consistency via code review), Pitfall 6 (storage explosion via binned stats in 2 ppm windows).
-**Research flags:** Standard pattern (HOSE parsing well-documented), no deeper research needed.
+**Rationale:** Everything downstream depends on storage. Schema must exist before extraction can write data; extraction infrastructure must exist before the search engine has anything to query. This phase also forces the critical architectural decision (separate file vs. same database) before any code is written, at minimum cost.
+**Delivers:** Schema v7 (`ssc` and `ssc_bitset` tables in `lucy-ng-fragments.db`); `DatabaseManager` query methods (`insert_ssc_batch`, `get_ssc_count`, `iter_ssc_bitsets`, `get_ssc_by_id`); `SSCRecord`/`SSCMatch` Pydantic models; validated schema migration; separate database file confirmed working with existing `lucy dereplicate` and `lucy predict` commands
+**Addresses:** Fragment database schema (table stakes #7), pitfalls #1 (checkpointing table exists) and #6 (database migration/separation)
+**Avoids:** Schema changes breaking existing dereplication and prediction queries; Dropbox sync issues from 5+ GB single file
 
-### Phase 34-02: Neighbourhood Detection
-**Rationale:** Second-highest impact (prevents unreasonable bonds), depends on extended schema from 34-01, requires HOSE sphere 1 parsing.
-**Delivers:** `lucy detect neighbours <shift>` CLI command, bond partner columns in hose_stats (has_carbon/oxygen/nitrogen_neighbor flags), NN/SN threshold filtering.
-**Addresses:** Table stakes features 2-3 (forbidden/mandatory neighbours).
-**Avoids:** Pitfall 2 (threshold sensitivity via override flags), Pitfall 4 (COCONUT quality via RDKit sanitization), Pitfall 12 (too many elements via min-report threshold).
-**Research flags:** Needs HOSE sphere 1 parsing validation (medium complexity).
+### Phase 2: SSC Extraction Pipeline
 
-### Phase 34-03: HHB and Ring Detection
-**Rationale:** Rounding out core detection features, both are simple queries (global HHB statistic, ring membership from RDKit).
-**Delivers:** `lucy detect hhb <formula>` CLI command, ring statistics columns (in_3ring/4ring/aromatic counts), HETE command generation logic.
-**Addresses:** Should-have feature (HHB allowance), badlist foundation (ring exclusion stats).
-**Avoids:** Pitfall 4 (data quality via simple global statistic, low sensitivity to errors).
-**Research flags:** Standard RDKit APIs (GetRingInfo), no research needed.
+**Rationale:** The fragment library is the foundation of all search functionality. Without 24M+ extracted SSCs, fragment search returns nothing and agent integration is untestable. This is the largest single phase and the highest-risk due to multi-hour runtime. Sample validation must precede full extraction.
+**Delivers:** `SSCExtractor` with BFS sphere fragmentation, bond-preserving rules (Sherlock algorithm: preserve heteroatom-heteroatom bonds, bond order >1, C adjacent to 2+ heteroatoms, complete ring systems), aromaticity standardization, deduplication by canonical SMILES, 256-bit fingerprint generation (2 ppm bins, bin size validated and recorded in schema_meta); `lucy fragment build` CLI command with `--resume`/`--fresh` flags; `lucy fragment info` for validation; approximately 24M SSC records
+**Addresses:** Table stakes #1-3 (SSC extraction, deduplication, fingerprints), pitfall #2 (bin size validation before full run), pitfall #5 (aromaticity standardization)
+**Avoids:** Re-extraction by validating fingerprint bin size on 1K sample first; self-search validation on 100 compounds (including aromatic compounds) before committing to full 928K run
 
-### Phase 34-04: Signal Grouping
-**Rationale:** CRITICAL for ibuprofen-class cases, algorithmic (no database), but complex LSD file generation changes.
-**Delivers:** `lucy analyze grouping <shifts>` CLI command, multiplicity-aware grouping logic, LSD HMBC parenthesized atom list generation.
-**Addresses:** Table stakes feature 5 (signal grouping).
-**Avoids:** Pitfall 5 (false positives via multiplicity awareness).
-**Research flags:** Needs LSD file generation research (medium complexity, parenthesized syntax verification).
+**Research flag:** Run on 1K compound sample first, measure per-compound cost, project full runtime, then commit to full run. Do not start full extraction until sample run passes self-search test (>99% recall on 100 sampled compounds) and bin size is confirmed. Log skipped compound count (compounds without atom-indexed shifts) — if >60% skipped, effective SSC count will be significantly below Sherlock's 24.5M.
 
-### Phase 34-05: Two-Tier Ranking and Badlist
-**Rationale:** Quick wins (ranking is algorithmic, badlist is hardcoded), high impact (prevents MAE hallucinations).
-**Delivers:** Modified `lucy lsd rank` with match-count-first sorting, HOSE radius reporting, badlist DEFF/FEXP patterns in agent knowledge.
-**Addresses:** Table stakes features 4 and 6 (two-tier ranking, badlist filters).
-**Avoids:** Pitfall 8 (match quality via radius-weighted scoring or reporting), Pitfall 10 (cyclopropane exclusion via override mechanism).
-**Research flags:** Standard pattern (modify existing ranker), no research needed.
+### Phase 3: Fragment Search Engine
 
-### Phase 34-06: Agent Integration
-**Rationale:** Teaches agent to use new detection commands autonomously, highest risk (workflow confusion), must come after all CLI commands stable.
-**Delivers:** Updated lucy-case-agent.md with detection protocol, chemistry-first hierarchy, threshold override examples, batch API if profiling shows >5s overhead.
-**Addresses:** Makes all statistical features usable autonomously.
-**Avoids:** Pitfall 7 (workflow confusion via clear hierarchy and examples), Pitfall 11 (CLI overhead via batch API if needed), Pitfall 13 (no summary via constraints.md generation).
-**Research flags:** Needs agent prompt engineering research, test scenario validation (high complexity).
+**Rationale:** With the SSC table populated, the search engine can be built and validated in isolation before agent integration. This separation makes debugging much easier — search correctness issues are isolated from agent behavior issues.
+**Delivers:** `FragmentSearcher` with batched bitset pre-screening (100K rows/batch, avoiding full RAM load) and fine spectral matching (DEV/AVGDEV + multiplicity + equivalence match); result ranking; CLI `lucy fragment search` command with JSON output including `deff_commands` and `fexp_command` fields as exact strings for agent injection; performance benchmarks (target: <2 seconds on M1 Mac with hard 2000-candidate limit after pre-screening)
+**Addresses:** Table stakes #2 (bitset pre-screening), #3 (fine matching), #4 (CLI), pitfall #7 (query performance)
+**Avoids:** Anti-pattern of loading 768 MB bitsets at module import time; validates pre-screening effectiveness on Ibuprofen and 4 other test compounds (search on own shifts must find plausible fragments) before agent integration
 
-### Phase 34-07: Validation (Recommended Addition)
-**Rationale:** Can't ship without knowing if constraints help or hurt, Sherlock's 45 test cases provide validation set.
-**Delivers:** Validation test suite (Sherlock's 45 cases from nmrXiv), metrics (constraint accuracy, search space reduction, rank improvement), regression tests in CI.
-**Addresses:** Pitfall 9 (no validation dataset).
-**Avoids:** Shipping features that degrade performance without detection.
-**Research flags:** Needs nmrXiv dataset download/sanitization (medium complexity).
+### Phase 4: DEFF Formatter and LSD Integration
+
+**Rationale:** The DEFF formatter is the highest-risk single component because the exact LSD fragment file format (SSTR/LINK notation inside a DEFF-referenced file) requires direct validation against LSD manual appendix before implementation. A wrong format produces syntactically invalid DEFF files with no helpful error message from LSD. This phase must validate LSD syntax independently before agent integration depends on it.
+**Delivers:** `DEFFFormatter` converting SSC SMILES with R groups to SSTR/LINK format files; `lucy fragment to-lsd` CLI command; validated DEFF/FEXP syntax confirmed with working LSD smoke test (inject known fragment, verify solution count decreases); fragment .lsd files written to iteration directory
+**Addresses:** Table stakes #5 (LSD goodlist file generation), pitfall #4 (DEFF vs DEFF NOT semantics)
+**Avoids:** Anti-pattern of injecting DEFF after MULT commands (must appear first in LSD file); validates goodlist semantics with minimal LSD test case before any agent workflow integration
+
+**Research flag:** DEFF fragment file internal format (SSTR/LINK notation inside the referenced .lsd file) is listed as MEDIUM confidence in research. Needs direct LSD manual appendix A4 verification or working test case before writing the formatter. This is the one unresolved open question that could require significant rework if the format differs from assumed SSTR/LINK structure.
+
+### Phase 5: Agent Integration
+
+**Rationale:** Agent integration is the final step and has no meaning until phases 1-4 deliver a working search pipeline with validated LSD syntax. The lsd-engineer workflow change is minimal in code (one new step before each LSD write) but high-risk in semantics (DEFF vs DEFF NOT confusion, sequential injection protocol). Integration must include explicit semantic tests before going to UAT.
+**Delivers:** Updated `lucy-lsd-engineer.md` agent with fragment search step, sequential injection protocol (one fragment at a time; discard if 0 solutions; log conflict and continue), DEFF/FEXP constraint inventory tracking in LSD file header, devils-advocate fragment file existence check pre-run; CASE-PROGRESS.md showing fragment search results per iteration
+**Addresses:** Table stakes #6 (agent integration), pitfall #4 (DEFF semantics with worked examples and smoke test), pitfall #5 (conflict detection and discard protocol)
+**Avoids:** Simultaneous multi-fragment injection without individual validation; agent halting on 0-solution fragment conflict instead of discarding and continuing to next fragment
+
+### Phase 6: Multi-Compound UAT
+
+**Rationale:** Single-compound testing during development is insufficient to validate the fragment library's impact. The Sherlock paper claims 34/40 cases reduce to single solution after first fragment — lucy-ng needs comparable validation. UAT must test ibuprofen plus 4+ other compounds from Sherlock's test set. Note: ibuprofen may not benefit if the 4J HMBC problem (excluded correct structure) persists from v4.0.
+**Delivers:** UAT results on 5+ compounds with solution counts before and after fragment injection; confirmation that fragment search finds structurally plausible fragments for each compound; identification of any remaining failure modes (4J problem compounds vs. fragment-limitation compounds); go/no-go for v5.0 release
+**Addresses:** Table stakes #7 (multi-compound UAT)
 
 ### Phase Ordering Rationale
 
-- Database schema changes FIRST (phases 34-01/02/03 all write to extended schema, must exist before generation runs)
-- Algorithmic features (34-04, 34-05) interleaved to provide variety (reduces fatigue from back-to-back database work)
-- Agent integration LAST (phase 34-06 depends on all CLI commands being stable and tested)
-- Validation AFTER implementation (phase 34-07 measures quality of 34-01 through 34-06)
-
-This order follows natural dependencies:
-1. Schema → Generation → Detection module → CLI → Agent
-2. Minimizes rework (schema changes are expensive, do once)
-3. Enables incremental testing (each phase delivers working CLI command)
-4. Defers complexity (agent integration is hardest, comes last when foundation solid)
+- Phase 1 before Phase 2: storage schema must exist before extraction writes data
+- Phase 2 before Phase 3: SSC table must be populated before search engine is testable
+- Phases 3 and 4 can run in parallel: search engine and DEFF formatter are independent modules; both depend only on the `SSCMatch` Pydantic model from Phase 1
+- Phase 5 must wait for Phase 4: agent integration needs the complete CLI pipeline (search + formatter) to be validated with real LSD smoke tests
+- Phase 6 must wait for Phase 5: full end-to-end pipeline before UAT is meaningful
 
 ### Research Flags
 
-**Needs deeper research during planning:**
-- Phase 34-02 (Neighbourhood Detection) — HOSE sphere 1 parsing validation, verify neighbor symbol extraction matches expectations
-- Phase 34-04 (Signal Grouping) — LSD parenthesized atom list syntax, verify combinatorial generation works correctly
-- Phase 34-06 (Agent Integration) — Prompt engineering for chemistry-first hierarchy, test scenario design for stats-vs-knowledge conflicts
-- Phase 34-07 (Validation) — nmrXiv dataset API, Sherlock test case sanitization workflow
+Phases needing deeper research during planning:
+- **Phase 2 (Extraction):** Validate 2 ppm bin size empirically on a 1K compound sample before committing to full 24M extraction. This is an unrecoverable decision if wrong.
+- **Phase 4 (DEFF Formatter):** LSD fragment file internal format (SSTR/LINK notation) is MEDIUM confidence. Needs LSD manual appendix A4 verification or working test case before implementing serialization. The fragment search pipeline works without this — only the LSD injection step requires it.
 
-**Standard patterns (skip deeper research):**
-- Phase 34-01 (Hybridisation) — HOSE prefix parsing is well-documented, RDKit GetHybridization() API verified
-- Phase 34-03 (HHB/Ring) — Global statistic query (simple SQL), RDKit GetRingInfo() API verified
-- Phase 34-05 (Ranking/Badlist) — Modify existing ranker (established codebase pattern), hardcoded SMARTS (no research)
+Phases with standard patterns (no additional research needed):
+- **Phase 1 (Schema):** Follows existing `migrate_v5_to_v6` pattern exactly. Standard SQLite schema migration. Two new tables, one new foreign key, one migration function.
+- **Phase 3 (Search Engine):** Bitset AND pre-screening and DEV/AVGDEV fine matching are fully specified in the Wenk thesis. All algorithm parameters are from primary sources with HIGH confidence.
+- **Phase 5 (Agent Integration):** lsd-engineer workflow change is a minimal addition to an existing documented workflow. Semantic validation (DEFF vs DEFF NOT) requires a smoke test but not research.
+- **Phase 6 (UAT):** Execution and measurement, not research.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All RDKit APIs verified in 2025.09.5 documentation, no new dependencies needed, existing HOSE infrastructure confirmed via codebase inspection |
-| Features | HIGH | Specifications directly from Sherlock thesis (Wenk 2023) with test case validation, thresholds (1% NN, 95% SN, 0.25 ppm grouping, 10 ppm match tolerance) documented with rationale |
-| Architecture | HIGH | Integration points verified in existing codebase (schema.py, stats_generator.py, cli/ pattern), data flow tested on small samples, storage estimates calculated |
-| Pitfalls | HIGH | Pitfalls 1-7 informed by lucy-ng architecture review, Sherlock analysis, RDKit documentation, and project memory (ibuprofen CASE learnings). Pitfalls 8-10 MEDIUM (edge cases, less documentation). Pitfalls 11-13 LOW (UX/performance, speculative) |
+| Stack | HIGH | All dependencies verified against official docs; no new packages required; `FindAtomEnvironmentOfRadiusN`, `PathToSubmol`, NumPy bitwise ops all confirmed in official documentation for installed versions |
+| Features | HIGH | Primary source is Wenk PhD thesis with full algorithmic specification; all algorithm parameters (bin size, thresholds, sphere radius, bond-preservation rules, fragment ranking) sourced directly from thesis |
+| Architecture | HIGH | Existing codebase directly inspected for all integration points (schema.py, manager.py, stats_generator.py, cli/*.py); patterns confirmed working in production; data flow matches established patterns throughout |
+| Pitfalls | MEDIUM-HIGH | Extraction pitfalls derived from existing HOSE stats generator experience (same code patterns, same runtime characteristics); DEFF semantic pitfall derived from agent behavior patterns observed in v3.0/v4.0 UAT; DEFF fragment file format is the one MEDIUM-confidence pitfall |
 
 **Overall confidence:** HIGH
 
-Research is comprehensive and actionable. All core APIs verified in official sources, all thresholds backed by Sherlock's experimental validation (45 test cases), all integration points confirmed in existing codebase. The foundation is solid.
+### Gaps to Address
 
-### Gaps to Address During Planning
+- **DEFF fragment file internal format (SSTR/LINK notation):** Confirmed at MEDIUM confidence from Sherlock thesis description. Exact LSD syntax for atom definitions inside a DEFF-referenced .lsd fragment file must be validated against LSD manual or working test case before implementing `DEFFFormatter`. If the format differs from assumed SSTR/LINK, the formatter implementation must change. Handle at start of Phase 4 — this is the highest-risk open question.
 
-**1. HOSE sphere 1 parsing accuracy**
-- Gap: Assumed HOSE first sphere neighbors map 1:1 to bond partners, but need to verify with hosegen library API.
-- How to handle: Phase 34-02 planning should include test cases with known bond partners, verify extraction matches expectations.
+- **Fingerprint bin size validation:** 2 ppm is from Sherlock thesis and is strongly recommended, but must be validated empirically on a 1K compound sample before full extraction. If recall at 2 ppm is unexpectedly low (due to COCONUT vs NMRShiftDB spectrum quality differences), bin size needs adjustment. Handle at start of Phase 2 before committing full 24M extraction.
 
-**2. LSD parenthesized atom list syntax**
-- Gap: Sherlock documentation shows `HMBC (2 3) 8` syntax for grouping, but LSD manual doesn't explicitly document this as valid.
-- How to handle: Phase 34-04 planning should run LSD with parenthesized syntax test cases, verify solutions generated correctly.
+- **Effective SSC count from lucy-ng database:** Sherlock extracted 24.5M SSCs from 892K compounds. Lucy-ng has 928K compounds but only 99.7% have atom-indexed shifts. Compounds without atom mapping (estimated 30-40% from NMRShiftDB inconsistencies) cannot yield valid SSCs. Final SSC count may be noticeably below 24.5M. This affects search effectiveness but does not change the implementation approach. Log skipped compound count during extraction for post-hoc diagnosis.
 
-**3. Threshold tuning validation**
-- Gap: Sherlock's thresholds (1% NN, 95% SN) are defaults, but no systematic tuning study to prove optimality.
-- How to handle: Phase 34-07 validation should test threshold sensitivity (0.5%, 1%, 2% NN; 90%, 95%, 99% SN), report which performs best on test set.
-
-**4. COCONUT structure quality quantification**
-- Gap: Inferred that COCONUT has variable curation quality, but no systematic measurement of bond assignment error rate.
-- How to handle: Phase 34-03 planning should include validation sampling (100 random structures manual inspection), reject design if >10% errors found.
-
-**5. Agent decision hierarchy edge cases**
-- Gap: Defined chemistry-first hierarchy for stats-vs-knowledge conflicts, but untested on real contradiction scenarios.
-- How to handle: Phase 34-06 planning should create test scenarios (e.g., sp3 stats for aromatic shift), verify agent resolves correctly.
+- **4J HMBC interaction with fragment constraints (ibuprofen):** The v4.0 UAT shows ibuprofen's correct structure may not appear in the LSD solution set at all (excluded by 4J HMBC constraints interpreted as 3J). Fragment constraints cannot recover a correct structure that was never generated. Fragment library (v5.0) and 4J detection (future milestone) must be treated as complementary. UAT should test non-4J compounds first to validate fragment library impact independently.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-
-**Sherlock CASE System:**
-- Michael Wenk, PhD Thesis, Friedrich-Schiller-Universitat Jena, 2023 — Statistical detection methodology, thresholds (1% NN, 95% SN, 0.25 ppm grouping), test case validation (45 compounds, 40/45 solved, 38/40 at rank #1)
-- [Sherlock publication (Molecules 2023)](https://www.mdpi.com/1420-3049/28/3/1448) — System architecture, integration patterns
-- [Sherlock GitHub](https://github.com/michaelwenk/sherlock) — Source code (pyLSD implementation)
-
-**RDKit API:**
-- [RDKit Atom Documentation](https://www.rdkit.org/docs/source/rdkit.Chem.rdchem.html) — GetHybridization(), GetNeighbors(), GetNumImplicitHs() verified
-- [RDKit Ring Documentation](https://www.rdkit.org/docs/cppapi/classRDKit_1_1RingInfo.html) — IsInRing(), GetRingInfo(), IsAtomInRingOfSize() verified
-- [RDKit Cookbook](https://www.rdkit.org/docs/Cookbook.html) — Implicit vs explicit hydrogen handling
-
-**Lucy-ng Codebase:**
-- `src/lucy_ng/database/schema.py` — Schema version 3 confirmed, hose_stats table structure
-- `src/lucy_ng/prediction/stats_generator.py` — Welford algorithm for incremental statistics
-- `src/lucy_ng/prediction/hose.py` — HOSE code format (prefix encodes hybridisation)
-- Live database queries on lucy-ng-derep.db — 7.9M HOSE stats across radii 1-6
-
-**LSD Software:**
-- [LSD Manual (GitHub)](https://github.com/UnixJunkie/LSD/blob/master/MANUAL_ENG.html) — DEFF, FEXP, LIST, ELEM, PROP command reference
-- Local installation (/Users/steinbeck/Dropbox/develop/LSD/Filters/) — Filter file formats (ring3, ring4) verified
+- Wenk, M. (2023). PhD Thesis, Friedrich-Schiller-Universitat Jena — full algorithmic specification for SSC extraction, bond-preservation rules, fingerprint design (256 bits, 2 ppm bins), DEV/AVGDEV thresholds, fragment ranking rules, and impact statistics (34/40 single solution result); the authoritative source for all algorithm parameters
+- `background/sherlock-analysis.md` — project-specific synthesis of Sherlock SSC design and impact on lucy-ng (24.5M SSC count, DEFF/FEXP injection mechanism)
+- `src/lucy_ng/database/schema.py` — v6 schema confirmed; migration pattern for v7 extension
+- `src/lucy_ng/database/manager.py` — `iter_compounds_with_shifts`, `set_checkpoint`, `get_checkpoint` methods confirmed present
+- `src/lucy_ng/prediction/stats_generator.py` — `ResumableHOSEStatsGenerator` checkpoint pattern; HOSE regen timing (8h39m reference) used to project SSC extraction time
+- RDKit 2025.09.5 docs — `FindAtomEnvironmentOfRadiusN`, `PathToSubmol` usage pattern confirmed; `rdSubstructLibrary` evaluated and rejected
+- NumPy 2.4 Manual — `packbits`, uint8 bitwise operations confirmed
+- LSD Manual (nuzillard.github.io) — `DEFF`/`FEXP` syntax confirmed: `DEFF F_n_ <path>`, `FEXP "F1 AND F2"` pattern
+- Lucy-ng SQLite database live query — atom_index coverage: 99.7% (23,994,980 / 24,063,169 shifts), all 928,443 compounds present
 
 ### Secondary (MEDIUM confidence)
+- Sherlock PMC paper (PMC9920390) — 256-bit bitstring fingerprint description: "each fragment has a bit string representation... screened via a bit string comparison where all set bits of a fragment have to be present in the query bitset"
+- Sherlock GitHub (casekit library, michaelwenk/casekit) — Java SSC extraction implementation reference; not directly inspected, inferred from thesis
+- `~/.claude/agents/lucy-lsd-engineer.md` — current lsd-engineer workflow; v3.0/v4.0 UAT findings on DEFF NOT badlist behavior
 
-**COCONUT Database:**
-- [COCONUT 2.0 (NAR 2024)](https://academic.oup.com/nar/article/53/D1/D634/7908792) — Comprehensive overhaul and curation, 63+ source databases
-- [COCONUT original (JChemInf 2020)](https://jcheminf.biomedcentral.com/articles/10.1186/s13321-020-00478-9) — Database construction methodology
-
-**NMR Prediction:**
-- [HOSE code prediction performance (JChemInf 2023)](https://jcheminf.biomedcentral.com/articles/10.1186/s13321-023-00785-x) — Small data quantity analysis
-- [Stereo-aware HOSE extension (ACS Omega 2019)](https://pubs.acs.org/doi/10.1021/acsomega.9b00488) — Enhanced methods
-
-### Tertiary (LOW confidence, needs validation)
-
-**Storage Estimates:**
-- Database size calculations (7.9M rows × 32 bytes/row = 253 MB increase) — arithmetic based on column types, not measured
-- Query performance estimates (5-10 ms for shift range) — extrapolated from small samples, not benchmarked on full DB
-
-**Threshold Optimality:**
-- Sherlock's 1% NN, 95% SN thresholds documented as defaults but no tuning study proving optimality — assumed based on 40/45 success rate
+### Tertiary (LOW confidence, explicitly rejected for this use case)
+- FPSim2 — HDF5-based Tanimoto similarity tool; wrong semantic (containment not similarity) and adds HDF5 dependency
+- rdSubstructLibrary — SMARTS-based substructure screening; wrong semantic (spectral match not SMARTS query)
+- BRICS fragmentation — retrosynthetic cuts; wrong semantic (need atom-environment spheres)
 
 ---
-*Research completed: 2026-02-10*
+*Research completed: 2026-02-19*
 *Ready for roadmap: yes*
-*Next step: gsd-roadmapper agent uses this SUMMARY.md to structure v3.0 milestone roadmap*
+*Next step: gsd-roadmapper agent uses this SUMMARY.md to structure v5.0 milestone roadmap*
