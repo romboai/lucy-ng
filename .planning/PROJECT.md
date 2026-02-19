@@ -80,8 +80,12 @@ An AI agent can autonomously determine the structure of an unknown organic compo
 
 ### Deferred
 
-- [ ] Support for COSY correlations in LSD constraints
-- [ ] Fragment library for substructure suggestion
+- [ ] Fragment library for substructure suggestion (Priority 1 — see background/sherlock-analysis.md)
+- [ ] Statistical 4J HMBC coupling detection (Priority 2 — v4.0 UAT root cause)
+- [ ] Support for COSY correlations in LSD constraints (Priority 3)
+- [ ] NP-likeness scoring for solution filtering (Priority 4 — RDKit built-in)
+- [ ] Multi-compound UAT against Sherlock's 45-case benchmark
+- [ ] Solvent-aware 13C prediction
 - [ ] Stereochemistry handling (E/Z, R/S)
 - [ ] Interactive CASE mode with user feedback loop
 
@@ -91,7 +95,6 @@ An AI agent can autonomously determine the structure of an unknown organic compo
 - GUI or web visualization - purely programmatic interface
 - Non-Bruker vendor formats (Varian, JEOL, etc.) - Bruker only for v1
 - SENECA integration - requires Java GUI rebuild, deferred
-- Natural products likeness scoring - later feature
 
 ## Constraints
 
@@ -105,6 +108,10 @@ An AI agent can autonomously determine the structure of an unknown organic compo
 ### Background
 
 Lucy was the original CASE software created by the project author and sold to Bruker. Lucy-ng represents a complete reimagining for the AI-agent era, prioritizing programmatic interfaces over GUI interactions.
+
+### Strategic Reference
+
+See `background/sherlock-analysis.md` — deep comparison of Sherlock CASE (Wenk PhD thesis) vs lucy-ng capabilities. Updated post-v4.0 with gap closure status and prioritized next milestones. Key finding: 4 of 5 critical gaps closed (v3.0/v4.0); fragment library (24.5M SSCs) is the remaining major gap for Sherlock parity.
 
 ### Problem
 
