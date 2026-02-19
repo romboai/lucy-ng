@@ -54,6 +54,8 @@ class FragmentSearcher:
         """
         self._db_path = Path(db_path)
         self._db: FragmentDatabaseManager | None = None
+        self.prescreening_count: int = 0
+        self.fine_match_count: int = 0
 
     def __enter__(self) -> FragmentSearcher:
         """Open the database connection."""
@@ -113,6 +115,7 @@ class FragmentSearcher:
 
         # Step 2: Pre-screening
         candidate_ids = self._prescreening_pass(expanded_fp, verbose=verbose)
+        self.prescreening_count = len(candidate_ids)
 
         if verbose:
             print(
@@ -121,6 +124,7 @@ class FragmentSearcher:
             )
 
         if not candidate_ids:
+            self.fine_match_count = 0
             return []
 
         # Step 3: Fine matching
@@ -143,6 +147,8 @@ class FragmentSearcher:
                 )
                 if match is not None:
                     matches.append(match)
+
+        self.fine_match_count = len(matches)
 
         if verbose:
             print(

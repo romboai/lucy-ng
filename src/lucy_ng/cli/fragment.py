@@ -1,7 +1,8 @@
-"""CLI commands for fragment library management."""
+"""CLI commands for fragment library management and search."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import click
@@ -9,6 +10,7 @@ import click
 from lucy_ng.database import DatabaseManager
 from lucy_ng.fragments import FragmentDatabaseManager
 from lucy_ng.fragments.extractor import SSCExtractor
+from lucy_ng.fragments.searcher import FragmentSearcher
 
 DEFAULT_FRAGMENTS_DB = Path("data/reference/lucy-ng-fragments.db")
 
@@ -57,6 +59,175 @@ def info(db_path: Path) -> None:
         click.echo(f"  SSC count: {ssc_count:,}")
         click.echo(f"  Bin size: {bin_size:.1f} ppm")
         click.echo(f"  File size: {file_size_mb:.1f} MB")
+
+
+@fragment.command()
+@click.option(
+    "--shifts",
+    required=True,
+    type=str,
+    help="Comma-separated 13C chemical shifts in ppm.",
+)
+@click.option(
+    "--db",
+    "db_path",
+    type=click.Path(path_type=Path),
+    default=DEFAULT_FRAGMENTS_DB,
+    show_default=True,
+    help="Path to fragment database.",
+)
+@click.option(
+    "--dev-threshold",
+    type=float,
+    default=2.0,
+    show_default=True,
+    help="Max per-signal deviation for fine matching (ppm).",
+)
+@click.option(
+    "--avgdev-threshold",
+    type=float,
+    default=1.0,
+    show_default=True,
+    help="Max average deviation for fine matching (ppm).",
+)
+@click.option(
+    "--top",
+    "max_results",
+    type=int,
+    default=5,
+    show_default=True,
+    help="Maximum number of fragments to return.",
+)
+@click.option(
+    "--min-atoms",
+    "min_atom_count",
+    type=int,
+    default=3,
+    show_default=True,
+    help="Minimum fragment heavy atom count.",
+)
+@click.option(
+    "--verbose",
+    is_flag=True,
+    default=False,
+    help="Show pre-screen and fine-match counts on stderr.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="json",
+    show_default=True,
+    help="Output format.",
+)
+def search(
+    shifts: str,
+    db_path: Path,
+    dev_threshold: float,
+    avgdev_threshold: float,
+    max_results: int,
+    min_atom_count: int,
+    verbose: bool,
+    output_format: str,
+) -> None:
+    """Search fragment database for SSC matches to experimental 13C shifts.
+
+    Runs a two-phase pipeline: fingerprint pre-screening followed by greedy
+    nearest-neighbour fine matching. Results are ranked by atom count
+    (descending) then average deviation (ascending).
+
+    \b
+    Examples:
+        lucy fragment search --shifts "155.08,151.58,130.2"
+
+        lucy fragment search --shifts "128.0,130.5,199.1" --format text
+
+        lucy fragment search --shifts "128.0,130.5" --verbose --top 10
+    """
+    # Parse shifts
+    try:
+        shift_list = [float(s.strip()) for s in shifts.split(",")]
+    except ValueError as e:
+        click.echo(
+            "Error: Invalid shifts format. Use comma-separated numbers.",
+            err=True,
+        )
+        raise click.Abort() from e
+
+    if not shift_list:
+        click.echo("Error: No shifts provided.", err=True)
+        raise click.Abort()
+
+    # Validate database exists
+    if not db_path.exists():
+        click.echo(
+            f"Error: Fragment database not found: {db_path}\n"
+            "Run 'lucy fragment build' to create it, or specify a path with"
+            " --db <path>",
+            err=True,
+        )
+        raise click.Abort()
+
+    # Run search
+    with FragmentSearcher(db_path) as searcher:
+        matches = searcher.search(
+            experimental_shifts=shift_list,
+            dev_threshold=dev_threshold,
+            avgdev_threshold=avgdev_threshold,
+            max_results=max_results,
+            min_atom_count=min_atom_count,
+            verbose=verbose,
+        )
+        prescreening_count = searcher.prescreening_count
+        fine_match_count = searcher.fine_match_count
+
+    # Build DEFF commands
+    deff_commands = [
+        f"DEFF F{i + 1} 'fragment_{i + 1}.lsd'" for i in range(len(matches))
+    ]
+
+    # Build FEXP command
+    if len(matches) == 0:
+        fexp_command = ""
+    elif len(matches) == 1:
+        fexp_command = "FEXP 'F1'"
+    else:
+        parts = " OR ".join(f"F{i + 1}" for i in range(len(matches)))
+        fexp_command = f"FEXP '{parts}'"
+
+    # Output
+    if output_format == "json":
+        output = {
+            "query_shifts": shift_list,
+            "prescreening_count": prescreening_count,
+            "fine_match_count": fine_match_count,
+            "result_count": len(matches),
+            "fragments": [m.model_dump() for m in matches],
+            "deff_commands": deff_commands,
+            "fexp_command": fexp_command,
+        }
+        click.echo(json.dumps(output, indent=2))
+    else:
+        # Text output
+        click.echo(
+            f"Fragment search results ({len(matches)} fragments"
+            f" from {fine_match_count} candidates):"
+        )
+        click.echo()
+        if matches:
+            click.echo(f" {'Rank':>4}  {'Atoms':>5}  {'AVGDEV':>6}  SMILES")
+            for m in matches:
+                click.echo(
+                    f" {m.rank:>4}  {m.atom_count:>5}  {m.avg_deviation:>6.2f}"
+                    f"  {m.smiles}"
+                )
+            click.echo()
+            click.echo("DEFF commands:")
+            for cmd in deff_commands:
+                click.echo(f"  {cmd}")
+            click.echo(f"  {fexp_command}")
+        else:
+            click.echo("  No matching fragments found.")
 
 
 @fragment.command()
