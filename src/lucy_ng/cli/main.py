@@ -8,6 +8,7 @@ from lucy_ng.cli.database import database
 from lucy_ng.cli.dereplicate import dereplicate
 from lucy_ng.cli.detect import detect
 from lucy_ng.cli.fetch import fetch
+from lucy_ng.cli.fragment import fragment
 from lucy_ng.cli.lsd import lsd
 from lucy_ng.cli.pick import pick
 from lucy_ng.cli.predict import predict
@@ -36,6 +37,7 @@ def cli() -> None:
       visualize   Generate NMR correlation diagrams
       fetch       Fetch data from external sources
       database    Database management (build, info)
+      fragment    Fragment library (build, search, info)
     """
     pass
 
@@ -51,3 +53,4 @@ cli.add_command(lsd)
 cli.add_command(visualize)
 cli.add_command(fetch)
 cli.add_command(database)
+cli.add_command(fragment)
