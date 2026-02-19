@@ -76,31 +76,31 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FRAG-01 | TBD | Pending |
-| FRAG-02 | TBD | Pending |
-| FRAG-03 | TBD | Pending |
-| FRAG-04 | TBD | Pending |
-| SRCH-01 | TBD | Pending |
-| SRCH-02 | TBD | Pending |
-| SRCH-03 | TBD | Pending |
-| SRCH-04 | TBD | Pending |
-| SRCH-05 | TBD | Pending |
-| SRCH-06 | TBD | Pending |
-| LINT-01 | TBD | Pending |
-| LINT-02 | TBD | Pending |
-| LINT-03 | TBD | Pending |
-| AGNT-01 | TBD | Pending |
-| AGNT-02 | TBD | Pending |
-| AGNT-03 | TBD | Pending |
-| AGNT-04 | TBD | Pending |
-| VALD-01 | TBD | Pending |
-| VALD-02 | TBD | Pending |
+| FRAG-01 | Phase 49 | Pending |
+| FRAG-02 | Phase 50 | Pending |
+| FRAG-03 | Phase 50 | Pending |
+| FRAG-04 | Phase 50 | Pending |
+| SRCH-01 | Phase 51 | Pending |
+| SRCH-02 | Phase 51 | Pending |
+| SRCH-03 | Phase 51 | Pending |
+| SRCH-04 | Phase 51 | Pending |
+| SRCH-05 | Phase 51 | Pending |
+| SRCH-06 | Phase 51 | Pending |
+| LINT-01 | Phase 52 | Pending |
+| LINT-02 | Phase 52 | Pending |
+| LINT-03 | Phase 52 | Pending |
+| AGNT-01 | Phase 53 | Pending |
+| AGNT-02 | Phase 53 | Pending |
+| AGNT-03 | Phase 53 | Pending |
+| AGNT-04 | Phase 53 | Pending |
+| VALD-01 | Phase 54 | Pending |
+| VALD-02 | Phase 54 | Pending |
 
 **Coverage:**
 - v5.0 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19
+- Mapped to phases: 19
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-19*
-*Last updated: 2026-02-19 after initial definition*
+*Last updated: 2026-02-19 after roadmap created — traceability complete*
