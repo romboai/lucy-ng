@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-19)
 
 **Core value:** AI agent autonomously determines compound structures from NMR, with a collaborative team architecture that self-corrects through peer review
-**Current focus:** v5.0 Fragment Library — Phase 49 Plan 01 complete; Phase 50 ready to plan
+**Current focus:** v5.0 Fragment Library — Phase 49 Plans 01-02 complete; Phase 50 ready to execute
 
 ## Current Position
 
 **Milestone**: v5.0 Fragment Library
 **Phase**: 49 of 54 (Fragment Schema and Infrastructure)
-**Status**: Phase 49 complete (1/1 plans done)
-**Last activity**: 2026-02-19 — Phase 49 Plan 01 executed: fragments/ module with schema v7, SSCRecord/SSCMatch models, FragmentDatabaseManager
+**Status**: Phase 49 complete (2/2 plans done)
+**Last activity**: 2026-02-19 — Phase 49 Plan 02 executed: lucy fragment CLI command group with info subcommand
 
-Progress: [█░░░░░░░░░] 10% (1 plan complete)
+Progress: [██░░░░░░░░] 20% (2 plans complete)
 
 ## Completed Milestones
 
@@ -48,6 +48,7 @@ Recent decisions affecting v5.0:
 - DEFF goodlist LSD syntax requires LSD smoke test validation BEFORE agent integration — goodlist vs DEFF NOT semantic confusion is silent failure
 - Phases 51 and 52 can run in parallel — both depend only on SSCMatch model from Phase 49, not on Phase 50 data
 - Phase 49: fragments/ module fully independent from database/ (zero cross-imports), INSERT OR IGNORE for bin_size protects existing populated DBs
+- Phase 49 Plan 02: existence check (db_path.exists()) before FragmentDatabaseManager open prevents sqlite3 silent empty-file creation
 
 ### Pending Todos
 
@@ -68,8 +69,8 @@ See `background/sherlock-analysis.md` for full Sherlock vs lucy-ng comparison. F
 ## Session Continuity
 
 Last session: 2026-02-19
-Stopped at: Completed 49-01-PLAN.md — fragments/ module with schema v7 and FragmentDatabaseManager; Phase 50 ready
+Stopped at: Completed 49-02-PLAN.md — lucy fragment CLI command group with info subcommand; Phase 50 ready to execute
 Resume file: None
 
 ---
-*Last updated: 2026-02-19 after Phase 49 Plan 01 complete*
+*Last updated: 2026-02-19 after Phase 49 Plan 02 complete*
