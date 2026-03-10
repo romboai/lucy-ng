@@ -1,5 +1,32 @@
 # Project Milestones: lucy-ng
 
+## v6.0 Skill Quality Overhaul (Shipped: 2026-03-10)
+
+**Delivered:** Comprehensive quality overhaul of all skill and agent definitions — factored oversized orchestrator, added 4J HMBC coupling awareness, optimized skill triggering, archived legacy agent, improved error handling, and added smoke test infrastructure.
+
+**Phases completed:** 55-58 (7 plans total)
+
+**Key accomplishments:**
+- Factored case.md orchestrator from 1,093 to 497 lines with 3 extracted reference files (progress-format, loop-patterns, advisory-templates)
+- Added 4J HMBC coupling awareness: nmr-chemist flags, lsd-engineer defers, solution-analyst verifies via 13C prediction
+- Orchestrator message validation with required fields enforcement and RESEND-REQUIRED protocol
+- Optimized all 5 skill descriptions with natural-language trigger phrases and routing decision tree
+- Added dry-run confirmation gate to sanitise, HOSE miss recovery to predict, 0-match guidance to dereplicate
+- Version compatibility check in status skill and smoke test mode (--smoke-test) in CASE orchestrator
+
+**Stats:**
+- 4 phases, 7 plans, 20 commits
+- All changes to .md skill/agent files (no Python code)
+- 1 day (2026-03-10)
+
+**Git range:** `90f82fb` → `77d71a8`
+
+**Tech debt:** None. Two minor integration gaps noted in audit (INTL-03 aromatic expectation relay, INTL-04 4J status field validation) — cosmetic, no behavioral impact.
+
+**What's next:** Statistical 4J HMBC coupling detection, multi-compound UAT
+
+---
+
 ## v3.0 Statistical Detection (Shipped: 2026-02-16)
 
 **Delivered:** Data-driven statistical detection replacing agent guesswork in structure elucidation — hybridisation, neighbourhood, HHB detection from 7.9M HOSE statistics, two-tier ranking preventing MAE hallucinations, badlist strained ring exclusion, and full CASE agent integration with chemistry-first hierarchy.

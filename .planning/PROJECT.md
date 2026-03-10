@@ -10,32 +10,18 @@ Lucy-ng is an AI-agent skill for Computer-Assisted Structure Elucidation (CASE) 
 
 An AI agent can autonomously determine the structure of an unknown organic compound from its NMR spectra, with a multi-agent architecture that prevents unproductive loops and keeps the elucidation on track.
 
-## Current Milestone: v6.0 Skill Quality Overhaul
-
-**Goal:** Comprehensive quality overhaul of all skill and agent definitions based on systematic skill-creator review — factoring oversized skills, adding 4J coupling awareness, optimizing triggering, archiving legacy agents, improving error handling, and adding testing infrastructure.
-
-**Target features:**
-- Factor case.md into core + bundled references (context window management)
-- Add 4J HMBC coupling awareness across nmr-chemist, lsd-engineer, solution-analyst
-- Optimize all skill descriptions for natural language triggering
-- Archive legacy monolithic CASE agent
-- Add dry-run mode to sanitise skill
-- Improve error recovery in predict and dereplicate skills
-- Add message format validation to orchestrator
-- Enhance routing page with decision tree
-- Add version/compatibility tracking to status skill
-- Create smoke test infrastructure for CASE pipeline
+## Current Milestone: None — ready for /gsd:new-milestone
 
 ## Current State
 
-**Version:** v5.0 shipped 2026-02-21
+**Version:** v6.0 shipped 2026-03-10
 **Codebase:** ~20,974 lines Python, 867 tests, 11 CLI command groups
 **Database:** SQLite v6 schema with 928K compounds, 7.89M HOSE statistics + fragment library (2.4M SSCs, 605 MB)
-**Agent definitions:** ~3,600 lines across 5 agent files + orchestrator skill (updated with fragment search workflow)
+**Agent definitions:** ~3,600 lines across 5 agent files + orchestrator skill (~595 lines, factored with 3 reference files)
 
-**What shipped in v5.0:** Fragment library infrastructure — 2,385,146 SSCs from 928K compounds, two-phase search engine (fingerprint pre-screening + fine matching), DEFF/FEXP goodlist injection validated with LSD smoke test, full agent team integration. Self-search recall 100%.
+**What shipped in v6.0:** Skill quality overhaul — factored case.md, 4J HMBC awareness across 3 agents, message validation, NL trigger phrases, routing decision tree, error recovery, dry-run gate, version check, smoke test mode. All .md skill/agent edits, no Python changes.
 
-**Known limitation:** 4J HMBC couplings through aromatic rings silently exclude correct structures. All 6 local test compounds have this risk, preventing controlled fragment A/B testing. Statistical 4J detection is the highest-priority next feature.
+**Known limitation:** 4J HMBC couplings through aromatic rings not statistically detected — heuristic flagging added in v6.0 but statistical DB-based detection (4J-01) is still the highest-priority next feature.
 
 ## Architecture
 
@@ -93,6 +79,17 @@ An AI agent can autonomously determine the structure of an unknown organic compo
 - DEFF/FEXP goodlist injection validated with LSD smoke test — v5.0
 - Agent team integration: lsd-engineer fragment search, devils-advocate file verification — v5.0
 - Self-search recall 100% (fingerprint indexing validated) — v5.0
+
+### Validated (v6.0)
+
+- Factored case.md orchestrator (<500 lines) with extracted reference files (progress-format, loop-patterns, advisory-templates) — v6.0
+- Archived legacy monolithic lucy-case-agent.md with deprecation header — v6.0
+- Shared NMR reference tables (nmr-basics.md) referenced by agents instead of inlined — v6.0
+- 4J HMBC coupling awareness: nmr-chemist flags, lsd-engineer defers, solution-analyst verifies via prediction — v6.0
+- Orchestrator structured message validation with RESEND-REQUIRED protocol — v6.0
+- Natural-language trigger phrases in all 5 skill descriptions + routing decision tree — v6.0
+- Dry-run confirmation gate in sanitise, HOSE miss recovery in predict, 0-match guidance in dereplicate — v6.0
+- Version compatibility check in status skill, smoke test mode in CASE orchestrator — v6.0
 
 ### Deferred
 
@@ -184,10 +181,16 @@ Minimum viable spectral data for v1:
 | DEFF goodlist over badlist | v5.0: DEFF/FEXP constrains structures TO contain fragment (positive constraint, more powerful than exclusion) | Good — LSD smoke test confirms |
 | Fragment persistence rule | v5.0: Copy DEFF F1/FEXP from previous LSD file, never reconstruct — same as DEFF NOT rule | Good |
 | UAT deferral for 4J risk | v5.0: All 6 compounds have 4J HMBC risk, deferred CASE comparison to avoid confounding variables | Pending — need non-aromatic compounds |
+| Factored case.md with references | v6.0: Extract progress-format, loop-patterns, advisory-templates to references/ for on-demand loading | Good |
+| 4J heuristic flagging | v6.0: nmr-chemist flags potential 4J in aromatic systems, lsd-engineer defers, solution-analyst verifies via prediction | Good — heuristic, statistical detection still needed |
+| Message validation protocol | v6.0: Orchestrator enforces required fields with RESEND-REQUIRED fallback | Good |
+| Trigger phrase pattern | v6.0: "Use when:" prefix in skill descriptions for NL intent routing | Good |
+| Dry-run gate in sanitise | v6.0: READ-ONLY scan, manifest report, exact "proceed" required before writes | Good |
+| Smoke test mode | v6.0: --smoke-test flag for 1-iteration CASE pipeline validation | Good |
 
 ## Technical State
 
-**Version:** v5.0 (shipped 2026-02-21)
+**Version:** v6.0 (shipped 2026-03-10)
 **Codebase:** ~20,974 lines Python, 867 tests
 **Tech stack:** Python 3.10+, Pydantic v2, nmrglue, RDKit, NumPy, SQLite, Click
 **Database:** v6 schema with 928K compounds, 7.89M HOSE statistics + fragment library (2.4M SSCs, 605 MB)
@@ -208,9 +211,9 @@ Minimum viable spectral data for v1:
 - Constraint inventory: JSON tracking in LSD file headers, DA reconciliation gate, DEFF/FEXP tracking
 
 **Known tech debt:**
-- 4J HMBC couplings through aromatic rings not detected — silently excludes correct structures (highest priority)
+- 4J HMBC couplings through aromatic rings not statistically detected — heuristic flagging added in v6.0, statistical 4J-01 still needed
 - Multi-compound CASE UAT deferred — all test compounds have 4J risk
-- 3 WARNING-level write_progress template gaps (aromatic field propagation)
+- 2 minor integration gaps from v6.0 audit (INTL-03 aromatic expectation relay, INTL-04 4J status field validation) — cosmetic
 
 ---
-*Last updated: 2026-03-10 after v6.0 milestone started*
+*Last updated: 2026-03-10 after v6.0 milestone completed*
