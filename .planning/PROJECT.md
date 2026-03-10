@@ -10,6 +10,22 @@ Lucy-ng is an AI-agent skill for Computer-Assisted Structure Elucidation (CASE) 
 
 An AI agent can autonomously determine the structure of an unknown organic compound from its NMR spectra, with a multi-agent architecture that prevents unproductive loops and keeps the elucidation on track.
 
+## Current Milestone: v6.0 Skill Quality Overhaul
+
+**Goal:** Comprehensive quality overhaul of all skill and agent definitions based on systematic skill-creator review — factoring oversized skills, adding 4J coupling awareness, optimizing triggering, archiving legacy agents, improving error handling, and adding testing infrastructure.
+
+**Target features:**
+- Factor case.md into core + bundled references (context window management)
+- Add 4J HMBC coupling awareness across nmr-chemist, lsd-engineer, solution-analyst
+- Optimize all skill descriptions for natural language triggering
+- Archive legacy monolithic CASE agent
+- Add dry-run mode to sanitise skill
+- Improve error recovery in predict and dereplicate skills
+- Add message format validation to orchestrator
+- Enhance routing page with decision tree
+- Add version/compatibility tracking to status skill
+- Create smoke test infrastructure for CASE pipeline
+
 ## Current State
 
 **Version:** v5.0 shipped 2026-02-21
@@ -197,4 +213,4 @@ Minimum viable spectral data for v1:
 - 3 WARNING-level write_progress template gaps (aromatic field propagation)
 
 ---
-*Last updated: 2026-02-21 after v5.0 milestone complete*
+*Last updated: 2026-03-10 after v6.0 milestone started*

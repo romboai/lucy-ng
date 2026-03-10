@@ -2,16 +2,17 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-21)
+See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** AI agent autonomously determines compound structures from NMR, with a collaborative team architecture that self-corrects through peer review
-**Current focus:** Planning next milestone
+**Current focus:** v6.0 Skill Quality Overhaul
 
 ## Current Position
 
-**Milestone**: v5.0 Fragment Library — SHIPPED 2026-02-21
-**Status**: Milestone complete, ready for next milestone
-**Last activity**: 2026-02-21 — v5.0 milestone archived
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-10 — Milestone v6.0 started
 
 ## Completed Milestones
 
@@ -55,11 +56,15 @@ Decisions are logged in PROJECT.md Key Decisions table.
 
 See `background/sherlock-analysis.md` for full Sherlock vs lucy-ng comparison. Fragment library now built (2.4M SSCs). Remaining gap: statistical 4J coupling detection.
 
+### Skill Analysis
+
+See `.planning/skill-analysis.md` for the comprehensive skill-creator review that drives v6.0 milestone scope.
+
 ## Session Continuity
 
-Last session: 2026-02-21
-Stopped at: v5.0 milestone archived
-Resume with: `/gsd:new-milestone` to start next milestone
+Last session: 2026-03-10
+Stopped at: v6.0 milestone requirements definition
+Resume with: Continue requirements/roadmap definition
 
 ---
-*Last updated: 2026-02-21 — v5.0 milestone complete and archived*
+*Last updated: 2026-03-10 — v6.0 milestone started*
