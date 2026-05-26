@@ -165,7 +165,7 @@ pip install git+https://github.com/Ratsemaat/HOSE_code_generator.git --no-deps
 
 **LSD Solver** (optional, for structure generation):
 ```bash
-# Download from http://eos.univ-reims.fr/LSD/
+# Download from https://nuzillard.github.io/LSD/index_ENG.html
 # Extract and add to PATH, or specify location when running
 ```
 
